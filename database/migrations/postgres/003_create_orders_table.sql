@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS orders (
+    id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    order_number VARCHAR(50) NOT NULL,
+    total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+    
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL,
+    deleted_at TIMESTAMP NULL,
+    
+    PRIMARY KEY (id),
+    CONSTRAINT FK_orders_users FOREIGN KEY (user_id) REFERENCES users(id)
+);

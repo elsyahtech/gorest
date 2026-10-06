@@ -1,0 +1,149 @@
+{
+  "collection": "orders",
+  "data": [
+    {
+      "id": "ord-001",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01",
+      "order_number": "INV/2026/09/001",
+      "total_amount": 150000.00,
+      "status": "COMPLETED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-002",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01",
+      "order_number": "INV/2026/09/002",
+      "total_amount": 250000.50,
+      "status": "PENDING",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-003",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02",
+      "order_number": "INV/2026/09/003",
+      "total_amount": 75000.00,
+      "status": "COMPLETED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-004",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02",
+      "order_number": "INV/2026/09/004",
+      "total_amount": 320000.00,
+      "status": "CANCELED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-005",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03",
+      "order_number": "INV/2026/09/005",
+      "total_amount": 1250000.00,
+      "status": "COMPLETED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-006",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04",
+      "order_number": "INV/2026/09/006",
+      "total_amount": 450000.00,
+      "status": "PENDING",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-007",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05",
+      "order_number": "INV/2026/09/007",
+      "total_amount": 90000.00,
+      "status": "COMPLETED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-008",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05",
+      "order_number": "INV/2026/09/008",
+      "total_amount": 100000.00,
+      "status": "PENDING",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-009",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05",
+      "order_number": "INV/2026/09/009",
+      "total_amount": 200000.00,
+      "status": "CANCELED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-010",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a06",
+      "order_number": "INV/2026/09/010",
+      "total_amount": 550000.00,
+      "status": "COMPLETED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-011",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a07",
+      "order_number": "INV/2026/09/011",
+      "total_amount": 110000.00,
+      "status": "PENDING",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    },
+    {
+      "id": "ord-012",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a08",
+      "order_number": "INV/2026/09/012",
+      "total_amount": 850000.00,
+      "status": "COMPLETED",
+      "is_active": true,
+      "is_deleted": false,
+      "created_at": "2026-09-21T00:00:00Z",
+      "updated_at": null,
+      "deleted_at": null
+    }
+  ]
+}

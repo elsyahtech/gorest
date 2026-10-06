@@ -1,0 +1,46 @@
+{
+  "collection": "orders",
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": [
+        "id",
+        "user_id",
+        "order_number",
+        "total_amount",
+        "status",
+        "is_active",
+        "is_deleted",
+        "created_at"
+      ],
+      "properties": {
+        "id": { "bsonType": "string" },
+        "user_id": { "bsonType": "string" },
+        "order_number": { "bsonType": "string" },
+        "total_amount": { "bsonType": ["double", "decimal", "int", "long"] },
+        "status": { "bsonType": "string" },
+        "is_active": { "bsonType": "bool" },
+        "is_deleted": { "bsonType": "bool" },
+        "created_at": { "bsonType": "date" },
+        "updated_at": { "bsonType": ["date", "null"] },
+        "deleted_at": { "bsonType": ["date", "null"] }
+      }
+    }
+  },
+  "indexes": [
+    {
+      "key": { "id": 1 },
+      "name": "pk_orders_id",
+      "unique": true
+    },
+    {
+      "key": { "user_id": 1 },
+      "name": "idx_orders_user_id"
+    },
+    {
+      "key": { "order_number": 1 },
+      "name": "uk_orders_order_number",
+      "unique": true
+    }
+  ]
+}

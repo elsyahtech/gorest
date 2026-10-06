@@ -1,0 +1,114 @@
+BEGIN
+    INSERT ALL
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+            'admin1@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-01',
+            1,
+            0, 
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02',
+            'admin2@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-01',
+            1,
+            0,
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03',
+            'admin3@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-02',
+            1,
+            0, 
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04',
+            'admin4@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-02',
+            1,
+            0,
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05',
+            'admin5@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-03',
+            1,
+            0, 
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a06',
+            'admin6@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-03',
+            1,
+            0,
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a07',
+            'admin7@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-04',
+            1,
+            0, 
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a08',
+            'admin8@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-04',
+            1,
+            0,
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a09',
+            'admin9@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-05',
+            1,
+            0, 
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a10',
+            'admin10@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-05',
+            1,
+            0,
+            CURRENT_TIMESTAMP
+        )
+        INTO users (id, email, password, department_id, is_active, is_deleted, created_at)
+        VALUES (
+            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            'admin11@mail.com',
+            '$2a$12$eXampleHashedPasswordStringForTestingOnly',
+            'dept-05',
+            1,
+            0,
+            CURRENT_TIMESTAMP
+        )
+    SELECT * FROM dual;
+END;

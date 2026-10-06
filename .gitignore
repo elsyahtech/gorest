@@ -28,5 +28,16 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+Makefile
+
+cmd/
+coba/
+logs/
+
+.golangci.yml
+
+database/*.db
+orm/*.txt

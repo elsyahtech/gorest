@@ -1,0 +1,33 @@
+{
+  "collection": "departments",
+  "validator": {
+    "$jsonSchema": {
+      "bsonType": "object",
+      "required": [
+        "id",
+        "name",
+        "description",
+        "is_active",
+        "is_deleted",
+        "created_at"
+      ],
+      "properties": {
+        "id": { "bsonType": "string" },
+        "name": { "bsonType": "string" },
+        "description": { "bsonType": "string" },
+        "is_active": { "bsonType": "bool" },
+        "is_deleted": { "bsonType": "bool" },
+        "created_at": { "bsonType": "date" },
+        "updated_at": { "bsonType": ["date", "null"] },
+        "deleted_at": { "bsonType": ["date", "null"] }
+      }
+    }
+  },
+  "indexes": [
+    {
+      "name": "idx_departments_id_unique",
+      "key": { "id": 1 },
+      "unique": true
+    }
+  ]
+}
