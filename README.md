@@ -303,7 +303,7 @@ app.Use(
 - **Redis and Database Drivers:** Easily switch your database backend by changing the Driver constant (database.Oracle, SQL Server, MYSQL, PostgreSQL, SQLite, MongoDB, ScyllaDB.). **Default Database:** GOREST uses **SQLite** as its default database driver. No external database server is required to run the default application.
 - **Controlled Migrations & Seeders:** Toggle database.MigrationEnabled and database.SeederEnabled directly inside the config block to let Gorest handle schema bootstrapping automatically on boot.
 
-See [configuration detail](./docs/CONFIGURATION.md)
+See [configuration detail](./docs/configuration.md)
 
 ---
 
@@ -323,12 +323,12 @@ See server & router configuration detail: [Router Technical Guide](./docs/guide/
 ---
 
 # 🔧 Configuration
-Read the full configuration breakdown: [Configuration Documentation](./docs/CONFIGURATION.md)
+Read the full configuration breakdown: [Configuration Documentation](./docs/configuration.md)
 
 ---
 
 # 📚 Guides
-Read the full guide: [Guide Documentation](./docs/GUIDE.md)
+Read the full guide: [Guide Documentation](./docs/guide.md)
 
 # 🔧 Troubleshoot
-Read the full troubleshoot guide: [Troubleshoot Documentation](./docs/GUIDE.md)
+Read the full troubleshoot guide: [Troubleshoot Documentation](./docs/guide.md)
