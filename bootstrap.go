@@ -103,9 +103,9 @@ func (app *App) startServer() {
 			app.Log(map[string]any{
 				LogFieldKeyError:   err,
 				LogFieldKeyMessage: message,
-			}, true).Error("failed to start server")
+			}, true).Error("starting server is failed")
 
-			golog.Fatalf("starting server is failed. message: %v", message)
+			golog.Fatalf("starting server is failed: %v. message: %v", err, message)
 		}
 	}
 

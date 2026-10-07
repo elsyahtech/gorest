@@ -49,10 +49,10 @@ func (app *App) Use(args ...any) *App {
 				app.registerService("Redis")
 
 				app.redisInit()
+			} else {
+				app.config.redis = nil
+				app.redis = nil
 			}
-
-			app.config.redis = nil
-			app.redis = nil
 
 		// DATABASE
 		case database.Config, *database.Config:
@@ -70,10 +70,10 @@ func (app *App) Use(args ...any) *App {
 				app.registerService(msg)
 
 				app.databaseInit()
+			} else {
+				app.config.database = nil
+				app.database = nil
 			}
-
-			app.config.database = nil
-			app.database = nil
 
 		// SERVER
 		case server.Config, *server.Config:

@@ -274,7 +274,7 @@ var ConfigDefault = Config{
 
 	// Whether to auto-run database integration on application startup.
 	// Default: false
-	Enabled: DatabaseDisabled,
+	Enabled: DatabaseEnabled,
 
 	// Maximum number of open connections to database.
 	// Default: unlimited (change this explicitly in production!)

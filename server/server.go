@@ -80,12 +80,13 @@ func StartServer(
 ) (string, error) {
 	port := config.Port
 	portStr := strconv.Itoa(port)
+	address := ":" + portStr
 
 	printStartupBanner(server, config, log, appName, version, timezone, environment, modules, routes...)
 
-	if err := server.SRV.Listen(":"+portStr, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
-		const message = "ensure the server configuration is set up correctly and " +
-			"the host and port is configured"
+	if err := server.SRV.Listen(address, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
+		message := fmt.Sprintf("ensure the server configuration is set up correctly, "+
+			"the host and port are configured, and the port '%s' is not already in use by another service", portStr)
 
 		return message, fmt.Errorf("%w", err)
 	}
