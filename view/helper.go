@@ -59,7 +59,7 @@ func (res *JSON) MarshalJSON() ([]byte, error) {
 	return data, nil
 }
 
-func ToJSON(fields map[string]any) *JSON {
+func (*JSON) ToJSON(fields map[string]any) *JSON {
 	viewFields := fields
 
 	if viewFields == nil {
