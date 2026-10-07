@@ -31,7 +31,13 @@ func New(config *Config) (*Server, string, error) {
 		config = &ConfigDefault
 	}
 
-	server := fiber.New(*config.Core)
+	server := fiber.New()
+
+	if config.Core == nil {
+		server = fiber.New(fiber.Config{})
+	} else {
+		server = fiber.New(*config.Core)
+	}
 
 	if config.Recover != nil {
 		server.Use(recover.New(*config.Recover))
