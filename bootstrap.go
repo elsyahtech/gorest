@@ -73,7 +73,7 @@ func (app *App) startServer() {
 	}
 
 	if !app.config.Debug {
-		publicRoutes := server.RegisterDefaultRoutes
+		publicRoutes := RegisterDefaultRoutes
 		modulesRunning := app.modules
 
 		app.services.routers = append(app.services.routers, publicRoutes)
@@ -97,7 +97,7 @@ func (app *App) startServer() {
 			app.config.Timezone,
 			ConfigDefault.Environment,
 			modulesRunning,
-			app.services.routers...,
+			app.services.routers,
 		)
 		if err != nil {
 			app.Log(map[string]any{

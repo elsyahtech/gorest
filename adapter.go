@@ -13,6 +13,7 @@ import (
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/orm"
 	gorestredis "github.com/elsyahtech/gorest/redis"
+	"github.com/elsyahtech/gorest/server"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -317,4 +318,82 @@ func (app *App) Redis() (*redis.Client, string, error) {
 	}
 
 	return client, "", nil
+}
+
+// Get registers a route for GET methods that requests a representation
+// of the specified resource. Requests using GET should only retrieve data.
+func (app *App) Get(path string, handler server.HandlerFunc) {
+	app.server.Get(path, handler)
+}
+
+// Head registers a route for HEAD methods that asks for a response identical
+// to that of a GET request, but without the response body.
+func (app *App) Head(path string, handler server.HandlerFunc) {
+	app.server.Head(path, handler)
+}
+
+// Post registers a route for POST methods that is used to submit an entity to the
+// specified resource, often causing a change in state or side effects on the server.
+func (app *App) Post(path string, handler server.HandlerFunc) {
+	app.server.Post(path, handler)
+}
+
+// Put registers a route for PUT methods that replaces all current representations
+// of the target resource with the request payload.
+func (app *App) Put(path string, handler server.HandlerFunc) {
+	app.server.Put(path, handler)
+}
+
+// Delete registers a route for DELETE methods that deletes the specified resource.
+func (app *App) Delete(path string, handler server.HandlerFunc) {
+	app.server.Delete(path, handler)
+}
+
+// Connect registers a route for CONNECT methods that establishes a tunnel to the
+// server identified by the target resource.
+func (app *App) Connect(path string, handler server.HandlerFunc) {
+	app.server.Connect(path, handler)
+}
+
+// Options registers a route for OPTIONS methods that is used to describe the
+// communication options for the target resource.
+func (app *App) Options(path string, handler server.HandlerFunc) {
+	app.server.Options(path, handler)
+}
+
+// Trace registers a route for TRACE methods that performs a message loop-back
+// test along the path to the target resource.
+func (app *App) Trace(path string, handler server.HandlerFunc) {
+	app.server.Trace(path, handler)
+}
+
+// Patch registers a route for PATCH methods that is used to apply partial
+// modifications to a resource.
+func (app *App) Patch(path string, handler server.HandlerFunc) {
+	app.server.Patch(path, handler)
+}
+
+// Query registers a route for QUERY methods that performs a safe, idempotent
+// query with a request body.
+func (app *App) Query(path string, handler server.HandlerFunc) {
+	app.server.Query(path, handler)
+}
+
+// Add allows you to specify multiple HTTP methods to register a route.
+// The provided handlers are executed in order, starting with `handler` and then the variadic `handlers`.
+func (app *App) Add(methods []string, path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Add(methods, path, handler, handlers...)
+}
+
+// All will register the handler on all HTTP methods.
+func (app *App) All(path string, handler server.HandlerFunc) {
+	app.server.All(path, handler)
+}
+
+// Group is used for Routes with common prefix to define a new sub-router with optional middleware.
+//
+//	api := app.Group("/api")
+//	api.Get("/users", handler).
+func (app *App) Group(prefix string, handlers ...server.HandlerFunc) *server.Server {
+	return app.server.Group(prefix, handlers...)
 } //nolint:revive

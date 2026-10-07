@@ -69,6 +69,8 @@ func New(config *Config) (*Server, string, error) {
 	}, "", nil
 }
 
+type RouteHandler func(any)
+
 //nolint:revive
 func StartServer(
 	server *Server,
@@ -76,13 +78,15 @@ func StartServer(
 	log *log.Log,
 	appName, version, timezone, environment string,
 	modules []string,
-	routes ...RouterRegistrar,
+	routes ...any,
 ) (string, error) {
 	port := config.Port
 	portStr := strconv.Itoa(port)
 	address := ":" + portStr
 
-	printStartupBanner(server, config, log, appName, version, timezone, environment, modules, routes...)
+	if err := printStartupBanner(server, config, log, appName, version, timezone, environment, modules, routes...); err != nil {
+		return "please contact us on github", fmt.Errorf("gorest error: %w", err)
+	}
 
 	if err := server.SRV.Listen(address, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
 		message := fmt.Sprintf("ensure the server configuration is set up correctly, "+

@@ -11,6 +11,4 @@ type Context struct {
 	fiber.Ctx
 }
 
-type RouterRegistrar func(*Server)
-
 type HandlerFunc func(*Context) error

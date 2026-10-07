@@ -22,8 +22,8 @@ func printStartupBanner(
 	timezone,
 	environment string,
 	modules []string,
-	routes ...RouterRegistrar,
-) {
+	routes ...any,
+) error {
 	address := fmt.Sprintf(
 		"%s:%d",
 		config.Host,
@@ -34,7 +34,12 @@ func printStartupBanner(
 	processorUsage := getProcessorUsage()
 
 	for _, route := range routes {
-		route(server)
+		rute, ok := route.(func(any))
+		if !ok {
+			continue
+		}
+
+		rute(server)
 	}
 
 	registeredPaths := getRegisteredEndpoints(server)
@@ -80,6 +85,8 @@ func printStartupBanner(
 
 	fmt.Println("╚═════════════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
+
+	return nil
 }
 
 func getRegisteredEndpoints(server *Server) []string {
@@ -113,7 +120,7 @@ func getRegisteredEndpoints(server *Server) []string {
 }
 
 //nolint:unused
-func routeName(register RouterRegistrar) string {
+func routeName(register any) string {
 	funFor := runtime.FuncForPC(reflect.ValueOf(register).Pointer())
 
 	if funFor == nil {

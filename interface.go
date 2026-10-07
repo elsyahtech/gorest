@@ -21,14 +21,14 @@ type App struct {
 	modules    []string
 }
 
+type RouterRegistrar func(*App)
+
 type Map map[string]any
 
 type Context = server.Context
 
-type Server = server.Server
-
 type service struct {
-	routers []server.RouterRegistrar
+	routers []RouterRegistrar
 }
 
 type DBSession struct {

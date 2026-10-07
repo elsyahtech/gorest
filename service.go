@@ -104,7 +104,7 @@ func (app *App) Use(args ...any) *App {
 }
 
 //nolint:unparam
-func (app *App) routerRegistry(args ...server.RouterRegistrar) (*fiber.App, string, error) {
+func (app *App) routerRegistry(args ...RouterRegistrar) (*fiber.App, string, error) {
 	if app.server == nil {
 		const message = "ensure that you have run the Server in your app"
 
@@ -113,7 +113,7 @@ func (app *App) routerRegistry(args ...server.RouterRegistrar) (*fiber.App, stri
 
 	for _, registrar := range args {
 		if registrar != nil {
-			registrar(app.server)
+			registrar(app)
 		}
 	}
 
@@ -121,11 +121,11 @@ func (app *App) routerRegistry(args ...server.RouterRegistrar) (*fiber.App, stri
 }
 
 func (app *App) RegisterServices(args ...any) {
-	var allRoutes []server.RouterRegistrar
+	var allRoutes []RouterRegistrar
 
 	for idx := range args {
 		switch arg := args[idx].(type) {
-		case []server.RouterRegistrar:
+		case []RouterRegistrar:
 			allRoutes = append(allRoutes, arg...)
 
 			_, message, err := app.routerRegistry(arg...)
