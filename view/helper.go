@@ -9,11 +9,9 @@ import (
 )
 
 func (res *JSON) WithMessage(message string, errInput any, code ...int) *JSON {
-	res.Success = false
-	res.HTTPCode = http.StatusBadRequest
-
 	var errString string
 
+	// Check if an error was sent
 	switch val := errInput.(type) {
 	case string:
 		errString = val
@@ -22,17 +20,30 @@ func (res *JSON) WithMessage(message string, errInput any, code ...int) *JSON {
 			errString = val.Error()
 		}
 	default:
-		errString = fmt.Sprintf("%v", val)
+		// If errInput is nil or another empty type
+		if val != nil {
+			errString = fmt.Sprintf("%v", val)
+		}
 	}
 
-	if message != "" && errString != "" {
-		res.Error = fmt.Sprintf("%s: %s", message, errString)
-	} else if errString != "" {
-		res.Error = errString
+	// If an error occurs (go to the failure path)
+	if errString != "" && errString != "<nil>" {
+		res.Success = false
+		res.HTTPCode = http.StatusBadRequest
+
+		if message != "" {
+			res.Error = fmt.Sprintf("%s: %s", message, errString)
+		} else {
+			res.Error = errString
+		}
 	} else {
-		res.Error = message
+		// If there are NO errors (go to the success path)
+		res.Success = true
+		res.HTTPCode = http.StatusOK
+		res.Message = message
 	}
 
+	// Override HTTP code if manually provided in the parameter
 	if len(code) > 0 {
 		res.HTTPCode = code[0]
 	}
