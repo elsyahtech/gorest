@@ -106,6 +106,7 @@ type Config struct {
 	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
 	// Recommended: 5 seconds (for production)
 	// Default: 5 seconds
+	// Example: 5 * time.Second
 	Timeout time.Duration
 
 	// Maximum lifetime of connection before being closed and recreated.
@@ -113,6 +114,7 @@ type Config struct {
 	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
 	// Recommended: 10-30 minutes
 	// Default: 20 minutes
+	// Example: 20 * time.Minute
 	ConnectionMaxLifetime time.Duration
 
 	// MSSQL/SQLSERVER only: whether to trust self-signed server certificates.
@@ -138,6 +140,12 @@ type Config struct {
 	// Production: false (manual control, recommended)
 	// Default: false
 	Seeder bool
+
+	// Enabled determines whether the Database connection is active and running.
+	// Set to true to enable Database integration, or false to disable it.
+	// Example: true
+	// Default: false
+	Enabled bool
 
 	// Maximum number of open connections to database.
 	// Default: unlimited (change this explicitly in production!)
@@ -263,6 +271,10 @@ var ConfigDefault = Config{
 	// Production: false (manual control, recommended)
 	// Default: false
 	Seeder: SeederDisabled,
+
+	// Whether to auto-run database integration on application startup.
+	// Default: false
+	Enabled: DatabaseDisabled,
 
 	// Maximum number of open connections to database.
 	// Default: unlimited (change this explicitly in production!)

@@ -239,6 +239,14 @@ func (app *App) Close() error {
 }
 
 func (dbSession *DBSession) Table(table string) *orm.ORM {
+	if dbSession.database == nil || dbSession.config == nil {
+		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+			"To use ORM, the application must use one of the following databases: " +
+			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+
+		golog.Fatalf("Gorest detected ORM Query in your application, but database is not running. Message: %s", message)
+	}
+
 	return &orm.ORM{
 		Error:          nil,
 		Database:       dbSession.database,

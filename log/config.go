@@ -15,7 +15,10 @@ type Config struct {
 	// Default: "app.log"
 	LogFile string
 
-	// Xxx
+	// Caller enables or disables the inclusion of caller information (such as
+	// the file name and line number) in the log entries.
+	// Example: true
+	// Default: true
 	Caller bool
 
 	// MaxFileSize defines the maximum size in megabytes (MB) that a log file can reach

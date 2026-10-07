@@ -57,6 +57,8 @@ const (
 	MigrationEnabled              = true
 	SeederDisabled                = false
 	SeederEnabled                 = true
+	DatabaseDisabled              = false
+	DatabaseEnabled               = true
 	DefaultMaxOpenConnections     = 50
 	DefaultMaxIdleConnections     = 5
 )

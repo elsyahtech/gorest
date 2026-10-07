@@ -13,6 +13,8 @@ const (
 	DefaultRedisConnMaxLifetime = 20 * time.Minute
 	DefaultRedisConnMaxIdleTime = 30 * time.Minute
 	DefaultRedisTLS             = false
+	RedisEnabled                = true
+	RedisDisabled               = false
 	DefaultRedisDatabase        = 0
 	DefaultRedisMaxRetries      = 3
 	DefaultRedisPoolSize        = 0

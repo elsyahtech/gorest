@@ -39,5 +39,8 @@ logs/
 
 .golangci.yml
 
-database/*.db
+database/gorest.db
+database/migrations
+database/seeders
 orm/*.txt
+server/*.png
