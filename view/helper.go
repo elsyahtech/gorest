@@ -8,16 +8,30 @@ import (
 	"github.com/elsyahtech/gorest"
 )
 
-func (res *JSON) SendMessage(msg string) *JSON {
-	res.Message = msg
-
-	return res
-}
-
-func (res *JSON) WithError(err string, code ...int) *JSON {
-	res.Error = err
+func (res *JSON) WithMessage(message string, errInput any, code ...int) *JSON {
 	res.Success = false
 	res.HTTPCode = http.StatusBadRequest
+
+	var errString string
+
+	switch val := errInput.(type) {
+	case string:
+		errString = val
+	case error:
+		if val != nil {
+			errString = val.Error()
+		}
+	default:
+		errString = fmt.Sprintf("%v", val)
+	}
+
+	if message != "" && errString != "" {
+		res.Error = fmt.Sprintf("%s: %s", message, errString)
+	} else if errString != "" {
+		res.Error = errString
+	} else {
+		res.Error = message
+	}
 
 	if len(code) > 0 {
 		res.HTTPCode = code[0]
@@ -61,7 +75,7 @@ func (res *JSON) MarshalJSON() ([]byte, error) {
 	return data, nil
 }
 
-func (*JSON) ToJSON(fields map[string]any) *JSON {
+func (*JSON) NewResponse(fields map[string]any) *JSON {
 	viewFields := fields
 
 	if viewFields == nil {
@@ -73,7 +87,7 @@ func (*JSON) ToJSON(fields map[string]any) *JSON {
 	})
 }
 
-func (*JSON) JSONView(ctx *gorest.Context, response *JSON, err error) error {
+func (*JSON) SendJSON(ctx *gorest.Context, response *JSON, err error) error {
 	if err = ctx.Status(response.HTTPCode).JSON(response); err != nil {
 		return fmt.Errorf("failed to send JSON Response: %w", err)
 	}
