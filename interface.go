@@ -7,7 +7,6 @@ import (
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
-	"github.com/elsyahtech/gorest/view"
 )
 
 type App struct {
@@ -36,5 +35,3 @@ type DBSession struct {
 type Map map[string]any
 
 type Context = server.Context
-
-type JSON = view.JSON
