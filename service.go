@@ -45,16 +45,14 @@ func (app *App) Use(args ...any) *App {
 				app.config.redis = argPtr
 			}
 
-			if !app.config.redis.Enabled {
-				app.config.redis = nil
-				app.redis = nil
+			if app.config.redis.Enabled {
+				app.registerService("Redis")
 
-				break
+				app.redisInit()
 			}
 
-			app.registerService("Redis")
-
-			app.redisInit()
+			app.config.redis = nil
+			app.redis = nil
 
 		// DATABASE
 		case database.Config, *database.Config:
@@ -66,18 +64,16 @@ func (app *App) Use(args ...any) *App {
 				app.config.database = argPtr
 			}
 
-			if !app.config.database.Enabled {
-				app.config.database = nil
-				app.database = nil
+			if app.config.database.Enabled {
+				msg := fmt.Sprintf("Database (%s)", database.NormalizeDatabaseDriver(app.config.database.Driver))
 
-				break
+				app.registerService(msg)
+
+				app.databaseInit()
 			}
 
-			msg := fmt.Sprintf("Database (%s)", database.NormalizeDatabaseDriver(app.config.database.Driver))
-
-			app.registerService(msg)
-
-			app.databaseInit()
+			app.config.database = nil
+			app.database = nil
 
 		// SERVER
 		case server.Config, *server.Config:
