@@ -25,6 +25,8 @@ type Map map[string]any
 
 type Context = server.Context
 
+type Server = server.Server
+
 type service struct {
 	routers []server.RouterRegistrar
 }
