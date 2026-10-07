@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
+	"github.com/gofiber/fiber/v3"
 )
 
 func (res *JSON) SendMessage(msg string) *JSON {
@@ -66,7 +68,15 @@ func (*JSON) ToJSON(fields map[string]any) *JSON {
 		viewFields = make(map[string]any)
 	}
 
-	return &JSON{
-		ExtraFields: viewFields,
+	return view(&jsonField{
+		Fields: viewFields,
+	})
+}
+
+func (*JSON) JSONView(ctx fiber.Ctx, response *JSON, err error) error {
+	if err = ctx.Status(response.HTTPCode).JSON(response); err != nil {
+		return fmt.Errorf("failed to send JSON Response: %w", err)
 	}
+
+	return nil
 }

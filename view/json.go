@@ -11,9 +11,13 @@ type JSON struct {
 	HTTPCode    int            `json:"httpCode,omitempty"`
 }
 
-func JSONView(json *JSON) *JSON {
+type jsonField struct {
+	Fields map[string]any
+}
+
+func view(json *jsonField) *JSON {
 	return &JSON{
-		ExtraFields: json.ExtraFields,
+		ExtraFields: json.Fields,
 		Success:     true,
 		HTTPCode:    http.StatusOK,
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
+	"github.com/elsyahtech/gorest/view"
 )
 
 type App struct {
@@ -21,17 +22,19 @@ type App struct {
 	modules    []string
 }
 
-type RouterRegistrar func(*App)
-
-type Map map[string]any
-
-type Context = server.Context
-
 type service struct {
 	routers []RouterRegistrar
 }
+
+type RouterRegistrar func(*App)
 
 type DBSession struct {
 	database *database.Database
 	config   *database.Config
 }
+
+type Map map[string]any
+
+type Context = server.Context
+
+type JSON = view.JSON
