@@ -128,7 +128,7 @@ func (orm *ORM) execBuildWhereClauseFindScylla(
 func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 	if len(orm.HavingClauses) > 0 {
 		return orm.setError(
-			"Having is not supported by ScyllaDB CQL. Filter aggregate results in application code or use a different query strategy.",
+			"ScyllaDB CQL does not support HAVING. Filter aggregate results in application code or use another query strategy. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
 			errors.New("find: unsupported Having clause for ScyllaDB"),
 			http.StatusBadRequest,
 		)
@@ -136,14 +136,15 @@ func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 
 	if len(orm.JoinClauses) > 0 {
 		return orm.setError(
-			"Join is not supported by ScyllaDB (CQL has no JOIN). Use Preload instead.",
-			errors.New("find: unsupported clause for ScyllaDB"),
+			"ScyllaDB CQL does not support JOIN; a SELECT query can read from only one table. Use Preload or another query strategy. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
+			errors.New("find: unsupported JOIN clause for ScyllaDB"),
+			http.StatusBadRequest,
 		)
 	}
 
 	if orm.OffsetVal > 0 {
 		return orm.setError(
-			"CQL does not support OFFSET. Use a clustering-key condition (e.g. .Where(\"created_at < ?\", last)) for pagination.",
+			"CQL does not support OFFSET. Use a clustering-key condition (e.g. .Where(\"created_at < ?\", last)) for pagination. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
 			errors.New("find: OFFSET is not supported by ScyllaDB"),
 		)
 	}
