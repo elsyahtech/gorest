@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strings"
-
-	"github.com/elsyahtech/gorest/database"
 )
 
 type fieldRequirement struct {
@@ -51,8 +48,6 @@ func (orm *ORM) validateDataMongo(data any, fieldReq fieldRequirement, opName st
 }
 
 func (orm *ORM) validateStructTags(data any, structRequirement fieldRequirement, opName string) error {
-	activeDriver := orm.DatabaseConfig.Driver
-
 	val, err := orm.buildValueValidateStructTags(data, opName)
 	if err != nil {
 		return orm.Error
@@ -81,28 +76,9 @@ func (orm *ORM) validateStructTags(data any, structRequirement fieldRequirement,
 			"expected struct or slice of structs, got %s", opName, val.Kind()), http.StatusBadRequest)
 	}
 
-	tagInfo, err := orm.buildTagInfoInvalidateStructTags(structType, structRequirement, opName)
+	_, err = orm.buildTagInfoInvalidateStructTags(structType, structRequirement, opName)
 	if err != nil {
 		return orm.Error
-	}
-
-	if activeDriver == database.MONGO && tagInfo.hasPrimaryKey && tagInfo.primaryKeyColumn != _id {
-		hint := ""
-
-		if strings.EqualFold(strings.TrimPrefix(tagInfo.primaryKeyColumn, "_"), "id") {
-			hint = " (did you forget the underscore? use \"_id\")"
-		}
-
-		message := fmt.Sprintf(
-			"MongoDB primary_key must be gorest:\"_id, primary_key\", got %q%s. "+
-				"This field always decodes empty, breaking Find results, Update/Delete by ID, and Preload.",
-			tagInfo.primaryKeyColumn, hint,
-		)
-
-		return orm.setError(message, fmt.Errorf(
-			"%s - validateStructTags: InvalidMongoPrimaryKeyColumn: struct %s got %q, want \"_id\"",
-			opName, structType.Name(), tagInfo.primaryKeyColumn,
-		), http.StatusBadRequest)
 	}
 
 	return nil

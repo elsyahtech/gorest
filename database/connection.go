@@ -211,7 +211,7 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 		}
 
 		message := fmt.Sprintf(
-			"verify if %s service/daemon is running, check host, credentials, port settings and network connectivity is stable. "+
+			"verify if %s service/daemon is running, database name, check host, credentials, port settings, TLS/ssl_mode and network connectivity is stable. "+
 				"If you are using oracle, please install Oracle Instant Client (https://www.oracle.com/database/technologies/instant-client/downloads.html) "+
 				"and set the correct LibDir path in your configuration (current LibDir: %s).",
 			driver,
