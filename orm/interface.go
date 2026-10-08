@@ -26,6 +26,7 @@ type ORM struct {
 	UpsertConflictCols []string
 	WhereClauses       []string
 	SelectedCols       []string
+	DistinctCols       []string
 	UpsertUpdateCols   []string
 	UpsertClauses      []string
 	UpsertArgs         []any
