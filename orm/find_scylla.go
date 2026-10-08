@@ -117,7 +117,18 @@ func (orm *ORM) findScylla(data any) error {
 }
 
 func (orm *ORM) setScyllaFindError(message string, err error) error {
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "group by non-primary-key column") {
+	if err == nil {
+		return orm.setError(message, err)
+	}
+
+	errText := strings.ToLower(err.Error())
+	if strings.Contains(errText, "select distinct queries must only request partition key columns") {
+		message = "ScyllaDB SELECT DISTINCT only supports partition key and static columns. ALLOW FILTERING does not remove this restriction. Check the table schema and selected columns. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html"
+
+		return orm.setError(message, err, http.StatusBadRequest)
+	}
+
+	if strings.Contains(errText, "group by non-primary-key column") {
 		message = "ScyllaDB only supports GROUP BY on a primary key prefix: the partition key first, followed by clustering columns in key order. Check the table's primary key and GROUP BY columns. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html"
 
 		return orm.setError(message, err, http.StatusBadRequest)
