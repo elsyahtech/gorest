@@ -19,18 +19,11 @@ func assignReflectValue(target reflect.Value, raw any) error {
 
 	source := reflect.ValueOf(raw)
 
-	if err := reflectNonPointerInAssignReflectValue(target, source, raw); err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
-	// Pointer assignment with conversion
 	if target.Kind() == reflect.Pointer {
-		if err := reflectPointerInAssignReflectValue(target, source, raw); err != nil {
-			return fmt.Errorf("%w", err)
-		}
+		return reflectPointerInAssignReflectValue(target, source, raw)
 	}
 
-	return fmt.Errorf("cannot assign database value of type %T to field type %s", raw, target.Type())
+	return reflectNonPointerInAssignReflectValue(target, source, raw)
 }
 
 func reflectNonPointerInAssignReflectValue(target, source reflect.Value, raw any) error {
