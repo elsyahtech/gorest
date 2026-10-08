@@ -44,6 +44,14 @@ func (orm *ORM) findSQL(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+	whereClause.valueArgs, whereClause.argCounter, err = orm.buildGroupByHavingFindSQL(
+		activeDriver,
+		whereClause.argCounter,
+		whereClause.valueArgs,
+	)
+	if err != nil {
+		return orm.Error
+	}
 
 	// 8. Build ORDER BY clauses
 	if len(orm.OrderByClauses) > 0 {

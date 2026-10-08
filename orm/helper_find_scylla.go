@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -125,6 +126,14 @@ func (orm *ORM) execBuildWhereClauseFindScylla(
 }
 
 func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
+	if len(orm.HavingClauses) > 0 {
+		return orm.setError(
+			"Having is not supported by ScyllaDB CQL. Filter aggregate results in application code or use a different query strategy.",
+			errors.New("find: unsupported Having clause for ScyllaDB"),
+			http.StatusBadRequest,
+		)
+	}
+
 	if len(orm.JoinClauses) > 0 {
 		return orm.setError(
 			"Join is not supported by ScyllaDB (CQL has no JOIN). Use Preload instead.",

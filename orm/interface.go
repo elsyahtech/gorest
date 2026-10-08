@@ -27,6 +27,9 @@ type ORM struct {
 	WhereClauses       []string
 	SelectedCols       []string
 	DistinctCols       []string
+	GroupByClauses     []string
+	HavingClauses      []string
+	HavingArgs         []any
 	UpsertUpdateCols   []string
 	UpsertClauses      []string
 	UpsertArgs         []any

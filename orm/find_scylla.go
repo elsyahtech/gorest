@@ -56,6 +56,10 @@ func (orm *ORM) findScylla(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+	if len(orm.GroupByClauses) > 0 {
+		orm.safeWriteString(" GROUP BY ")
+		orm.safeWriteString(strings.Join(orm.GroupByClauses, ", "))
+	}
 
 	// 10. Build ORDER BY clauses (valid only for clustering keys when the partition key is restricted)
 	if len(orm.OrderByClauses) > 0 {

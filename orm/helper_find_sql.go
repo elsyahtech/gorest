@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -297,6 +298,52 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 		argCounter: argCounter,
 		limitVal:   limitVal,
 	}, nil
+}
+
+func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounter int, valueArgs []any) ([]any, int, error) {
+	if len(orm.GroupByClauses) > 0 {
+		orm.safeWriteString(" GROUP BY ")
+		orm.safeWriteString(strings.Join(orm.GroupByClauses, ", "))
+	}
+
+	if len(orm.HavingClauses) == 0 {
+		return valueArgs, argCounter, nil
+	}
+
+	var (
+		havingParts []string
+		argIndex    int
+	)
+
+	for _, clause := range orm.HavingClauses {
+		placeholderCount := countActivePlaceholders(clause, activeDriver)
+		if argIndex+placeholderCount > len(orm.HavingArgs) {
+			return nil, 0, orm.setError(
+				"Ensure the number of placeholders in .Having() matches the number of arguments provided.",
+				errors.New("find: mismatched having clause placeholders and arguments"),
+				http.StatusBadRequest,
+			)
+		}
+
+		normalized, nextCounter := normalizeWherePlaceholders(clause, activeDriver, argCounter)
+		argCounter = nextCounter
+		havingParts = append(havingParts, normalized)
+		valueArgs = append(valueArgs, orm.HavingArgs[argIndex:argIndex+placeholderCount]...)
+		argIndex += placeholderCount
+	}
+
+	if argIndex != len(orm.HavingArgs) {
+		return nil, 0, orm.setError(
+			"Ensure the number of arguments matches the number of placeholders across all .Having() clauses.",
+			errors.New("find: unused arguments provided to .Having()"),
+			http.StatusBadRequest,
+		)
+	}
+
+	orm.safeWriteString(" HAVING ")
+	orm.safeWriteString(strings.Join(havingParts, " AND "))
+
+	return valueArgs, argCounter, nil
 }
 
 type structBuildLimitOffsetFindSQL struct {

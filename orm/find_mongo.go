@@ -3,6 +3,10 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"net/http"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func (orm *ORM) findMongo(data any) error {
@@ -17,9 +21,9 @@ func (orm *ORM) findMongo(data any) error {
 	// 2. Block fitur join and disctinc for mongoDB to avoid overhead.
 	// Performance consideration
 	if len(orm.JoinClauses) > 0 || orm.IsDistinct {
-		const message = "Join, and Distinct are not supported by Mongo (mongo has no JOIN)."
+		const message = "Join and Distinct are not supported by Mongo Find."
 
-		return orm.setError(message, errors.New("find: unsupported clause for MongoDB"))
+		return orm.setError(message, errors.New("find: unsupported clause for MongoDB"), http.StatusBadRequest)
 	}
 
 	// 3. Validate Struct (Ensure the struct has valid tags & primary_key)
@@ -61,8 +65,16 @@ func (orm *ORM) findMongo(data any) error {
 		return orm.Error
 	}
 
-	// 9. Build Mongo Options (Projection, SORT, LIMIT, OFFSET)
-	findOpts, err := orm.buildMongoOptionFindMongo(tableName, preload, sort, isSlice)
+	grouped := len(orm.GroupByClauses) > 0 || len(orm.HavingClauses) > 0
+	var (
+		findOpts *options.FindOptionsBuilder
+		pipeline mongo.Pipeline
+	)
+	if grouped {
+		pipeline, err = orm.buildMongoGroupPipeline(tableName, filter, sort, isSlice)
+	} else {
+		findOpts, err = orm.buildMongoOptionFindMongo(tableName, preload, sort, isSlice)
+	}
 	if err != nil {
 		return orm.Error
 	}
@@ -77,8 +89,13 @@ func (orm *ORM) findMongo(data any) error {
 		return orm.setError(message, err)
 	}
 
-	// 12. Execute mongo find query
-	cursor, err := coll.Find(execCtx, filter, findOpts)
+	// 12. Execute Mongo find or aggregation query.
+	var cursor *mongo.Cursor
+	if grouped {
+		cursor, err = coll.Aggregate(execCtx, pipeline)
+	} else {
+		cursor, err = coll.Find(execCtx, filter, findOpts)
+	}
 	if err != nil {
 		const findMessage = "Check your filter, sort, or index configuration."
 
