@@ -102,8 +102,17 @@ func (orm *ORM) findMongo(data any) error {
 		return orm.setError(findMessage, err)
 	}
 
+	// Keep the original cursor for cleanup. The scanner returns a nil cursor
+	// when decoding or mapping fails, so do not overwrite the cursor captured
+	// by the deferred Close call.
+	cursorToClose := cursor
+
 	defer func() {
-		if err := cursor.Close(execCtx); err == nil {
+		if cursorToClose == nil {
+			return
+		}
+
+		if err := cursorToClose.Close(execCtx); err == nil {
 			return
 		}
 
@@ -116,7 +125,7 @@ func (orm *ORM) findMongo(data any) error {
 	fieldLookupMap := buildStructFieldMapByTag(structInfo.structType)
 
 	// 14. Process rows scanning and relationship mapping
-	cursor, err = orm.buildRowsScanFindMongo(
+	_, err = orm.buildRowsScanFindMongo(
 		execCtx,
 		cursor,
 		structInfo.structType,
