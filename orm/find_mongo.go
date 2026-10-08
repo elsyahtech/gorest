@@ -111,6 +111,9 @@ func (orm *ORM) findMongo(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+	if !isSlice && orm.RowsAffected == 0 {
+		return orm.setNotFound("find")
+	}
 
 	// 15. Load Find Mongo Preload/has-many relationships preload data
 	if err := orm.loadFindMogoPreloadData(execCtx, preload, valElem, isSlice); err != nil {

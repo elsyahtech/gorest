@@ -38,6 +38,7 @@ type ORM struct {
 	RowsAffected       int64
 	OffsetVal          int
 	LimitVal           int
+	HTTPCode           int
 	IsUpsert           bool
 	AllowFilteringFlag bool
 	IsDistinct         bool

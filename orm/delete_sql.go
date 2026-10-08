@@ -64,6 +64,9 @@ func (orm *ORM) deleteSQL(data any) error {
 	}
 
 	orm.extractResultDeleteSQL(result)
+	if orm.RowsAffected == 0 {
+		return orm.setNotFound("delete")
+	}
 
 	return nil
 }

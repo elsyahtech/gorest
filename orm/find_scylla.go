@@ -107,6 +107,9 @@ func (orm *ORM) findScylla(data any) error {
 	if err := orm.buildIterScanFindScylla(iter, structInfo.structType, fieldLookupMap, isSlice, valElem, structInfo.structValue); err != nil {
 		return orm.Error
 	}
+	if !isSlice && orm.RowsAffected == 0 {
+		return orm.setNotFound("find")
+	}
 
 	// 18. Load Find Scylla Preload/has-many relationships preload data
 	if err := orm.loadFindScyllaPreloadData(execCtx, preload, valElem, isSlice); err != nil {

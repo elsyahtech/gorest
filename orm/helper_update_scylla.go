@@ -37,10 +37,7 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 	}
 
 	if !applied {
-		return orm.setError(
-			"Ensure that the record exists before updating. Primary key or where clause matched 0 records.",
-			errors.New("update: record not found for the given where clause"),
-		)
+		return orm.setNotFound("update")
 	}
 
 	const note = "note"
@@ -56,8 +53,6 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 
 func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rowsVal []reflect.Value, meta columnMetaData, activeDriver string) error {
 	var (
-		batchQueries      []string
-		batchArgs         [][]any
 		totalRowsAffected int64
 		query             resBuildQueryUpdateSQL
 	)
@@ -89,21 +84,22 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 			return orm.Error
 		}
 
-		queryStr := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+		queryStr := fmt.Sprintf("UPDATE %s SET %s WHERE %s IF EXISTS",
 			strings.TrimSpace(tableName),
 			strings.Join(query.clauses, ", "),
 			strings.Join(whereClauses, " AND "),
 		)
 
-		batchQueries = append(batchQueries, queryStr)
-		batchArgs = append(batchArgs, query.args)
-
-		totalRowsAffected++
+		applied, message, err := orm.Database.ScanCQL(execCtx, queryStr, query.args...)
+		if err != nil {
+			return orm.setError(message, err)
+		}
+		if applied {
+			totalRowsAffected++
+		}
 	}
-
-	message, err := orm.Database.ExecBatchCQL(execCtx, batchQueries, batchArgs)
-	if err != nil {
-		return orm.setError(message, err)
+	if totalRowsAffected == 0 {
+		return orm.setNotFound("update")
 	}
 
 	orm.RowsAffected = totalRowsAffected

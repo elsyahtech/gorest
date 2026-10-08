@@ -2,6 +2,7 @@ package orm
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/elsyahtech/gorest/database"
 )
@@ -10,7 +11,7 @@ func (orm *ORM) validateDBInstance(data any, targetDriver string, opName string)
 	if data == nil {
 		message := "Ensure that the payload data passed to " + opName + "() is not configured nil"
 
-		return "", orm.setError(message, fmt.Errorf("%s: payload data is nil", opName))
+		return "", orm.setError(message, fmt.Errorf("%s: payload data is nil", opName), http.StatusBadRequest)
 	}
 
 	if orm.Database == nil {
@@ -52,7 +53,7 @@ func (orm *ORM) validateDBInstance(data any, targetDriver string, opName string)
 	if orm.Table == nil || *orm.Table == "" {
 		message := fmt.Sprintf("Ensure that you specify the target table using .Table(\"table_name\") before calling %s().", opName)
 
-		return "", orm.setError(message, fmt.Errorf("%s: table name is empty", opName))
+		return "", orm.setError(message, fmt.Errorf("%s: table name is empty", opName), http.StatusBadRequest)
 	}
 
 	tableName = *orm.Table

@@ -460,6 +460,7 @@ func (orm *ORM) buildRowsScanFindSQL(req *structBuildRowsScanFindSQL) error {
 		}
 
 		fieldMapRowsScanFindSQL(resStructScanColumnRows.fieldMappings, resStructScanColumnRows.fieldHolders)
+		orm.RowsAffected++
 
 		// Preload Mapping (if active)
 		if len(orm.Preloads) > 0 {

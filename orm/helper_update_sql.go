@@ -40,10 +40,12 @@ func (orm *ORM) updateSingleSQL(
 		if err != nil {
 			return orm.Error
 		}
+		if len(scanned) == 0 {
+			return orm.setNotFound("update")
+		}
 
 		return orm.finishReturn(retPlan, scanned, rowsVal)
 	}
-
 	result, message, err := orm.Database.ExecSQL(execCtx, queryStr, whereClause.args...)
 	if err != nil {
 		return orm.setError(message, err)
@@ -55,6 +57,9 @@ func (orm *ORM) updateSingleSQL(
 		if aff, err := result.RowsAffected(); err == nil {
 			affected = aff
 		}
+	}
+	if affected == 0 {
+		return orm.setNotFound("update")
 	}
 
 	orm.RowsAffected = affected
@@ -78,7 +83,6 @@ func (orm *ORM) updateBulkSQL(
 	if err != nil {
 		return orm.Error
 	}
-
 	chunkSize := buildChunkSize(activeDriver, len(updatableCols), len(meta.primaryKeyIndex))
 
 	totalRowsAffected, scanned, err := orm.execBulkUpdateSQL(
@@ -95,6 +99,9 @@ func (orm *ORM) updateBulkSQL(
 	)
 	if err != nil {
 		return orm.Error
+	}
+	if totalRowsAffected == 0 {
+		return orm.setNotFound("update")
 	}
 
 	orm.RowsAffected = totalRowsAffected

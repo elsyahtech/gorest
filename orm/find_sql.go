@@ -117,6 +117,9 @@ func (orm *ORM) findSQL(data any) error {
 	); err != nil {
 		return orm.Error
 	}
+	if !isSlice && orm.RowsAffected == 0 {
+		return orm.setNotFound("find")
+	}
 
 	// 17. Load Find SQL Preload/has-many relationships preload data
 	if err := orm.loadFindSQLPreloadData(execCtx, activeDriver, valElem, isSlice, preload.hasManyRels, cols); err != nil {

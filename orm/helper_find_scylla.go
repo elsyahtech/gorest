@@ -184,6 +184,8 @@ func (orm *ORM) buildIterScanFindScylla(
 			}
 		}
 
+		orm.RowsAffected++
+
 		if !isSlice {
 			valElem.Set(newStructVal)
 

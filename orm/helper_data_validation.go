@@ -2,6 +2,7 @@ package orm
 
 import (
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -77,7 +78,7 @@ func (orm *ORM) validateStructTags(data any, structRequirement fieldRequirement,
 		message := fmt.Sprintf("Ensure you pass a struct or a slice of structs, but got type '%s'.", val.Kind())
 
 		return orm.setError(message, fmt.Errorf("%s - validateStructTags: InvalidDataType: "+
-			"expected struct or slice of structs, got %s", opName, val.Kind()))
+			"expected struct or slice of structs, got %s", opName, val.Kind()), http.StatusBadRequest)
 	}
 
 	tagInfo, err := orm.buildTagInfoInvalidateStructTags(structType, structRequirement, opName)
@@ -101,7 +102,7 @@ func (orm *ORM) validateStructTags(data any, structRequirement fieldRequirement,
 		return orm.setError(message, fmt.Errorf(
 			"%s - validateStructTags: InvalidMongoPrimaryKeyColumn: struct %s got %q, want \"_id\"",
 			opName, structType.Name(), tagInfo.primaryKeyColumn,
-		))
+		), http.StatusBadRequest)
 	}
 
 	return nil
@@ -113,6 +114,7 @@ func (orm *ORM) buildValueValidateStructTags(data any, opName string) (reflect.V
 		return val, orm.setError(
 			"Ensure the payload data passed is a struct, a slice of structs, or a valid pointer.",
 			fmt.Errorf("%s - validateStructTags: InvalidReflectValue", opName),
+			http.StatusBadRequest,
 		)
 	}
 
@@ -121,6 +123,7 @@ func (orm *ORM) buildValueValidateStructTags(data any, opName string) (reflect.V
 			return val, orm.setError(
 				fmt.Sprintf("Ensure the pointer passed to the %s operation is not nil; initialize it before passing.", opName),
 				fmt.Errorf("%s - validateStructTags: NilPointerDereference", opName),
+				http.StatusBadRequest,
 			)
 		}
 
@@ -136,6 +139,7 @@ func (orm *ORM) verifFieldRequirementValidateStructTags(requirement fieldRequire
 			return orm.setError(
 				"Ensure the provided slice contains at least one record/element to perform this operation.",
 				fmt.Errorf("%s - validateStructTags: EmptySliceProvided", opName),
+				http.StatusBadRequest,
 			)
 		}
 
@@ -144,6 +148,7 @@ func (orm *ORM) verifFieldRequirementValidateStructTags(requirement fieldRequire
 				return orm.setError(
 					fmt.Sprintf("Ensure element at index %d in the slice is not a nil pointer.", idx),
 					fmt.Errorf("%s - validateStructTags: NilElementInSlice", opName),
+					http.StatusBadRequest,
 				)
 			}
 		}
@@ -164,6 +169,7 @@ func (orm *ORM) buildStructTypeByElemInValidateStructTags(val reflect.Value, opN
 			fmt.Sprintf("Ensure the slice contains structs, but found a slice of type '%s'.", elemType.Kind()),
 			fmt.Errorf("%s - validateStructTags: "+
 				"InvalidSliceElementType: expected slice of structs, got slice of %s", opName, elemType.Kind()),
+			http.StatusBadRequest,
 		)
 	}
 
@@ -183,6 +189,7 @@ func (orm *ORM) buildTagInfoInvalidateStructTags(structType reflect.Type, struct
 				structType.Name(), tagInfo.err,
 			),
 			fmt.Errorf("%s - validateStructTags: EmptyGorestTag: %w", opName, tagInfo.err),
+			http.StatusBadRequest,
 		)
 	}
 
@@ -190,6 +197,7 @@ func (orm *ORM) buildTagInfoInvalidateStructTags(structType reflect.Type, struct
 		return tagInfo, orm.setError(
 			"Ensure your struct fields have valid 'gorest' tags mapped to columns (e.g., gorest:\"column_name\").",
 			fmt.Errorf("%s - validateStructTags: MissingGorestTags", opName),
+			http.StatusBadRequest,
 		)
 	}
 
@@ -198,6 +206,7 @@ func (orm *ORM) buildTagInfoInvalidateStructTags(structType reflect.Type, struct
 			"Ensure that at least one field in your struct is designated using "+
 				"the 'primary_key' flag (e.g., gorest:\"id, primary_key\").",
 			fmt.Errorf("%s - validateStructTags: MissingPrimaryKeyTag", opName),
+			http.StatusBadRequest,
 		)
 	}
 

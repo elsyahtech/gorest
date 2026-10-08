@@ -287,6 +287,8 @@ func (orm *ORM) buildRowsScanFindMongo(
 			}
 		}
 
+		orm.RowsAffected++
+
 		if !isSlice {
 			valElem.Set(newStructVal)
 

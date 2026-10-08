@@ -48,6 +48,9 @@ func (orm *ORM) updateSingleMongo(execCtx context.Context, collection *mongo.Col
 		matched = res.MatchedCount
 		modified = res.ModifiedCount
 	}
+	if matched == 0 {
+		return orm.setNotFound("update")
+	}
 
 	orm.RowsAffected = modified
 	orm.Result = map[string]any{
@@ -96,6 +99,9 @@ func (orm *ORM) updateBulkMongo(execCtx context.Context, collection *mongo.Colle
 	if result != nil {
 		totalMatched = result.MatchedCount
 		totalModified = result.ModifiedCount
+	}
+	if totalMatched == 0 {
+		return orm.setNotFound("update")
 	}
 
 	orm.RowsAffected = totalModified

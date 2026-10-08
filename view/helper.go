@@ -2,6 +2,7 @@ package view
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -30,6 +31,10 @@ func (res *JSON) WithMessage(message string, errInput any, code ...int) *JSON {
 	if errString != "" && errString != "<nil>" {
 		res.Success = false
 		res.HTTPCode = http.StatusBadRequest
+		var statusErr interface{ HTTPStatusCode() int }
+		if errors.As(asError(errInput), &statusErr) {
+			res.HTTPCode = statusErr.HTTPStatusCode()
+		}
 
 		if message != "" {
 			res.Error = fmt.Sprintf("%s: %s", message, errString)
@@ -49,6 +54,13 @@ func (res *JSON) WithMessage(message string, errInput any, code ...int) *JSON {
 	}
 
 	return res
+}
+
+func asError(value any) error {
+	if err, ok := value.(error); ok {
+		return err
+	}
+	return nil
 }
 
 func (res *JSON) MarshalJSON() ([]byte, error) {

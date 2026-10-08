@@ -87,6 +87,9 @@ func (orm *ORM) deleteMongo(data any) error {
 	}
 
 	orm.RowsAffected = deletedCount
+	if deletedCount == 0 {
+		return orm.setNotFound("delete")
+	}
 	orm.Result = map[string]any{
 		isSuccess:    true,
 		rowsAffected: deletedCount,

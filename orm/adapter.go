@@ -1,6 +1,9 @@
 package orm
 
-import "fmt"
+import (
+	"fmt"
+	"net/http"
+)
 
 func (orm *ORM) Create(data any) *ORM {
 	return orm.execOrm(data, "Create", orm.createSQL, orm.createMongo, orm.createScylla)
@@ -18,7 +21,11 @@ func (orm *ORM) Find(data any) *ORM {
 	if len(orm.DistinctCols) > 0 {
 		if len(orm.SelectedCols) > 0 {
 			orm.Message = "Use either Select() or Distinct(columns), not both. Distinct(columns) selects the distinct columns."
-			orm.Error = fmt.Errorf("find: Select() conflicts with Distinct(columns)")
+			orm.Error = orm.setError(
+				orm.Message,
+				fmt.Errorf("find: Select() conflicts with Distinct(columns)"),
+				http.StatusBadRequest,
+			)
 
 			return orm
 		}
