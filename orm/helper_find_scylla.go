@@ -159,7 +159,16 @@ func (orm *ORM) buildIterScanFindScylla(
 	isSlice bool,
 	valElem *reflect.Value,
 	sliceVal *reflect.Value,
-) error {
+) (scanErr error) {
+	defer func() {
+		if closeErr := iter.Close(); closeErr != nil && scanErr == nil {
+			scanErr = orm.setScyllaFindError(
+				"ensure ScyllaDB is reachable and the query is valid (non-key columns need .AllowFiltering())",
+				closeErr,
+			)
+		}
+	}()
+
 	for {
 		row := make(map[string]any)
 		if !iter.MapScan(row) {
@@ -210,13 +219,6 @@ func (orm *ORM) buildIterScanFindScylla(
 
 	if isSlice {
 		valElem.Set(*sliceVal)
-	}
-
-	if err := iter.Close(); err != nil {
-		return orm.setError(
-			"ensure ScyllaDB is reachable and the query is valid (non-key columns need .AllowFiltering())",
-			err,
-		)
 	}
 
 	return nil

@@ -1,7 +1,6 @@
 package orm
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -92,24 +91,8 @@ func (orm *ORM) findScylla(data any) error {
 	// 15. Execute database query
 	iter, message, err := orm.Database.QueryCQL(execCtx, queryStr, valueArgs...)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "group by non-primary-key column") {
-			message = "ScyllaDB only supports GROUP BY on a primary key prefix: the partition key first, followed by clustering columns in key order. Check the table's primary key and GROUP BY columns. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html"
-
-			return orm.setError(message, err, http.StatusBadRequest)
-		}
-
-		return orm.setError(message, err)
+		return orm.setScyllaFindError(message, err)
 	}
-
-	defer func() {
-		if err := iter.Close(); err == nil {
-			return
-		}
-
-		orm.Message = "Ensure the context has sufficient timeout for " +
-			"cleanup operations and check network stability to the database server."
-		orm.Error = fmt.Errorf("failed to iter close: %w", err)
-	}()
 
 	// 16. Build field lookup map for struct
 	fieldLookupMap := buildStructFieldMapByTag(structInfo.structType)
@@ -131,4 +114,14 @@ func (orm *ORM) findScylla(data any) error {
 	orm.Result = data
 
 	return nil
+}
+
+func (orm *ORM) setScyllaFindError(message string, err error) error {
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "group by non-primary-key column") {
+		message = "ScyllaDB only supports GROUP BY on a primary key prefix: the partition key first, followed by clustering columns in key order. Check the table's primary key and GROUP BY columns. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html"
+
+		return orm.setError(message, err, http.StatusBadRequest)
+	}
+
+	return orm.setError(message, err)
 }
