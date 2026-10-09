@@ -16,7 +16,7 @@ import (
 // DecodeMongoCursor decodes MongoDB documents into a struct or slice of
 // structs using the first value in each field's gorest tag as its BSON field
 // name. The caller retains ownership of the cursor and should close it.
-func DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
+func (*Database) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
 	if ctx == nil || cursor == nil {
 		return setError(
 			"Ensure the MongoDB context and cursor are not nil.",

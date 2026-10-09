@@ -96,6 +96,10 @@ func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Colle
 	return coll, "", httpCode, nil
 }
 
+func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
+	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest)
+}
+
 // Getter native Mongo create collection queries.
 func (dbSession *DBSession) MongoCreateCollection(
 	ctx context.Context,
