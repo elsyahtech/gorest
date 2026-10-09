@@ -31,9 +31,9 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 		strings.Join(whereClause.parts, " AND "),
 	)
 
-	applied, troubleshootMsg, err := orm.Database.ScanCQL(execCtx, queryStr, whereClause.args...)
+	applied, troubleshootMsg, httpCode, err := orm.Database.ScanCQL(execCtx, queryStr, whereClause.args...)
 	if err != nil {
-		return orm.setError(troubleshootMsg, err)
+		return orm.setError(troubleshootMsg, err, httpCode)
 	}
 
 	if !applied {
@@ -90,9 +90,9 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 			strings.Join(whereClauses, " AND "),
 		)
 
-		applied, message, err := orm.Database.ScanCQL(execCtx, queryStr, query.args...)
+		applied, message, httpCode, err := orm.Database.ScanCQL(execCtx, queryStr, query.args...)
 		if err != nil {
-			return orm.setError(message, err)
+			return orm.setError(message, err, httpCode)
 		}
 		if applied {
 			totalRowsAffected++

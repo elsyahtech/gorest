@@ -67,9 +67,9 @@ func (orm *ORM) createSQL(data any) error {
 		return orm.execReturn(execCtx, queryStr, resultArg.valueArgs, retPlan, rowsVal, meta)
 	}
 
-	result, message, err := orm.Database.ExecSQL(execCtx, queryStr, resultArg.valueArgs...)
+	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, queryStr, resultArg.valueArgs...)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	orm.Result = result

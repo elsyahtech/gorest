@@ -530,9 +530,9 @@ func mapMongoDoc(doc bson.M, structType reflect.Type, lookup map[string]*structF
 
 // eachMongoDoc executes a Find operation on another collection and calls each() for each document.
 func (orm *ORM) eachMongoDoc(ctx context.Context, collection string, filter any, sort bson.D, each func(doc bson.M) error) error {
-	coll, message, err := orm.Database.Collection(orm.DatabaseConfig, collection)
+	coll, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, collection)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	opts := options.Find()

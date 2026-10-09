@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
@@ -19,19 +20,26 @@ type TransactionFunc func(ctx context.Context, tx *sql.Tx) error
 // ========================================================================================================
 // MYSQL, POSTGRES, SQLSERVER, ORACLE and SQLITE
 // ========================================================================================================.
-func (db *Database) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, error) {
-	if db.SQL == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ExecSQL, the application must use one of the following databases: " +
-			"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE."
+func (db *Database) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
+	if db == nil || db.SQL == nil {
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use ExecSQL, the application must use one of the following databases: "+
+				"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE.",
+			errors.New("execSQL: SQL database service is not running"),
+		)
 
-		return nil, message, errors.New("execSQL: SQL database service is not running")
+		return nil, message, code, err
 	}
 
 	if ctx == nil || query == "" {
-		const message = "Ensure the context and SQL query are not empty."
+		message, code, err := setError(
+			"Ensure the context and SQL query are not empty.",
+			errors.New("execSQL: context and SQL query cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return nil, message, errors.New("execSQL: context and SQL query cannot be empty")
+		return nil, message, code, err
 	}
 
 	var (
@@ -46,28 +54,38 @@ func (db *Database) ExecSQL(ctx context.Context, query string, args ...any) (sql
 	}
 
 	if err != nil {
-		message := "Ensure the target table exists and is accessible, " +
-			"and check that your SQL syntax, table names, column names, and parameter types are correct."
+		message, code, err := setError(
+			"Ensure the target table exists and is accessible, "+
+				"and check that your SQL syntax, table names, column names, and parameter types are correct.",
+			fmt.Errorf("execSQL: %w", err),
+		)
 
-		return nil, message, fmt.Errorf("execSQL: %w", err)
+		return nil, message, code, err
 	}
 
-	return result, "", nil
+	return result, "", http.StatusOK, nil
 }
 
-func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, error) {
-	if db.SQL == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ExecSQL, the application must use one of the following databases: " +
-			"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE."
+func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
+	if db == nil || db.SQL == nil {
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use ExecSQL, the application must use one of the following databases: "+
+				"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE.",
+			errors.New("querySQL: SQL database service is not running"),
+		)
 
-		return nil, message, errors.New("querySQL: SQL database service is not running")
+		return nil, message, code, err
 	}
 
 	if ctx == nil || query == "" {
-		const message = "Ensure the context and SQL query are not empty."
+		message, code, err := setError(
+			"Ensure the context and SQL query are not empty.",
+			errors.New("querySQL: context and SQL query cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return nil, message, errors.New("querySQL: context and SQL query cannot be empty")
+		return nil, message, code, err
 	}
 
 	var (
@@ -82,29 +100,39 @@ func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*s
 	}
 
 	if err != nil {
-		message := "Ensure the target table exists and is accessible, " +
-			"and check that your SQL syntax, table names, column names, and parameter types are correct."
+		message, code, err := setError(
+			"Ensure the target table exists and is accessible, "+
+				"and check that your SQL syntax, table names, column names, and parameter types are correct.",
+			fmt.Errorf("querySQL: %w", err),
+		)
 
-		return nil, message, fmt.Errorf("querySQL: %w", err)
+		return nil, message, code, err
 	}
 
-	return result, "", nil
+	return result, "", http.StatusOK, nil
 }
 
-func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, error) {
+func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, int, error) {
 	if db == nil || db.SQL == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ExecSQLTx, the application must use one of the following databases: " +
-			"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE."
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use ExecSQLTx, the application must use one of the following databases: "+
+				"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE.",
+			errors.New("BeginTx: SQL database service is not running"),
+		)
 
-		return nil, message, errors.New("BeginTx: SQL database service is not running")
+		return nil, message, code, err
 	}
 
 	if db.Tx != nil {
-		const message = "Ensure you properly commit or rollback the previous transaction (using Commit() or Rollback()) " +
-			"before starting a new one, or avoid calling BeginTx multiple times consecutively."
+		message, code, err := setError(
+			"Ensure you properly commit or rollback the previous transaction (using Commit() or Rollback()) "+
+				"before starting a new one, or avoid calling BeginTx multiple times consecutively.",
+			errors.New("BeginTx: a transaction is already active in this database session"),
+			http.StatusConflict,
+		)
 
-		return nil, message, errors.New("BeginTx: a transaction is already active in this database session")
+		return nil, message, code, err
 	}
 
 	var opt *sql.TxOptions
@@ -114,34 +142,44 @@ func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, error) {
 
 	transaction, err := db.SQL.BeginTx(context.Background(), opt)
 	if err != nil {
-		const message = "Check your database connection health, verify that the database server is running and reachable"
+		message, code, err := setError(
+			"Check your database connection health, verify that the database server is running and reachable",
+			fmt.Errorf("BeginTx: failed to start transaction: %w", err),
+		)
 
-		return nil, message, fmt.Errorf("BeginTx: failed to start transaction: %w", err)
+		return nil, message, code, err
 	}
 
 	db.Tx = transaction
 
-	return db, "", nil
+	return db, "", http.StatusOK, nil
 }
 
 // ========================================================================================================
 // MONGO
 // ========================================================================================================.
-func (db *Database) Collection(config *Config, collectionName string) (*mongo.Collection, string, error) {
+func (db *Database) Collection(config *Config, collectionName string) (*mongo.Collection, string, int, error) {
 	if db == nil || db.Mongo == nil || config == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use Collection, the application must use MONGO"
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use Collection, the application must use MONGO",
+			errors.New("collection: mongo service is not running"),
+		)
 
-		return nil, message, errors.New("collection: mongo service is not running")
+		return nil, message, code, err
 	}
 
 	if collectionName == "" {
-		const message = "ensure collection name is not empty."
+		message, code, err := setError(
+			"ensure collection name is not empty.",
+			errors.New("collection: collection name cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return nil, message, errors.New("collection: collection name cannot be empty")
+		return nil, message, code, err
 	}
 
-	return db.Mongo.Database(config.Name).Collection(collectionName), "", nil
+	return db.Mongo.Database(config.Name).Collection(collectionName), "", http.StatusOK, nil
 }
 
 // CreateCollection creates a new collection in MongoDB with optional configurations (like schema validator).
@@ -150,80 +188,120 @@ func (db *Database) CreateCollection(
 	config *Config,
 	collectionName string,
 	opts ...options.Lister[options.CreateCollectionOptions],
-) (string, error) {
+) (string, int, error) {
 	if db == nil || db.Mongo == nil || config == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use Collection, the application must use MONGO"
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use Collection, the application must use MONGO",
+			errors.New("createCollection: mongo service is not running"),
+		)
 
-		return message, errors.New("createCollection: mongo service is not running")
+		return message, code, err
 	}
 
 	if ctx == nil || collectionName == "" {
-		const message = "ensure the context and collection name are not empty"
+		message, code, err := setError(
+			"ensure the context and collection name are not empty",
+			errors.New("createCollection: context and collection name cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return message, errors.New("createCollection: context and collection name cannot be empty")
+		return message, code, err
 	}
 
 	err := db.Mongo.Database(config.Name).CreateCollection(ctx, collectionName, opts...)
 	if err != nil {
-		const message = "verify the database user permissions, network state, or if the collection already exists"
+		message, code, err := setError(
+			"verify the database user permissions, network state, or if the collection already exists",
+			fmt.Errorf("createCollection: %w", err),
+		)
 
-		return message, fmt.Errorf("createCollection: %w", err)
+		return message, code, err
 	}
 
-	return "", nil
+	return "", http.StatusOK, nil
 }
 
 // ========================================================================================================
 // SCYLLA
 // ========================================================================================================.
-func (db *Database) ExecCQL(ctx context.Context, query string, args ...any) (string, error) {
+func (db *Database) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
 	if db == nil || db.Scylla == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ExecCQL, the application must use SCYLLA"
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use ExecCQL, the application must use SCYLLA",
+			errors.New("execCQL: scylla service is not running"),
+		)
 
-		return message, errors.New("execCQL: scylla service is not running")
+		return message, code, err
 	}
 
 	if ctx == nil || query == "" {
-		const message = "ensure the context and CQL query are not empty"
+		message, code, err := setError(
+			"ensure the context and CQL query are not empty",
+			errors.New("execCQL: context and CQL query cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return message, errors.New("execCQL: context and CQL query cannot be empty")
+		return message, code, err
 	}
 
 	err := db.Scylla.Query(query, args...).ExecContext(ctx)
 	if err != nil {
-		message := "Ensure the target table exists and is accessible, " +
-			"and check that your CQL syntax, table names, column names, partition keys and parameter types are correct."
+		message, code, err := setError(
+			"Ensure the target table exists and is accessible, "+
+				"and check that your CQL syntax, table names, column names, partition keys and parameter types are correct.",
+			fmt.Errorf("execCQL: %w", err),
+		)
 
-		return message, fmt.Errorf("execCQL: %w", err)
+		return message, code, err
 	}
 
-	return "", nil
+	return "", http.StatusOK, nil
 }
 
-func (db *Database) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, error) {
+func (db *Database) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
 	if db == nil || db.Scylla == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ExecCQL, the application must use SCYLLA"
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use ExecCQL, the application must use SCYLLA",
+			errors.New("queryCQL: scylla service is not running"),
+		)
 
-		return nil, message, errors.New("queryCQL: scylla service is not running")
+		return nil, message, code, err
 	}
 
 	if ctx == nil || query == "" {
-		const message = "ensure the context and CQL query are not empty"
+		message, code, err := setError(
+			"ensure the context and CQL query are not empty",
+			errors.New("queryCQL: context and CQL query cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return nil, message, errors.New("queryCQL: context and CQL query cannot be empty")
+		return nil, message, code, err
 	}
 
-	return db.Scylla.Query(query, args...).IterContext(ctx), "", nil
+	return db.Scylla.Query(query, args...).IterContext(ctx), "", http.StatusOK, nil
 }
 
-func (db *Database) ScanCQL(ctx context.Context, query string, args ...any) (applied bool, troubleshoot string, err error) {
-	if ctx == nil || query == "" {
-		const message = "ensure the context and CQL query are not empty"
+func (db *Database) ScanCQL(ctx context.Context, query string, args ...any) (applied bool, troubleshoot string, httpCode int, err error) {
+	if db == nil || db.Scylla == nil {
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. To use ScanCQL, the application must use SCYLLA.",
+			errors.New("scanCQL: scylla service is not running"),
+		)
 
-		return false, message, errors.New("scanCQL: context and CQL query cannot be empty")
+		return false, message, code, err
+	}
+
+	if ctx == nil || query == "" {
+		message, code, err := setError(
+			"ensure the context and CQL query are not empty",
+			errors.New("scanCQL: context and CQL query cannot be empty"),
+			http.StatusBadRequest,
+		)
+
+		return false, message, code, err
 	}
 
 	qry := db.Scylla.Query(query, args...)
@@ -232,26 +310,36 @@ func (db *Database) ScanCQL(ctx context.Context, query string, args ...any) (app
 
 	applied, err = qry.MapScanCASContext(ctx, pyld)
 	if err != nil {
-		const message = "Ensure that the record exists."
+		message, code, err := setError(
+			"Ensure that the record exists.",
+			err,
+		)
 
-		return false, message, fmt.Errorf("%w", err)
+		return false, message, code, err
 	}
 
-	return applied, "", nil
+	return applied, "", http.StatusOK, nil
 }
 
-func (db *Database) ExecBatchCQL(ctx context.Context, queries []string, batchArgs [][]any) (string, error) {
+func (db *Database) ExecBatchCQL(ctx context.Context, queries []string, batchArgs [][]any) (string, int, error) {
 	if db == nil || db.Scylla == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ExecuteBatchCQL, the application must use SCYLLA"
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"To use ExecuteBatchCQL, the application must use SCYLLA",
+			errors.New("executeBatchCQL: scylla service is not running"),
+		)
 
-		return message, errors.New("executeBatchCQL: scylla service is not running")
+		return message, code, err
 	}
 
 	if ctx == nil || len(queries) == 0 || len(queries) != len(batchArgs) {
-		const message = "ensure the context is valid and queries/arguments list match and are not empty"
+		message, code, err := setError(
+			"ensure the context is valid and queries/arguments list match and are not empty",
+			errors.New("executeBatchCQL: invalid batch parameters"),
+			http.StatusBadRequest,
+		)
 
-		return message, errors.New("executeBatchCQL: invalid batch parameters")
+		return message, code, err
 	}
 
 	batch := db.Scylla.Batch(gocql.UnloggedBatch)
@@ -273,28 +361,37 @@ func (db *Database) ExecBatchCQL(ctx context.Context, queries []string, batchArg
 
 	err := batch.ExecContext(ctx)
 	if err != nil {
-		const message = "Ensure that your CQL batch syntax, table names, and parameter bindings are correct."
+		message, code, err := setError(
+			"Ensure that your CQL batch syntax, table names, and parameter bindings are correct.",
+			fmt.Errorf("executeBatchCQL: %w", err),
+		)
 
-		return message, fmt.Errorf("executeBatchCQL: %w", err)
+		return message, code, err
 	}
 
-	return "", nil
+	return "", http.StatusOK, nil
 }
 
 //nolint:revive
-func (db *Database) Close(ctx context.Context, cfg *Config) (string, error) {
+func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error) {
 	if db == nil || cfg == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"The application must use one of the following databases: " +
-			"MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA"
-
-		return message, errors.New("close: database service is not running")
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+				"The application must use one of the following databases: "+
+				"MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA",
+			errors.New("close: database service is not running"),
+		)
+		return message, code, err
 	}
 
 	if ctx == nil {
-		const message = "Ensure the context is not empty"
+		message, code, err := setError(
+			"Ensure the context is not empty",
+			errors.New("context cannot be empty"),
+			http.StatusBadRequest,
+		)
 
-		return message, errors.New("context cannot be empty")
+		return message, code, err
 	}
 
 	var (
@@ -312,9 +409,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, error) {
 				"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE.")
 
 			errs = append(errs, errors.New("close SQL connection: SQL database service is not running"))
-		}
-
-		if err := db.SQL.Close(); err != nil {
+		} else if err := db.SQL.Close(); err != nil {
 			messages = append(messages, "Ensure that all active database transactions or prepared statements "+
 				"are finished/closed before shutting down the SQL connection.")
 
@@ -326,9 +421,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, error) {
 				"The application must use MONGO")
 
 			errs = append(errs, errors.New("close MongoDB connection: Mongo database service is not running"))
-		}
-
-		if err := db.Mongo.Disconnect(ctx); err != nil {
+		} else if err := db.Mongo.Disconnect(ctx); err != nil {
 			messages = append(messages, "Ensure that the context timeout is sufficient and MongoDB client "+
 				"sessions/cursors are properly released before disconnecting.")
 
@@ -340,11 +433,11 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, error) {
 				"The application must use SCYLLA")
 
 			errs = append(errs, errors.New("close Scylla connection: scylla database service is not running"))
+		} else {
+			db.Scylla.Close()
 		}
 
-		db.Scylla.Close()
-
-		if !db.Scylla.Closed() {
+		if db.Scylla != nil && !db.Scylla.Closed() {
 			messages = append(messages, "Ensure that all ScyllaDB query sessions are fully terminated "+
 				"and background workers/cluster rings have finished executing.")
 
@@ -355,7 +448,8 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, error) {
 			"MySQL, PostgreSQL, SQL Server, SQLite, MongoDB, and Scylla. " +
 			"Gorest does not currently support any database types other than these."
 
-		return message, fmt.Errorf("database driver %q is not supported", activeDriver)
+		msg, code, err := setError(message, fmt.Errorf("database driver %q is not supported", activeDriver))
+		return msg, code, err
 	}
 
 	if len(errs) > 0 {
@@ -365,8 +459,9 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, error) {
 			combinedMsg += messages[0] // Bisa disesuaikan jika ingin menggabungkan semua pesan
 		}
 
-		return combinedMsg, errors.Join(errs...)
+		msg, code, err := setError(combinedMsg, errors.Join(errs...))
+		return msg, code, err
 	}
 
-	return "", nil
+	return "", http.StatusOK, nil
 }

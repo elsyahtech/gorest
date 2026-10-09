@@ -10,9 +10,9 @@ import (
 )
 
 func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableName string) error {
-	collection, message, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
+	collection, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	buildMessage := func() string {

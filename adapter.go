@@ -67,33 +67,33 @@ func (app *App) NewContext(timeout time.Duration) (context.Context, context.Canc
 }
 
 // Getter native exec SQL queries.
-func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, error) {
-	result, message, err := dbSession.database.ExecSQL(ctx, query, args...)
+func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
+	result, message, httpCode, err := dbSession.database.ExecSQL(ctx, query, args...)
 	if err != nil {
-		return nil, message, fmt.Errorf("%w", err)
+		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return result, "", nil
+	return result, "", httpCode, nil
 }
 
 // Getter native query SQL queries.
-func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, error) {
-	rows, message, err := dbSession.database.QuerySQL(ctx, query, args...)
+func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
+	rows, message, httpCode, err := dbSession.database.QuerySQL(ctx, query, args...)
 	if err != nil {
-		return nil, message, fmt.Errorf("%w", err)
+		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return rows, "", nil
+	return rows, "", httpCode, nil
 }
 
 // Getter native Mongo collectionqueries.
-func (app *App) MongoCollection(collectionName string) (*mongo.Collection, string, error) {
-	coll, message, err := app.database.Collection(app.config.database, collectionName)
+func (app *App) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
+	coll, message, httpCode, err := app.database.Collection(app.config.database, collectionName)
 	if err != nil {
-		return nil, message, fmt.Errorf("%w", err)
+		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return coll, "", nil
+	return coll, "", httpCode, nil
 }
 
 // Getter native Mongo create collection queries.
@@ -101,33 +101,33 @@ func (app *App) MongoCreateCollection(
 	ctx context.Context,
 	collectionName string,
 	opts ...options.Lister[options.CreateCollectionOptions],
-) (string, error) {
-	message, err := app.database.CreateCollection(ctx, app.config.database, collectionName, opts...)
+) (string, int, error) {
+	message, httpCode, err := app.database.CreateCollection(ctx, app.config.database, collectionName, opts...)
 	if err != nil {
-		return message, fmt.Errorf("%w", err)
+		return message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return "", nil
+	return "", httpCode, nil
 }
 
 // Getter native exec Scylla queries.
-func (app *App) ExecCQL(ctx context.Context, query string, args ...any) (string, error) {
-	message, err := app.database.ExecCQL(ctx, query, args...)
+func (app *App) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
+	message, httpCode, err := app.database.ExecCQL(ctx, query, args...)
 	if err != nil {
-		return message, fmt.Errorf("%w", err)
+		return message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return "", nil
+	return "", httpCode, nil
 }
 
 // Getter native query Scylla queries.
-func (app *App) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, error) {
-	iter, message, err := app.database.QueryCQL(ctx, query, args...)
+func (app *App) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
+	iter, message, httpCode, err := app.database.QueryCQL(ctx, query, args...)
 	if err != nil {
-		return nil, message, fmt.Errorf("%w", err)
+		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return iter, "", nil
+	return iter, "", httpCode, nil
 }
 
 // QueryBuilderSQL defines the signature for raw SQL complex queries.
@@ -166,13 +166,13 @@ func (app *App) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) error
 	return nil
 }
 
-func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, error) {
-	_, message, err := dbSession.database.BeginTx(opts...)
+func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
+	_, message, httpCode, err := dbSession.database.BeginTx(opts...)
 	if err != nil {
-		return nil, message, fmt.Errorf("%w", err)
+		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return dbSession, "", nil
+	return dbSession, "", httpCode, nil
 }
 
 func (dbSession *DBSession) Rollback() error {
@@ -219,7 +219,7 @@ func (app *App) Close() error {
 		ctx, cancel := app.NewContext(timeout)
 		defer cancel()
 
-		message, err := app.database.Close(ctx, app.config.database)
+		message, _, err := app.database.Close(ctx, app.config.database)
 		if err != nil {
 			app.Log(Map{
 				LogFieldKeyError: err,

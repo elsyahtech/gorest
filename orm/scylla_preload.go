@@ -462,9 +462,9 @@ func (orm *ORM) buildScyllaInQuery(table, col, currentSelectCols string, keys []
 }
 
 func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each func(row map[string]any) error) error {
-	iter, message, err := orm.Database.QueryCQL(ctx, cql, args...)
+	iter, message, httpCode, err := orm.Database.QueryCQL(ctx, cql, args...)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	defer func() {

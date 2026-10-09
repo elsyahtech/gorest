@@ -46,9 +46,9 @@ func (orm *ORM) createScylla(data any) error {
 	defer cancel()
 
 	// 8. Execute Query DB
-	message, err := orm.Database.ExecCQL(execCtx, resultArg.queryStr, resultArg.valueArgs...)
+	message, httpCode, err := orm.Database.ExecCQL(execCtx, resultArg.queryStr, resultArg.valueArgs...)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	// 9. Assign final result to ORM instance for handler consumption

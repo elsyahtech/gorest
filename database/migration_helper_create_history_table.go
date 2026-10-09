@@ -73,7 +73,7 @@ func createHistoryTable(
 // ======================================================================================.
 func createMongoHistoryTable(ctx context.Context, database *Database, config *Config, collectionName string, uniqueField *string) (string, error) {
 	// Step 1: Create collection (idempotent)
-	message, err := database.CreateCollection(ctx, config, collectionName)
+	message, _, err := database.CreateCollection(ctx, config, collectionName)
 	if err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			return message, fmt.Errorf("create collection failed: %w", err)
@@ -82,7 +82,7 @@ func createMongoHistoryTable(ctx context.Context, database *Database, config *Co
 
 	// Step 2: Create unique index kalau diperlukan
 	if uniqueField != nil {
-		coll, message, err := database.Collection(config, collectionName)
+		coll, message, _, err := database.Collection(config, collectionName)
 		if err != nil {
 			return message, fmt.Errorf("get collection failed: %w", err)
 		}
@@ -147,7 +147,7 @@ func createSQLHistoryTable(ctx context.Context, database *Database, driver, tabl
 		return message, fmt.Errorf("unsupported database driver: %s", driver)
 	}
 
-	if _, message, err := database.ExecSQL(ctx, createTableSQL); err != nil {
+	if _, message, _, err := database.ExecSQL(ctx, createTableSQL); err != nil {
 		msg := fmt.Sprintf("failed to create '%s' table in %s. %s", tableName, driver, message)
 		return msg, fmt.Errorf("create table failed: %w", err)
 	}
@@ -168,7 +168,7 @@ func createScylaHistoryTable(ctx context.Context, database *Database, keyspaceNa
     );
     `, keyspaceName, columnName, columnName)
 
-	if message, err := database.ExecCQL(ctx, createTableCQL); err != nil {
+	if message, _, err := database.ExecCQL(ctx, createTableCQL); err != nil {
 		msg := fmt.Sprintf("failed to execute CQL statement for creating the 'migration_history' table in ScyllaDB. "+
 			"Verify database keyspace, user privileges, connection state, or %s", message)
 

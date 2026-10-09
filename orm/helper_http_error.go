@@ -17,7 +17,9 @@ func withHTTPCode(err error, code int) error {
 	if err == nil {
 		return nil
 	}
+
 	var coded interface{ HTTPStatusCode() int }
+
 	if errors.As(err, &coded) {
 		return err
 	}

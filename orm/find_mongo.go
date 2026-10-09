@@ -84,9 +84,9 @@ func (orm *ORM) findMongo(data any) error {
 	defer cancel()
 
 	// 11. Execute mongo collection
-	coll, message, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
+	coll, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	// 12. Execute Mongo find or aggregation query.

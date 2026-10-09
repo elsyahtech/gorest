@@ -46,9 +46,9 @@ func (orm *ORM) updateSingleSQL(
 
 		return orm.finishReturn(retPlan, scanned, rowsVal)
 	}
-	result, message, err := orm.Database.ExecSQL(execCtx, queryStr, whereClause.args...)
+	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, queryStr, whereClause.args...)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	var affected int64
@@ -230,9 +230,9 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 			continue
 		}
 
-		result, message, err := orm.Database.ExecSQL(req.execCtx, queryStr, query.args...)
+		result, message, httpCode, err := orm.Database.ExecSQL(req.execCtx, queryStr, query.args...)
 		if err != nil {
-			return 0, nil, orm.setError(message, err)
+			return 0, nil, orm.setError(message, err, httpCode)
 		}
 
 		if result == nil {

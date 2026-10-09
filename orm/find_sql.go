@@ -76,9 +76,9 @@ func (orm *ORM) findSQL(data any) error {
 	defer cancel()
 
 	// 12. Execute database query
-	rows, message, err := orm.Database.QuerySQL(execCtx, queryStr, whereClause.valueArgs...)
+	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, queryStr, whereClause.valueArgs...)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	defer func() {

@@ -89,9 +89,9 @@ func (orm *ORM) findScylla(data any) error {
 	defer cancel()
 
 	// 15. Execute database query
-	iter, message, err := orm.Database.QueryCQL(execCtx, queryStr, valueArgs...)
+	iter, message, httpCode, err := orm.Database.QueryCQL(execCtx, queryStr, valueArgs...)
 	if err != nil {
-		return orm.setScyllaFindError(message, err)
+		return orm.setScyllaFindError(message, err, httpCode)
 	}
 
 	// 16. Build field lookup map for struct
@@ -116,9 +116,9 @@ func (orm *ORM) findScylla(data any) error {
 	return nil
 }
 
-func (orm *ORM) setScyllaFindError(message string, err error) error {
+func (orm *ORM) setScyllaFindError(message string, err error, code ...int) error {
 	if err == nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, code...)
 	}
 
 	errText := strings.ToLower(err.Error())
@@ -134,5 +134,5 @@ func (orm *ORM) setScyllaFindError(message string, err error) error {
 		return orm.setError(message, err, http.StatusBadRequest)
 	}
 
-	return orm.setError(message, err)
+	return orm.setError(message, err, code...)
 }

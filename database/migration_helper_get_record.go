@@ -13,7 +13,7 @@ import (
 // getMongoRecords - Generic helper for migrations & seeders
 // ======================================================================================.
 func getMongoRecords(ctx context.Context, database *Database, config *Config, collectionName, fieldName string) ([]string, string, error) {
-	coll, message, err := database.Collection(config, collectionName)
+	coll, message, _, err := database.Collection(config, collectionName)
 	if err != nil {
 		return nil, message, fmt.Errorf("get mongo collection '%s' failed: %w", collectionName, err)
 	}
@@ -84,7 +84,7 @@ func getMongoRecords(ctx context.Context, database *Database, config *Config, co
 func getSQLRecords(ctx context.Context, database *Database, tableName, columnName string) ([]string, string, error) {
 	query := fmt.Sprintf("SELECT %s FROM %s ORDER BY executed_at ASC", columnName, tableName)
 
-	rows, message, err := database.QuerySQL(ctx, query)
+	rows, message, _, err := database.QuerySQL(ctx, query)
 	if err != nil {
 		msg := fmt.Sprintf("query the '%s' table failed. Ensure table exists, "+
 			"database connection is healthy, or %s", tableName, message)
@@ -125,7 +125,7 @@ func getSQLRecords(ctx context.Context, database *Database, tableName, columnNam
 func getScyllaRecords(ctx context.Context, database *Database, tableName, columnName string) ([]string, string, error) {
 	query := fmt.Sprintf("SELECT %s FROM %s", columnName, tableName)
 
-	iter, message, err := database.QueryCQL(ctx, query)
+	iter, message, _, err := database.QueryCQL(ctx, query)
 	if err != nil {
 		msg := fmt.Sprintf("query the %s table in ScyllaDB failed. Ensure that the table exists "+
 			"and the database connection is healthy, or %s", tableName, message)

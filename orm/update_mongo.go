@@ -45,9 +45,9 @@ func (orm *ORM) updateMongo(data any) error {
 	defer cancel()
 
 	// 6. Dapatkan instance Collection MongoDB terlebih dahulu
-	collection, message, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
+	collection, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setError(message, err, httpCode)
 	}
 
 	isBatch := len(rowsVal) > 1

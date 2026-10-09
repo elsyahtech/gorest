@@ -99,7 +99,7 @@ func mongoDataMigrationExec(ctx context.Context, database *Database, config *Con
 			createOptions.SetValidator(payload.Validator)
 		}
 
-		message, err := database.CreateCollection(
+		message, _, err := database.CreateCollection(
 			ctx,
 			config,
 			payload.Collection,
@@ -117,7 +117,7 @@ func mongoDataMigrationExec(ctx context.Context, database *Database, config *Con
 
 		// 3. Create indexes if specified.
 		if len(payload.Indexes) > 0 {
-			coll, message, err := database.Collection(config, payload.Collection)
+			coll, message, _, err := database.Collection(config, payload.Collection)
 			if err != nil {
 				return message, fmt.Errorf(
 					"get mongo collection instance failed: %w",
@@ -202,7 +202,7 @@ func mongoDataMigrationExec(ctx context.Context, database *Database, config *Con
 	}
 
 	// 4. Write migration history to migration_history collection.
-	historyColl, message, err := database.Collection(config, "migration_history")
+	historyColl, message, _, err := database.Collection(config, "migration_history")
 	if err != nil {
 		return message, fmt.Errorf(
 			"get mongo history collection failed: %w",
@@ -306,7 +306,7 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 		documents = append(documents, parsedDoc)
 	}
 
-	targetColl, message, err := database.Collection(config, collectionName)
+	targetColl, message, _, err := database.Collection(config, collectionName)
 	if err != nil {
 		return message, fmt.Errorf("%w", err)
 	}
@@ -319,7 +319,7 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 		return message, fmt.Errorf("%w", err)
 	}
 
-	historyColl, message, err := database.Collection(config, "seeder_history")
+	historyColl, message, _, err := database.Collection(config, "seeder_history")
 	if err != nil {
 		return message, fmt.Errorf("get mongo seeder history collection failed: %w", err)
 	}
@@ -348,7 +348,7 @@ func sqlDataMigrationExec(ctx context.Context, driver string, database *Database
 	queryMysql := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (?, ?)"
 	queryOracle := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (:1, :2)"
 
-	if _, message, err := database.ExecSQL(ctx, file.Content); err != nil {
+	if _, message, _, err := database.ExecSQL(ctx, file.Content); err != nil {
 		msg := fmt.Sprintf("execute SQL statements inside migration file '%s' failed. "+
 			"Check the migration script syntax, schema constraints, or "+
 			"potential SQL runtime errors or %s", file.Name, message)
@@ -375,7 +375,7 @@ func sqlDataMigrationExec(ctx context.Context, driver string, database *Database
 	}
 
 	// Record migration in migration_history table (mark as executed)
-	if _, message, err := database.ExecSQL(ctx, insertQuery, file.Name, time.Now()); err != nil {
+	if _, message, _, err := database.ExecSQL(ctx, insertQuery, file.Name, time.Now()); err != nil {
 		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into the 'migration_history' table. "+
 			"Check database write permissions or unique index constraints or %s", file.Name, message)
 
@@ -402,7 +402,7 @@ func scyllaDataMigrationExec(ctx context.Context, database *Database, migration 
 	}
 
 	for _, stmt := range statements {
-		if message, err := database.ExecCQL(ctx, stmt); err != nil {
+		if message, _, err := database.ExecCQL(ctx, stmt); err != nil {
 			msg := fmt.Sprintf("execute CQL statement inside migration file '%s' failed. "+
 				"Statement: [%s]. Check the CQL syntax, keyspace settings, or runtime errors or %s",
 				migration.Name, stmt, message)
@@ -412,7 +412,7 @@ func scyllaDataMigrationExec(ctx context.Context, database *Database, migration 
 	}
 
 	query := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (?, ?)"
-	if message, err := database.ExecCQL(ctx, query, migration.Name, time.Now()); err != nil {
+	if message, _, err := database.ExecCQL(ctx, query, migration.Name, time.Now()); err != nil {
 		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into ScyllaDB. "+
 			"Check database write permissions or %s", migration.Name, message)
 
