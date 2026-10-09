@@ -87,8 +87,8 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 }
 
 // Getter native Mongo collectionqueries.
-func (app *App) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
-	coll, message, httpCode, err := app.database.Collection(app.config.database, collectionName)
+func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
+	coll, message, httpCode, err := dbSession.database.Collection(dbSession.config, collectionName)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -97,12 +97,12 @@ func (app *App) MongoCollection(collectionName string) (*mongo.Collection, strin
 }
 
 // Getter native Mongo create collection queries.
-func (app *App) MongoCreateCollection(
+func (dbSession *DBSession) MongoCreateCollection(
 	ctx context.Context,
 	collectionName string,
 	opts ...options.Lister[options.CreateCollectionOptions],
 ) (string, int, error) {
-	message, httpCode, err := app.database.CreateCollection(ctx, app.config.database, collectionName, opts...)
+	message, httpCode, err := dbSession.database.CreateCollection(ctx, dbSession.config, collectionName, opts...)
 	if err != nil {
 		return message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -111,8 +111,8 @@ func (app *App) MongoCreateCollection(
 }
 
 // Getter native exec Scylla queries.
-func (app *App) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
-	message, httpCode, err := app.database.ExecCQL(ctx, query, args...)
+func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
+	message, httpCode, err := dbSession.database.ExecCQL(ctx, query, args...)
 	if err != nil {
 		return message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -121,8 +121,8 @@ func (app *App) ExecCQL(ctx context.Context, query string, args ...any) (string,
 }
 
 // Getter native query Scylla queries.
-func (app *App) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
-	iter, message, httpCode, err := app.database.QueryCQL(ctx, query, args...)
+func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
+	iter, message, httpCode, err := dbSession.database.QueryCQL(ctx, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -134,8 +134,8 @@ func (app *App) QueryCQL(ctx context.Context, query string, args ...any) (*gocql
 type QueryBuilderSQL func(ctx context.Context, db *sql.DB) error
 
 // Escape Hatch: If handler needs direct raw SQL queries (e.g., for complex joins, CTEs, etc.)
-func (app *App) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
-	if err := fn(ctx, app.database.SQL); err != nil {
+func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
+	if err := fn(ctx, dbSession.database.SQL); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
@@ -158,8 +158,8 @@ func (app *App) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) error {
 type QueryBuilderScylla func(ctx context.Context, session *gocql.Session) error
 
 // Escape Hatch: If handler needs direct raw ScyllaDB queries.
-func (app *App) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) error {
-	if err := fn(ctx, app.database.Scylla); err != nil {
+func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) error {
+	if err := fn(ctx, dbSession.database.Scylla); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
