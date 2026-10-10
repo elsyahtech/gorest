@@ -31,7 +31,9 @@ func (res *JSON) WithMessage(message string, errInput any, code ...int) *JSON {
 	if errString != "" && errString != "<nil>" {
 		res.Success = false
 		res.HTTPCode = http.StatusBadRequest
+
 		var statusErr interface{ HTTPStatusCode() int }
+
 		if errors.As(asError(errInput), &statusErr) {
 			res.HTTPCode = statusErr.HTTPStatusCode()
 		}
