@@ -111,6 +111,11 @@ func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*s
 			fmt.Errorf("querySQL: %w", err),
 		)
 
+		if isDuplicateKeyError(err) {
+			message = "A record with the same value for a primary key or unique column already exists."
+			code = http.StatusConflict
+		}
+
 		return nil, message, code, err
 	}
 
