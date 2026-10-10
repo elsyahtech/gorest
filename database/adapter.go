@@ -54,11 +54,16 @@ func (db *Database) ExecSQL(ctx context.Context, query string, args ...any) (sql
 	}
 
 	if err != nil {
-		message, code, err := setError(
-			"Ensure the target table exists and is accessible, "+
-				"and check that your SQL syntax, table names, column names, and parameter types are correct.",
-			fmt.Errorf("execSQL: %w", err),
-		)
+		message := "Ensure the target table exists and is accessible, " +
+			"and check that your SQL syntax, table names, column names, and parameter types are correct."
+		code := http.StatusInternalServerError
+
+		if isDuplicateKeyError(err) {
+			message = "A record with the same value for a primary key or unique column already exists."
+			code = http.StatusConflict
+		}
+
+		message, code, err = setError(message, fmt.Errorf("execSQL: %w", err), code)
 
 		return nil, message, code, err
 	}
