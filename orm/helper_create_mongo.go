@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -112,6 +113,9 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 			upsertedID:   orm.LastInsertId,
 		}
 
+		orm.Message = "Data updated successfully"
+		orm.HTTPCode = http.StatusOK
+
 		return nil
 	}
 
@@ -133,6 +137,9 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 		rowsAffected: orm.RowsAffected,
 		upsertedID:   orm.LastInsertId,
 	}
+
+	orm.Message = "Data created successfully"
+	orm.HTTPCode = http.StatusOK
 
 	return nil
 }

@@ -314,56 +314,60 @@ func (orm *ORM) buildUpsertCreateSQL(
 	return nil
 }
 
+// extractResultCreateSQL fills RowsAffected, LastInsertId, Message, and Result after a create/upsert query.
 func (orm *ORM) extractResultCreateSQL(result sql.Result, primaryKeyIndex []int, rowsVal []reflect.Value) {
-	affected, err := result.RowsAffected()
-	if err != nil {
-		orm.RowsAffected = 0
-	}
-
-	orm.RowsAffected = affected
+	orm.RowsAffected = rowsAffectedOf(result)
 
 	if len(primaryKeyIndex) > 0 {
-		var allIDs []string
-
-		for _, rowVal := range rowsVal {
-			rowPKs := make([]string, 0, len(primaryKeyIndex))
-
-			for _, idx := range primaryKeyIndex {
-				fieldVal := rowVal.Field(idx).Interface()
-
-				rowPKs = append(rowPKs, fmt.Sprintf("%v", fieldVal))
-			}
-
-			if len(rowPKs) > 0 {
-				allIDs = append(allIDs, strings.Join(rowPKs, "-"))
-			}
-		}
-
-		orm.LastInsertId = strings.Join(allIDs, ", ")
+		orm.LastInsertId = joinPrimaryKeys(primaryKeyIndex, rowsVal)
+	} else if lastID, err := result.LastInsertId(); err == nil && lastID > 0 {
+		orm.LastInsertId = strconv.FormatInt(lastID, 10)
 	} else {
-		lastID, err := result.LastInsertId()
-		if err == nil && lastID > 0 {
-			orm.LastInsertId = strconv.FormatInt(lastID, 10)
-			orm.Message = "Data created successfully"
-		} else {
-			orm.LastInsertId = ""
-			orm.Message = "Data updated successfully"
-		}
+		orm.LastInsertId = ""
 	}
 
+	// Message depends on the operation, not on whether an ID was returned.
+	idKey := lastInsertID
 	if orm.IsUpsert {
-		orm.Result = map[string]any{
-			isSuccess:    true,
-			rowsAffected: orm.RowsAffected,
-			upsertedID:   orm.LastInsertId,
-		}
+		orm.Message = "Data saved successfully"
+		idKey = upsertedID
 	} else {
-		orm.Result = map[string]any{
-			isSuccess:    true,
-			rowsAffected: orm.RowsAffected,
-			lastInsertID: orm.LastInsertId,
-		}
+		orm.Message = "Data created successfully"
 	}
+
+	orm.Result = map[string]any{
+		isSuccess:    true,
+		rowsAffected: orm.RowsAffected,
+		idKey:        orm.LastInsertId,
+	}
+}
+
+// rowsAffectedOf returns the number of affected rows, or 0 if the driver cannot report it.
+func rowsAffectedOf(result sql.Result) int64 {
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0
+	}
+
+	return affected
+}
+
+// joinPrimaryKeys builds "pk1-pk2, pk1-pk2, ..." from the primary key fields of each row.
+// Composite keys are joined with "-", and rows are joined with ", ".
+func joinPrimaryKeys(primaryKeyIndex []int, rowsVal []reflect.Value) string {
+	ids := make([]string, 0, len(rowsVal))
+
+	for _, rowVal := range rowsVal {
+		parts := make([]string, 0, len(primaryKeyIndex))
+
+		for _, idx := range primaryKeyIndex {
+			parts = append(parts, fmt.Sprint(rowVal.Field(idx).Interface()))
+		}
+
+		ids = append(ids, strings.Join(parts, "-"))
+	}
+
+	return strings.Join(ids, ", ")
 }
 
 func (orm *ORM) buildReturnCreateSQL(

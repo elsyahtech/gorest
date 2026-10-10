@@ -2,7 +2,6 @@ package orm
 
 import (
 	"errors"
-	"net/http"
 )
 
 func (orm *ORM) createScylla(data any) error {
@@ -51,9 +50,6 @@ func (orm *ORM) createScylla(data any) error {
 	if err != nil {
 		return orm.setError(message, err, httpCode)
 	}
-
-	orm.Message = "Data created successfully"
-	orm.HTTPCode = http.StatusCreated
 
 	// 9. Assign final result to ORM instance for handler consumption
 	orm.extractResultCreateScylla(rowsVal, meta.primaryKeyIndex)
