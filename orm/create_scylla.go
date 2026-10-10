@@ -51,6 +51,8 @@ func (orm *ORM) createScylla(data any) error {
 		return orm.setError(message, err, httpCode)
 	}
 
+	orm.Message = "Data created successfully"
+
 	// 9. Assign final result to ORM instance for handler consumption
 	orm.extractResultCreateScylla(rowsVal, meta.primaryKeyIndex)
 

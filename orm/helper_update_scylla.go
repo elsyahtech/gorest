@@ -42,6 +42,7 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 
 	const note = "note"
 
+	orm.Message = "Data updated successfully"
 	orm.RowsAffected = 1
 	orm.Result = map[string]any{
 		isSuccess: true,
@@ -102,6 +103,7 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 		return orm.setNotFound("update")
 	}
 
+	orm.Message = "Data updated successfully"
 	orm.RowsAffected = totalRowsAffected
 	orm.Result = map[string]any{
 		isSuccess:    true,

@@ -112,6 +112,7 @@ func (orm *ORM) findScylla(data any) error {
 
 	// 19. Assign final result to ORM instance for handler consumption
 	orm.Result = data
+	orm.Message = "Data retrieved successfully"
 
 	return nil
 }

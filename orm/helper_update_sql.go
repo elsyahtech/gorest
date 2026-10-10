@@ -68,6 +68,8 @@ func (orm *ORM) updateSingleSQL(
 		rowsAffected: affected,
 	}
 
+	orm.Message = "Data updated successfully"
+
 	return nil
 }
 
@@ -109,6 +111,8 @@ func (orm *ORM) updateBulkSQL(
 		isSuccess:    true,
 		rowsAffected: totalRowsAffected,
 	}
+
+	orm.Message = "Data updated successfully"
 
 	if retPlan != nil {
 		return orm.finishReturn(retPlan, scanned, rowsVal)

@@ -136,6 +136,7 @@ func (orm *ORM) findSQL(data any) error {
 
 	// 18. Assign final result to ORM instance for handler consumption
 	orm.Result = data
+	orm.Message = "Data deleted successfully"
 
 	return nil
 }

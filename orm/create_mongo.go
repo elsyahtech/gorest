@@ -40,5 +40,7 @@ func (orm *ORM) createMongo(data any) error {
 		return orm.Error
 	}
 
+	orm.Message = "Data created successfully"
+
 	return nil
 }
