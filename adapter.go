@@ -183,37 +183,48 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 	}, "", httpCode, nil
 }
 
-func (dbSession *DBSession) Rollback() (int, error) {
+// Rollback aborts the current database transaction.
+func (dbSession *DBSession) Rollback() (string, int, error) {
 	if dbSession.database.Tx == nil {
-		return http.StatusBadRequest, errors.New("rollback: no active transaction to rollback") // Lebih cocok Bad Request atau biarkan Internal Server Error jika ini state internal
+		return "Ensure that a database transaction has been properly started before attempting a rollback.",
+			http.StatusBadRequest,
+			errors.New("rollback: no active transaction to rollback")
 	}
 
 	err := dbSession.database.Tx.Rollback()
 	dbSession.database.Tx = nil
 
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("rollback failed: %w", err)
+		return "Ensure the database connection is healthy and the transaction is not already closed or committed.",
+			http.StatusInternalServerError,
+			fmt.Errorf("rollback failed: %w", err)
 	}
 
-	return http.StatusOK, nil
+	return "", http.StatusOK, nil
 }
 
-func (dbSession *DBSession) Commit() (int, error) {
+// Commit finalizes the current database transaction.
+func (dbSession *DBSession) Commit() (string, int, error) {
 	if dbSession.database.Tx == nil {
-		return http.StatusBadRequest, errors.New("commit: no active transaction to commit")
+		return "Ensure that a database transaction has been properly started before attempting a commit.",
+			http.StatusBadRequest,
+			errors.New("commit: no active transaction to commit")
 	}
 
 	err := dbSession.database.Tx.Commit()
 	dbSession.database.Tx = nil
 
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("commit failed: %w", err)
+		return "Ensure the database connection remains active, there are no unhandled constraint violations, " +
+				"and the transaction has not timed out.",
+			http.StatusInternalServerError,
+			fmt.Errorf("commit failed: %w", err)
 	}
 
-	return http.StatusOK, nil
+	return "", http.StatusOK, nil
 }
 
-func (app *App) Close() error {
+func (app *App) Close() (string, int, error) {
 	if app.redis != nil {
 		message, err := app.redis.Close()
 		if err != nil {
@@ -221,7 +232,7 @@ func (app *App) Close() error {
 				LogFieldKeyError: err,
 			}).Error(message)
 
-			return fmt.Errorf("%w", err)
+			return message, http.StatusInternalServerError, fmt.Errorf("%w", err)
 		}
 	}
 
@@ -231,24 +242,24 @@ func (app *App) Close() error {
 		ctx, cancel := app.NewContext(timeout)
 		defer cancel()
 
-		message, _, err := app.database.Close(ctx, app.config.database)
+		message, httpCode, err := app.database.Close(ctx, app.config.database)
 		if err != nil {
 			app.Log(Map{
 				LogFieldKeyError: err,
 			}).Error(message)
 
-			return fmt.Errorf("failed to disconnect database: %w", err)
+			return message, httpCode, fmt.Errorf("failed to disconnect database: %w", err)
 		}
 	}
 
 	if app.log != nil {
-		message, err := app.log.Close()
+		message, httpCode, err := app.log.Close()
 		if err != nil {
-			return fmt.Errorf("failed to disconnect logger: %w. %s", err, message)
+			return message, httpCode, fmt.Errorf("failed to disconnect logger: %w. %s", err, message)
 		}
 	}
 
-	return nil
+	return "", http.StatusOK, nil
 }
 
 func (dbSession *DBSession) Table(table string) *orm.ORM {

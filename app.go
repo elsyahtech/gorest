@@ -47,7 +47,7 @@ func (app *App) Start() *App {
 	sig := <-quit
 	app.Log(map[string]any{"signal": sig.String()}, true).Info("Gorest engine received shutdown signal...")
 
-	if err := app.Close(); err != nil {
+	if _, _, err := app.Close(); err != nil {
 		app.Log(map[string]any{LogFieldKeyError: err}, true).Error("Failed to shutdown Gorest gracefully.")
 	} else {
 		app.Log(nil, true).Info("Gorest engine shutdown successfully. Clean exit.")

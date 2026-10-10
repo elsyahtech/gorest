@@ -3,20 +3,25 @@ package log
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"go.uber.org/zap"
 )
 
-func (log *Log) Close() (string, error) {
+func (log *Log) Close() (string, int, error) {
 	if log == nil || log.logger == nil {
-		return "Ensure logger called after 'app.Start() and defer app.Close()'", errors.New("logger is empty")
+		return "Ensure the logger is properly initialized and running in your application.",
+			http.StatusBadRequest,
+			errors.New("logger is empty")
 	}
 
 	if err := log.logger.Sync(); err != nil {
-		return "", fmt.Errorf("close log sync failed: %w", err)
+		return "Ensure the underlying file system or logging output stream is writable and healthy.",
+			http.StatusInternalServerError,
+			fmt.Errorf("close log sync failed: %w", err)
 	}
 
-	return "", nil
+	return "", http.StatusOK, nil
 }
 
 func (log *Log) Log(field map[string]any, noCaller ...bool) *zap.Logger {
