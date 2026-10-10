@@ -110,7 +110,7 @@ func derefValue(val reflect.Value) reflect.Value {
 // planReturn specifies the target, the columns to be populated, and the RETURNING/OUTPUT columns.
 func (orm *ORM) planReturn(data any, rowsVal []reflect.Value, meta columnMetaData, driver string) (*returnPlan, error) {
 	switch driver {
-	case database.POSTGRES, database.SQLITE, database.SQLSERVER:
+	case database.MYSQL, database.POSTGRES, database.SQLITE, database.SQLSERVER:
 	default:
 		return nil, orm.setError(
 			"Return() is not supported on this database driver yet",
