@@ -105,18 +105,16 @@ func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*s
 	}
 
 	if err != nil {
-		message, code, err := setError(
-			"Ensure the target table exists and is accessible, "+
-				"and check that your SQL syntax, table names, column names, and parameter types are correct.",
-			fmt.Errorf("querySQL: %w", err),
-		)
+		message := "Ensure the target table exists and is accessible, " +
+			"and check that your SQL syntax, table names, column names, and parameter types are correct."
+		code := http.StatusInternalServerError
 
 		if isDuplicateKeyError(err) {
 			message = "A record with the same value for a primary key or unique column already exists."
 			code = http.StatusConflict
 		}
 
-		return nil, message, code, err
+		message, code, err = setError(message, fmt.Errorf("querySQL: %w", err), code)
 	}
 
 	return result, "", http.StatusOK, nil
