@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	golog "log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -171,38 +172,45 @@ func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderS
 }
 
 func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
-	_, message, httpCode, err := dbSession.database.BeginTx(opts...)
+	txDB, message, httpCode, err := dbSession.database.BeginTx(opts...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return dbSession, "", httpCode, nil
+	return &DBSession{
+		database: txDB,
+		config:   dbSession.config,
+	}, "", httpCode, nil
 }
 
-func (dbSession *DBSession) Rollback() error {
+func (dbSession *DBSession) Rollback() (int, error) {
 	if dbSession.database.Tx == nil {
-		return errors.New("rollback: no active transaction to rollback")
+		return http.StatusBadRequest, errors.New("rollback: no active transaction to rollback") // Lebih cocok Bad Request atau biarkan Internal Server Error jika ini state internal
 	}
 
 	err := dbSession.database.Tx.Rollback()
 	dbSession.database.Tx = nil
 
-	return fmt.Errorf("%w", err)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("rollback failed: %w", err)
+	}
+
+	return http.StatusOK, nil
 }
 
-func (dbSession *DBSession) Commit() error {
+func (dbSession *DBSession) Commit() (int, error) {
 	if dbSession.database.Tx == nil {
-		return errors.New("commit: no active transaction to commit")
+		return http.StatusBadRequest, errors.New("commit: no active transaction to commit")
 	}
 
 	err := dbSession.database.Tx.Commit()
-	if err != nil {
-		return fmt.Errorf("%w", err)
-	}
-
 	dbSession.database.Tx = nil
 
-	return nil
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("commit failed: %w", err)
+	}
+
+	return http.StatusOK, nil
 }
 
 func (app *App) Close() error {

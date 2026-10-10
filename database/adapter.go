@@ -136,6 +136,7 @@ func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, int, err
 	}
 
 	var opt *sql.TxOptions
+
 	if len(opts) > 0 && opts[0] != nil {
 		opt = opts[0]
 	}
@@ -150,9 +151,10 @@ func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, int, err
 		return nil, message, code, err
 	}
 
-	db.Tx = transaction
+	txDB := *db
+	txDB.Tx = transaction
 
-	return db, "", http.StatusOK, nil
+	return &txDB, "", http.StatusOK, nil
 }
 
 // ========================================================================================================

@@ -2,6 +2,7 @@ package gorest
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/log"
@@ -30,6 +31,7 @@ type RouterRegistrar func(*App)
 type DBSession struct {
 	database *database.Database
 	config   *database.Config
+	Tx       *sql.Tx
 }
 
 type Map map[string]any
