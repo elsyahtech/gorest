@@ -344,8 +344,10 @@ func (orm *ORM) extractResultCreateSQL(result sql.Result, primaryKeyIndex []int,
 		lastID, err := result.LastInsertId()
 		if err == nil && lastID > 0 {
 			orm.LastInsertId = strconv.FormatInt(lastID, 10)
+			orm.Message = "Data created successfully"
 		} else {
 			orm.LastInsertId = ""
+			orm.Message = "Data updated successfully"
 		}
 	}
 

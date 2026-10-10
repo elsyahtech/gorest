@@ -2,6 +2,7 @@ package orm
 
 import (
 	"errors"
+	"net/http"
 )
 
 func (orm *ORM) createMongo(data any) error {
@@ -41,6 +42,7 @@ func (orm *ORM) createMongo(data any) error {
 	}
 
 	orm.Message = "Data created successfully"
+	orm.HTTPCode = http.StatusCreated
 
 	return nil
 }
