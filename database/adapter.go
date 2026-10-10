@@ -115,6 +115,8 @@ func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*s
 		}
 
 		message, code, err = setError(message, fmt.Errorf("querySQL: %w", err), code)
+
+		return nil, message, code, err
 	}
 
 	return result, "", http.StatusOK, nil
