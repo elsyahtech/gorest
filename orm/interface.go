@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/elsyahtech/gorest/database"
-	"github.com/elsyahtech/gorest/log"
 )
 
 type ORM struct {
@@ -15,7 +14,6 @@ type ORM struct {
 	Context            context.Context
 	ReturnDest         any
 	Database           *database.Database
-	Log                *log.Log
 	Tx                 *sql.Tx
 	StringBuilder      *strings.Builder
 	DatabaseConfig     *database.Config
