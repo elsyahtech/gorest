@@ -128,7 +128,6 @@ func (orm *ORM) buildOracleMergeSQL(tableName string, columns, pkCols []string, 
 		for colIdx, col := range columns {
 			item := getPlaceholder(driver, row*len(columns)+colIdx+1)
 
-			// Alias kolom cukup di SELECT pertama
 			if row == 0 {
 				item += " AS " + col
 			}
@@ -296,7 +295,7 @@ func (orm *ORM) buildUpsertCreateSQL(
 	case database.ORACLE:
 		orm.StringBuilder.Reset()
 
-		mergeQuery, mergeArgs := orm.buildOracleMergeSQL(
+		_, mergeArgs := orm.buildOracleMergeSQL(
 			table,
 			meta.columns,
 			meta.primaryKeyColumns,
@@ -304,9 +303,6 @@ func (orm *ORM) buildUpsertCreateSQL(
 			driver,
 			len(resultArg.valueArgs)+1,
 		)
-
-		orm.safeWriteString(mergeQuery)
-
 		resultArg.valueArgs = append(resultArg.valueArgs, mergeArgs...)
 	default:
 	}
