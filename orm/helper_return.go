@@ -407,6 +407,14 @@ func (orm *ORM) scanReturnRows(rows *sql.Rows, plan *returnPlan) ([]reflect.Valu
 	}
 
 	if err = rows.Err(); err != nil {
+		if database.IsDuplicateKeyError(err) {
+			return nil, orm.setError(
+				"A record with the same value for a primary key or unique column already exists.",
+				err,
+				http.StatusConflict,
+			)
+		}
+
 		return nil, orm.setError("ensure that database result stream is valid and complete", err)
 	}
 

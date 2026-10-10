@@ -58,7 +58,7 @@ func (db *Database) ExecSQL(ctx context.Context, query string, args ...any) (sql
 			"and check that your SQL syntax, table names, column names, and parameter types are correct."
 		code := http.StatusInternalServerError
 
-		if isDuplicateKeyError(err) {
+		if IsDuplicateKeyError(err) {
 			message = "A record with the same value for a primary key or unique column already exists."
 			code = http.StatusConflict
 		}
@@ -109,7 +109,7 @@ func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*s
 			"and check that your SQL syntax, table names, column names, and parameter types are correct."
 		code := http.StatusInternalServerError
 
-		if isDuplicateKeyError(err) {
+		if IsDuplicateKeyError(err) {
 			message = "A record with the same value for a primary key or unique column already exists."
 			code = http.StatusConflict
 		}

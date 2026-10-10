@@ -10,7 +10,8 @@ import (
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
-func isDuplicateKeyError(err error) bool {
+// IsDuplicateKeyError reports whether err is a SQL duplicate or unique-key violation.
+func IsDuplicateKeyError(err error) bool {
 	var mysqlErr *mysql.MySQLError
 	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 		return true
