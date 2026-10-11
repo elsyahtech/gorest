@@ -159,13 +159,14 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 	}
 
 	if driver == SQLITE {
-		dbPath, err := generateSQLiteDatabase(cfg)
-		if err != nil {
+		if err := generateSQLiteDatabase(cfg); err != nil {
 			return nil, "ensure database name is configured correctly", err
 		}
 
+		const db = ".db"
+
 		if !strings.HasSuffix(cfg.Name, ".db") {
-			cfg.Name += dbPath
+			cfg.Name += db
 		}
 	}
 
@@ -227,7 +228,49 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 // generateSQLiteDatabase creates the SQLite database file (and its directory) if it doesn't exist.
 // It returns the final file path, which must be the same path used in the SQLite DSN.
 // An existing database file is never truncated.
-func generateSQLiteDatabase(cfg *Config) (string, error) {
+
+func generateSQLiteDatabase(cfg *Config) error {
+	if cfg == nil {
+		return errors.New("GenerateSQLiteDatabase - config is nil")
+	}
+
+	dbName := cfg.Name
+	if dbName == "" {
+		return errors.New("GenerateSQLiteDatabase - database name is empty")
+	}
+
+	// Ensure .db extension
+	if !strings.HasSuffix(dbName, ".db") {
+		dbName += ".db"
+	}
+
+	dbDir := DefaultDatabaseDirectory
+
+	if cfg.DatabaseDirectory != "" {
+		dbDir = cfg.DatabaseDirectory
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dbDir), 0o755); err != nil {
+		return fmt.Errorf("generate sqlite database: create directory: %w", err)
+	}
+
+	dbPath := filepath.Join(dbDir, dbName)
+
+	// Create the database file if it doesn't exist
+	file, err := os.OpenFile(dbPath, os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return fmt.Errorf("GenerateSQLiteDatabase - create database file: %w", err)
+	}
+
+	err = file.Close()
+	if err != nil {
+		return fmt.Errorf("GenerateSQLiteDatabase - close database file: %w", err)
+	}
+
+	return nil
+}
+
+func generateSQLiteDatabasse(cfg *Config) (string, error) {
 	if cfg == nil {
 		return "", errors.New("generate sqlite database: config is nil")
 	}
