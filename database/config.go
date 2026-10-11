@@ -91,6 +91,11 @@ type Config struct {
 	// Default: "utf8mb4" (recommended)
 	Charset string
 
+	// Path to database files directory.
+	// Example: "./database"
+	// Default: "./database"
+	DatabaseDirectory string
+
 	// Path to database migration files directory.
 	// Example: "./database/migrations"
 	// Default: "./database/migrations"
@@ -224,6 +229,11 @@ var ConfigDefault = Config{
 	// Default: "utf8mb4" (recommended)
 	Charset: DefaultCharset,
 
+	// Path to database files directory.
+	// Example: "./database"
+	// Default: "./database"
+	DatabaseDirectory: DefaultDatabaseDirectory,
+
 	// Path to database migration files directory.
 	// Example: "./database/migrations"
 	// Default: "./database/migrations"
@@ -347,22 +357,18 @@ func configDefault(config ...Config) Config {
 		cfg.Charset = ConfigDefault.Charset
 	}
 
-	// Default: "./database/migrations"
-	if cfg.MigrationDirectory == "" {
-		cfg.MigrationDirectory = filepath.Join(
-			DefaultDatabaseDirectory,
-			ConfigDefault.MigrationDirectory,
-			driver,
-		)
+	// Default: "./database"
+	databaseDir := DefaultDatabaseDirectory
+
+	if cfg.DatabaseDirectory != "" {
+		databaseDir = cfg.DatabaseDirectory
 	}
 
-	if cfg.SeederDirectory == "" {
-		cfg.SeederDirectory = filepath.Join(
-			DefaultDatabaseDirectory,
-			ConfigDefault.SeederDirectory,
-			driver,
-		)
-	}
+	// Default: "./database/migrations"
+	cfg.MigrationDirectory = resolveDir(databaseDir, cfg.MigrationDirectory, ConfigDefault.MigrationDirectory, driver)
+
+	// Default: "./database/seeders"
+	cfg.SeederDirectory = resolveDir(databaseDir, cfg.SeederDirectory, ConfigDefault.SeederDirectory, driver)
 
 	// Default: 5 second
 	if cfg.Timeout == 0 {
@@ -401,6 +407,14 @@ func configDefault(config ...Config) Config {
 	}
 
 	return cfg
+}
+
+func resolveDir(baseDir, dir, defaultDir, driver string) string {
+	if dir == "" {
+		dir = defaultDir
+	}
+
+	return filepath.Join(baseDir, dir, driver)
 }
 
 func setDefaultDBPort(driver string) string {
