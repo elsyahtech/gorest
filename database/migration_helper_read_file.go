@@ -79,7 +79,7 @@ func fileExtension(driver string) (string, string, error) {
 	case SCYLLA:
 		return ".cql", "", nil
 	default:
-		return "", "Ensure your database driver is mysql, postgresql, mssql, oracle, sqlite, mongodb or scylladb",
+		return "", "Ensure your database driver is MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO or SCYLLA",
 			fmt.Errorf("driver %s is not supported", driver)
 	}
 }

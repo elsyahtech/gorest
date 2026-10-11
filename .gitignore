@@ -40,7 +40,6 @@ logs/
 .golangci.yml
 
 database/gorest.db
-database/migrations
-database/seeders
+
 orm/*.txt
 server/*.png
