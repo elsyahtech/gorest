@@ -37,7 +37,8 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 	if len(files) == 0 {
 		log.WithOptions(zap.WithCaller(false)).With(
 			zap.String("driver", driver),
-			zap.String("directory ./", subDir)).
+			zap.String("directory ./", subDir),
+			zap.String("sample_file", sampleFile(driver, execType))).
 			Info(fmt.Sprintf("%s migration ignored! %s files not found", driver, execType))
 
 		return "", nil
@@ -95,4 +96,18 @@ func ensureDir(dir string, execType executionType) (string, error) {
 	}
 
 	return "", nil
+}
+
+const samplesBaseURL = "https://github.com/elsyahtech/gorest/tree/main/database"
+
+// sampleFile returns the GitHub folder containing sample files for a driver.
+// Example: https://github.com/elsyahtech/gorest/tree/main/database/migrations/{Driver}
+// Example: https://github.com/elsyahtech/gorest/tree/main/database/seeders/{Driver}
+func sampleFile(driver string, execType executionType) string {
+	folder := "migrations"
+	if execType != typeMigration {
+		folder = "seeders"
+	}
+
+	return fmt.Sprintf("%s/%s/%s", samplesBaseURL, folder, driver)
 }
