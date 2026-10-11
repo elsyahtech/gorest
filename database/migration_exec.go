@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"go.uber.org/zap"
 )
@@ -15,10 +14,10 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 
 	switch execType {
 	case typeMigration:
-		subDir = filepath.Join(config.MigrationDirectory, driver)
+		subDir = config.MigrationDirectory
 		tableName, columnName = migrationTableName, migrationColumnName
 	default:
-		subDir = filepath.Join(config.SeederDirectory, driver)
+		subDir = config.SeederDirectory
 		tableName, columnName = seederTableName, seederColumnName
 	}
 

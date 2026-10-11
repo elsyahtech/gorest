@@ -96,14 +96,16 @@ type Config struct {
 	// Default: "./database"
 	DatabaseDirectory string
 
-	// Path to database migration files directory.
-	// Example: "./database/migrations"
-	// Default: "./database/migrations"
+	// Migration directory, relative to DatabaseDirectory.
+	// The driver name is appended automatically.
+	// Example: "migrations" -> ./database/migrations/{Driver}
+	// Default: "migrations"
 	MigrationDirectory string
 
-	// Path to database seeder files directory.
-	// Example: "./database/seeders"
-	// Default: "./database/seeders"
+	// Seeder directory, relative to DatabaseDirectory.
+	// The driver name is appended automatically.
+	// Example: "seeders" -> ./app/database/seeders/{Driver}
+	// Default: "seeders"
 	SeederDirectory string
 
 	// Timeout duration limit for database connection and operations.
@@ -234,14 +236,16 @@ var ConfigDefault = Config{
 	// Default: "./database"
 	DatabaseDirectory: DefaultDatabaseDirectory,
 
-	// Path to database migration files directory.
-	// Example: "./database/migrations"
-	// Default: "./database/migrations"
+	/// Migration directory, relative to DatabaseDirectory.
+	// The driver name is appended automatically.
+	// Example: "migrations" -> ./database/migrations/{Driver}
+	// Default: "migrations"
 	MigrationDirectory: DefaultMigrationDirectory,
 
-	// Path to database seeder files directory.
-	// Example: "./database/seeders"
-	// Default: "./database/seeders"
+	// Seeder directory, relative to DatabaseDirectory.
+	// The driver name is appended automatically.
+	// Example: "seeders" -> ./app/database/seeders/{Driver}
+	// Default: "seeders"
 	SeederDirectory: DefaultSeederDirectory,
 
 	// Timeout duration limit for database connection and operations.
@@ -364,11 +368,11 @@ func configDefault(config ...Config) Config {
 		databaseDir = cfg.DatabaseDirectory
 	}
 
-	// Default: "./database/migrations"
-	cfg.MigrationDirectory = resolveDir(databaseDir, cfg.MigrationDirectory, ConfigDefault.MigrationDirectory, driver)
+	// Default: "migrations" -> ./database/migrations/{Driver}
+	cfg.MigrationDirectory = resolveDir(databaseDir, cfg.MigrationDirectory, DefaultMigrationDirectory, driver)
 
-	// Default: "./database/seeders"
-	cfg.SeederDirectory = resolveDir(databaseDir, cfg.SeederDirectory, ConfigDefault.SeederDirectory, driver)
+	// Default: "seeders" -> ./database/seeders/{Driver}
+	cfg.SeederDirectory = resolveDir(databaseDir, cfg.SeederDirectory, DefaultSeederDirectory, driver)
 
 	// Default: 5 second
 	if cfg.Timeout == 0 {

@@ -47,8 +47,8 @@ const (
 	DefaultSSLCAPath              = ""
 	DefaultCharset                = "utf8mb4"
 	DefaultDatabaseDirectory      = "./database"
-	DefaultMigrationDirectory     = "./migrations"
-	DefaultSeederDirectory        = "./seeders"
+	DefaultMigrationDirectory     = "migrations"
+	DefaultSeederDirectory        = "seeders"
 	DefaultTimeout                = 5 * time.Second
 	DefaultConnectionMaxLifetime  = 10 * time.Minute
 	DefaultTrustServerCertificate = false
