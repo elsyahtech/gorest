@@ -80,7 +80,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 		log.WithOptions(zap.WithCaller(false)).With(nameField).Info(fmt.Sprintf("%s %s executed successfully", driver, execType))
 	}
 
-	log.With(zap.Int("count", len(pendingFiles)), zap.String("driver", driver)).
+	log.WithOptions(zap.WithCaller(false)).With(zap.Int("count", len(pendingFiles)), zap.String("driver", driver)).
 		Info(fmt.Sprintf("all %s %ss completed successfully", driver, execType))
 
 	return "", nil
