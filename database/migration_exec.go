@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"go.uber.org/zap"
 )
@@ -10,18 +11,15 @@ import (
 func migrationExec(ctx context.Context, database *Database, config *Config, log *zap.Logger, execType executionType) (string, error) {
 	driver := NormalizeDatabaseDriver(config.Driver)
 
-	migrationDir := config.MigrationDirectory
-	seederDir := config.SeederDirectory
-
 	var subDir, tableName, columnName string
-	if execType == typeMigration {
-		subDir = migrationDir
-		tableName = migrationTableName
-		columnName = migrationColumnName
-	} else {
-		subDir = seederDir
-		tableName = seederTableName
-		columnName = seederColumnName
+
+	switch execType {
+	case typeMigration:
+		subDir = filepath.Join(config.MigrationDirectory, driver)
+		tableName, columnName = migrationTableName, migrationColumnName
+	default:
+		subDir = filepath.Join(config.SeederDirectory, driver)
+		tableName, columnName = seederTableName, seederColumnName
 	}
 
 	log.Info(fmt.Sprintf("starting %s %ss", driver, execType))
