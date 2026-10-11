@@ -169,7 +169,7 @@ func createScylaHistoryTable(ctx context.Context, database *Database, keyspaceNa
     `, keyspaceName, columnName, columnName)
 
 	if message, _, err := database.ExecCQL(ctx, createTableCQL); err != nil {
-		msg := fmt.Sprintf("failed to execute CQL statement for creating the 'migration_history' table in ScyllaDB. "+
+		msg := fmt.Sprintf("failed to execute CQL statement for creating the 'gorest_migration' table in ScyllaDB. "+
 			"Verify database keyspace, user privileges, connection state, or %s", message)
 
 		return msg, fmt.Errorf("%w", err)

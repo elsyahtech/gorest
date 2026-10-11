@@ -24,9 +24,9 @@ const (
 	ORACLE_PORT                       = "1521"
 	typeMigration       executionType = "migration"
 	typeSeeder          executionType = "seeder"
-	migrationTableName                = "migration_history"
+	migrationTableName                = "gorest_migration"
 	migrationColumnName               = "migration_name"
-	seederTableName                   = "seeder_history"
+	seederTableName                   = "gorest_seeder"
 	seederColumnName                  = "seeder_name"
 
 	DefaultDatabaseDriver         = SQLITE

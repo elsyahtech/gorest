@@ -58,7 +58,7 @@ func dataMigrationExec(
 
 // migrationMongoDataExec executes a single migration JSON file and records it in history.
 // Parses the JSON content, creates the collection and indexes if specified,
-// then inserts a record into the migration_history collection.
+// then inserts a record into the gorest_migration collection.
 // If any step fails, returns an error (entire migration considered failed).
 //
 //nolint:gocognit,revive,funlen
@@ -201,8 +201,8 @@ func mongoDataMigrationExec(ctx context.Context, database *Database, config *Con
 		}
 	}
 
-	// 4. Write migration history to migration_history collection.
-	historyColl, message, _, err := database.Collection(config, "migration_history")
+	// 4. Write migration history to gorest_migration collection.
+	historyColl, message, _, err := database.Collection(config, "gorest_migration")
 	if err != nil {
 		return message, fmt.Errorf(
 			"get mongo history collection failed: %w",
@@ -219,7 +219,7 @@ func mongoDataMigrationExec(ctx context.Context, database *Database, config *Con
 	if err != nil {
 		message := fmt.Sprintf(
 			"migration '%s' executed successfully, but failed to record its history "+
-				"into the 'migration_history' collection. "+
+				"into the 'gorest_migration' collection. "+
 				"Check database write permissions or unique index constraints.",
 			migration.Name,
 		)
@@ -234,7 +234,7 @@ func mongoDataMigrationExec(ctx context.Context, database *Database, config *Con
 }
 
 // mongoDataSeederExec parses a single seeder JSON file, inserts data into the target collection,
-// and records it in the seeder_history collection.
+// and records it in the gorest_seeder collection.
 //
 //nolint:revive,funlen
 func mongoDataSeederExec(ctx context.Context, database *Database, config *Config, seeder File) (res string, eror error) {
@@ -319,7 +319,7 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 		return message, fmt.Errorf("%w", err)
 	}
 
-	historyColl, message, _, err := database.Collection(config, "seeder_history")
+	historyColl, message, _, err := database.Collection(config, "gorest_seeder")
 	if err != nil {
 		return message, fmt.Errorf("get mongo seeder history collection failed: %w", err)
 	}
@@ -331,7 +331,7 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 
 	_, err = historyColl.InsertOne(ctx, historyRecord)
 	if err != nil {
-		message := fmt.Sprintf("seeder '%s' executed successfully, but failed to record its history into 'seeder_history'.", seeder.Name)
+		message := fmt.Sprintf("seeder '%s' executed successfully, but failed to record its history into 'gorest_seeder'.", seeder.Name)
 
 		return message, fmt.Errorf("%w", err)
 	}
@@ -340,7 +340,7 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 }
 
 // sqlDataMigrationExec executes a single migration SQL file and records it in history
-// Executes the SQL, then inserts record in migration_history table
+// Executes the SQL, then inserts record in gorest_migration table
 // If any step fails, returns error (entire migration considered failed).
 func sqlDataMigrationExec(ctx context.Context, driver string, database *Database, file File, tableName, columnName string) (string, error) {
 	queryPostgres := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES ($1, $2)"
@@ -374,9 +374,9 @@ func sqlDataMigrationExec(ctx context.Context, driver string, database *Database
 		return message, fmt.Errorf("unsupported database driver: %s", driver)
 	}
 
-	// Record migration in migration_history table (mark as executed)
+	// Record migration in gorest_migration table (mark as executed)
 	if _, message, _, err := database.ExecSQL(ctx, insertQuery, file.Name, time.Now()); err != nil {
-		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into the 'migration_history' table. "+
+		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into the 'gorest_migration' table. "+
 			"Check database write permissions or unique index constraints or %s", file.Name, message)
 
 		return msg, fmt.Errorf("record migration in history failed: %w", err)
