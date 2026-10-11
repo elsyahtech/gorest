@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 )
@@ -21,14 +22,14 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 		tableName, columnName = seederTableName, seederColumnName
 	}
 
-	log.With(
-		zap.String("driver", driver),
-		zap.String("directory", subDir),
-		zap.String("execType", string(execType)),
-	).Info(fmt.Sprintf("starting %s %ss", driver, execType))
+	log.Info(fmt.Sprintf("starting %s %ss", driver, execType))
+
+	if message, err := ensureDir(subDir, execType); err != nil {
+		return message, err
+	}
 
 	// 1. Read files
-	files, message, err := readFiles(driver, subDir, execType)
+	files, message, err := readFiles(driver, subDir)
 	if err != nil {
 		return message, fmt.Errorf("read %s %s files: %w", driver, execType, err)
 	}
@@ -80,6 +81,18 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 
 	log.With(zap.Int("count", len(pendingFiles)), zap.String("driver", driver)).
 		Info(fmt.Sprintf("all %s %ss completed successfully", driver, execType))
+
+	return "", nil
+}
+
+// ensureDir creates the migration/seeder directory if it doesn't exist.
+// MkdirAll is idempotent: no error if the directory already exists.
+func ensureDir(dir string, execType executionType) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		message := fmt.Sprintf("Ensure the application has write permission to create the %s directory: %s", execType, dir)
+
+		return message, fmt.Errorf("create %s directory %s: %w", execType, dir, err)
+	}
 
 	return "", nil
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -225,7 +226,7 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 }
 
 // ==========================================================================
-// GenerateSQLiteDatabase ensures SQLite database file exists in root folder
+// GenerateSQLiteDatabase
 // ==========================================================================.
 func generateSQLiteDatabase(cfg *Config) error {
 	if cfg == nil {
@@ -242,10 +243,27 @@ func generateSQLiteDatabase(cfg *Config) error {
 		dbName += ".db"
 	}
 
-	// Create the database file if it doesn't exist
-	file, err := os.OpenFile(dbName, os.O_CREATE|os.O_WRONLY, 0666)
+	// Default: "./database"
+	dbDir := DefaultDatabaseDirectory
+	if cfg.DatabaseDirectory != "" {
+		dbDir = cfg.DatabaseDirectory
+	}
+
+	dbPath := filepath.Join(dbDir, dbName)
+
+	// MkdirAll is idempotent: no error if the directory already exists.
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		return fmt.Errorf("generate sqlite database: create directory: %w", err)
+	}
+
+	// O_CREATE without O_TRUNC: creates the file if missing, leaves existing data untouched.
+	file, err := os.OpenFile(dbPath, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
-		return fmt.Errorf("GenerateSQLiteDatabase - create database file: %w", err)
+		return fmt.Errorf("generate sqlite database: create file %s: %w", dbPath, err)
+	}
+
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("generate sqlite database: close file %s: %w", dbPath, err)
 	}
 
 	err = file.Close()
