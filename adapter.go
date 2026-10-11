@@ -16,6 +16,7 @@ import (
 	gorestredis "github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
 	"github.com/redis/go-redis/v9"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.uber.org/zap"
@@ -99,6 +100,10 @@ func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Colle
 
 func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
 	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest)
+}
+
+func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
+	return dbSession.database.EncodeMongoCollection(dest)
 }
 
 // Getter native Mongo create collection queries.

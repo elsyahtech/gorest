@@ -13,6 +13,91 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+// EncodeMongoCollection converts a struct to a BSON document using gorest tags.
+func (*Database) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
+	value := reflect.ValueOf(dest)
+	if !value.IsValid() {
+		message, httpCode, err := setError(
+			"Pass a struct with valid gorest tags.",
+			errors.New("encodeMongoCollection: destination is nil"),
+			http.StatusBadRequest,
+		)
+		return nil, message, httpCode, err
+	}
+
+	for value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			message, httpCode, err := setError(
+				"Pass a non-nil struct with valid gorest tags.",
+				errors.New("encodeMongoCollection: destination is a nil pointer"),
+				http.StatusBadRequest,
+			)
+			return nil, message, httpCode, err
+		}
+		value = value.Elem()
+	}
+
+	document, err := mongoDocumentByGorestTag(value)
+	if err != nil {
+		message, httpCode, wrappedErr := setError(
+			"Pass a struct with unique, valid gorest tags.",
+			fmt.Errorf("encodeMongoCollection: %w", err),
+			http.StatusBadRequest,
+		)
+		return nil, message, httpCode, wrappedErr
+	}
+
+	return document, "", http.StatusOK, nil
+}
+
+func mongoDocumentByGorestTag(value reflect.Value) (bson.M, error) {
+	for value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return nil, errors.New("document is a nil pointer")
+		}
+		value = value.Elem()
+	}
+
+	if value.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("expected a struct, got %s", value.Kind())
+	}
+
+	document := make(bson.M)
+	typ := value.Type()
+	for idx := 0; idx < value.NumField(); idx++ {
+		field := typ.Field(idx)
+		if field.PkgPath != "" {
+			continue
+		}
+
+		tag := strings.TrimSpace(field.Tag.Get("gorest"))
+		if tag == "" || tag == "-" {
+			continue
+		}
+
+		name := strings.TrimSpace(strings.Split(tag, ",")[0])
+		if name == "" || name == "-" {
+			continue
+		}
+		if _, exists := document[name]; exists {
+			return nil, fmt.Errorf("multiple struct fields use gorest tag %q", name)
+		}
+
+		fieldValue := value.Field(idx)
+		if fieldValue.Kind() == reflect.Pointer && fieldValue.IsNil() {
+			document[name] = nil
+			continue
+		}
+		document[name] = fieldValue.Interface()
+	}
+
+	if len(document) == 0 {
+		return nil, fmt.Errorf("struct %s has no fields with gorest tags", typ.Name())
+	}
+
+	return document, nil
+}
+
 // DecodeMongoCursor decodes MongoDB documents into a struct or slice of
 // structs using the first value in each field's gorest tag as its BSON field
 // name. The caller retains ownership of the cursor and should close it.
