@@ -17,8 +17,6 @@ func (app *App) logInit() {
 		golog.Fatalf("failed to run logger: %v. message: %v", err, message)
 	}
 
-	app.Log(nil, true).Info("logger initialized successfully")
-
 	app.log = logInitialized
 }
 
