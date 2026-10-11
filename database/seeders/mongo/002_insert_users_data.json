@@ -2,7 +2,7 @@
   "collection": "users",
   "data": [
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e01",
       "email": "admin1@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-01",
@@ -12,7 +12,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e02",
       "email": "admin2@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-01",
@@ -22,7 +22,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e03",
       "email": "admin3@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-02",
@@ -32,7 +32,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e04",
       "email": "admin4@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-02",
@@ -42,7 +42,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e05",
       "email": "admin5@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-03",
@@ -52,7 +52,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a06",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e06",
       "email": "admin6@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-03",
@@ -62,7 +62,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a07",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e07",
       "email": "admin7@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-04",
@@ -72,7 +72,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a08",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e08",
       "email": "admin8@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-04",
@@ -82,7 +82,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a09",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e09",
       "email": "admin9@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-05",
@@ -92,7 +92,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a10",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e10",
       "email": "admin10@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-05",
@@ -102,7 +102,7 @@
       "deleted_at": null
     },
     {
-      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      "id": "3746e32f-1bd6-4023-a608-f535696f5e11",
       "email": "admin11@mail.com",
       "password": "$2a$12$eXampleHashedPasswordStringForTestingOnly",
       "department_id": "dept-05",

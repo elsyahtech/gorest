@@ -7,5 +7,6 @@ CREATE TABLE IF NOT EXISTS departments (
     updated_at TIMESTAMP NULL,
     deleted_at TIMESTAMP NULL,
     PRIMARY KEY (id)
-    INDEX idx_departments_name (name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_departments_name ON departments (name);

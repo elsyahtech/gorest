@@ -2,7 +2,7 @@ BEGIN
     INSERT ALL
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+            '3746e32f-1bd6-4023-a608-f535696f5e01',
             'admin1@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-01',
@@ -11,7 +11,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a02',
+            '3746e32f-1bd6-4023-a608-f535696f5e02',
             'admin2@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-01',
@@ -20,7 +20,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a03',
+            '3746e32f-1bd6-4023-a608-f535696f5e03',
             'admin3@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-02',
@@ -29,7 +29,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a04',
+            '3746e32f-1bd6-4023-a608-f535696f5e04',
             'admin4@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-02',
@@ -38,7 +38,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a05',
+            '3746e32f-1bd6-4023-a608-f535696f5e05',
             'admin5@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-03',
@@ -47,7 +47,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a06',
+            '3746e32f-1bd6-4023-a608-f535696f5e06',
             'admin6@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-03',
@@ -56,7 +56,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a07',
+            '3746e32f-1bd6-4023-a608-f535696f5e07',
             'admin7@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-04',
@@ -65,7 +65,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a08',
+            '3746e32f-1bd6-4023-a608-f535696f5e08',
             'admin8@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-04',
@@ -74,7 +74,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a09',
+            '3746e32f-1bd6-4023-a608-f535696f5e09',
             'admin9@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-05',
@@ -83,7 +83,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a10',
+            '3746e32f-1bd6-4023-a608-f535696f5e10',
             'admin10@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-05',
@@ -92,7 +92,7 @@ BEGIN
         )
         INTO users (id, email, password, department_id, is_active, created_at)
         VALUES (
-            'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            '3746e32f-1bd6-4023-a608-f535696f5e11',
             'admin11@mail.com',
             '$2a$12$eXampleHashedPasswordStringForTestingOnly',
             'dept-05',

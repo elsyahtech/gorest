@@ -245,6 +245,7 @@ func generateSQLiteDatabase(cfg *Config) error {
 
 	// Default: "./database"
 	dbDir := DefaultDatabaseDirectory
+
 	if cfg.DatabaseDirectory != "" {
 		dbDir = cfg.DatabaseDirectory
 	}
@@ -264,11 +265,6 @@ func generateSQLiteDatabase(cfg *Config) error {
 
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("generate sqlite database: close file %s: %w", dbPath, err)
-	}
-
-	err = file.Close()
-	if err != nil {
-		return fmt.Errorf("GenerateSQLiteDatabase - close database file: %w", err)
 	}
 
 	return nil

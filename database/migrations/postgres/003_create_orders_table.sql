@@ -12,5 +12,6 @@ CREATE TABLE IF NOT EXISTS orders (
     
     PRIMARY KEY (id),
     CONSTRAINT FK_orders_users FOREIGN KEY (user_id) REFERENCES users(id)
-    INDEX idx_orders_order_number (order_number)
 );
+
+CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders (order_number);

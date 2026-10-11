@@ -8,5 +8,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP NULL,
     deleted_at TIMESTAMP NULL,
     PRIMARY KEY (id)
-    INDEX idx_users_department_id (department_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_users_department_id ON users (department_id);
