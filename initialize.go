@@ -17,6 +17,8 @@ func (app *App) logInit() {
 		golog.Fatalf("failed to run logger: %v. message: %v", err, message)
 	}
 
+	app.Log(nil, true).Info("logger initialized successfully")
+
 	app.log = logInitialized
 }
 
@@ -88,8 +90,6 @@ func (app *App) databaseInit() {
 }
 
 func (app *App) serverInit() {
-	app.Log(nil, true).Info("initializing server")
-
 	if app.log == nil {
 		golog.Fatalf("failed initializing server: " +
 			"logger is not running. message: Ensure the logger is running before initializing the server, " +

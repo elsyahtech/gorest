@@ -23,9 +23,11 @@ func New(config ...Config) *App {
 	app.loadTimezone()
 
 	// initialize the global logger
+	app.Log(nil, true).Info("initializing logger")
 	app.logInit()
 
 	// initialize the server
+	app.Log(nil, true).Info("initializing server")
 	app.serverInit()
 
 	return app
