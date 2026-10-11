@@ -21,7 +21,7 @@ func (log *Log) Close() (string, int, error) {
 			fmt.Errorf("close log sync failed: %w", err)
 	}
 
-	return "", http.StatusOK, nil
+	return "Logger closed successfully", http.StatusOK, nil
 }
 
 func (log *Log) Log(field map[string]any, noCaller ...bool) *zap.Logger {

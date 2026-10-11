@@ -28,5 +28,5 @@ func (redis *Redis) Close() (string, error) {
 		return message, fmt.Errorf("redis close error: %w", err)
 	}
 
-	return "", nil
+	return "Redis connection closed successfully", nil
 }

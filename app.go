@@ -45,12 +45,12 @@ func (app *App) Start() *App {
 	}()
 
 	sig := <-quit
-	app.Log(map[string]any{"signal": sig.String()}, true).Info("Gorest engine received shutdown signal...")
+	app.Log(map[string]any{"signal": sig.String()}, true).Info("Application received shutdown signal...")
 
-	if _, _, err := app.Close(); err != nil {
-		app.Log(map[string]any{LogFieldKeyError: err}, true).Error("Failed to shutdown Gorest gracefully.")
+	if message, _, err := app.Close(); err != nil {
+		app.Log(map[string]any{LogFieldKeyError: err}, true).Error(message)
 	} else {
-		app.Log(nil, true).Info("Gorest engine shutdown successfully. Clean exit.")
+		app.Log(nil, true).Info(message)
 	}
 
 	return app

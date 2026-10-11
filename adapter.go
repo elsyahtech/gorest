@@ -74,7 +74,7 @@ func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...a
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return result, "", httpCode, nil
+	return result, message, httpCode, nil
 }
 
 // Getter native query SQL queries.
@@ -84,7 +84,7 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return rows, "", httpCode, nil
+	return rows, message, httpCode, nil
 }
 
 // Getter native Mongo collectionqueries.
@@ -94,7 +94,7 @@ func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Colle
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return coll, "", httpCode, nil
+	return coll, message, httpCode, nil
 }
 
 func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
@@ -112,7 +112,7 @@ func (dbSession *DBSession) MongoCreateCollection(
 		return message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return "", httpCode, nil
+	return message, httpCode, nil
 }
 
 // Getter native exec Scylla queries.
@@ -122,7 +122,7 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 		return message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return "", httpCode, nil
+	return message, httpCode, nil
 }
 
 // Getter native query Scylla queries.
@@ -132,7 +132,7 @@ func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return iter, "", httpCode, nil
+	return iter, message, httpCode, nil
 }
 
 // QueryBuilderSQL defines the signature for raw SQL complex queries.
@@ -180,13 +180,15 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 	return &DBSession{
 		database: txDB,
 		config:   dbSession.config,
-	}, "", httpCode, nil
+	}, message, httpCode, nil
 }
 
-// Rollback aborts the current database transaction.
+// Rollback aborts the active transaction.
+// Returns 400 Bad Request if there is no active transaction,
+// and 500 Internal Server Error if the rollback fails.
 func (dbSession *DBSession) Rollback() (string, int, error) {
-	if dbSession.database.Tx == nil {
-		return "Ensure that a database transaction has been properly started before attempting a rollback.",
+	if dbSession == nil || dbSession.database == nil || dbSession.database.Tx == nil {
+		return "Ensure that a database transaction has been properly started before attempting a rollback",
 			http.StatusBadRequest,
 			errors.New("rollback: no active transaction to rollback")
 	}
@@ -195,18 +197,20 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 	dbSession.database.Tx = nil
 
 	if err != nil {
-		return "Ensure the database connection is healthy and the transaction is not already closed or committed.",
+		return "Ensure the database connection is healthy and the transaction is not already closed or committed",
 			http.StatusInternalServerError,
-			fmt.Errorf("rollback failed: %w", err)
+			fmt.Errorf("rollback: %w", err)
 	}
 
-	return "", http.StatusOK, nil
+	return "Transaction rolled back successfully", http.StatusOK, nil
 }
 
-// Commit finalizes the current database transaction.
+// Commit commits the active transaction.
+// Returns 400 Bad Request if there is no active transaction,
+// and 500 Internal Server Error if the commit fails.
 func (dbSession *DBSession) Commit() (string, int, error) {
-	if dbSession.database.Tx == nil {
-		return "Ensure that a database transaction has been properly started before attempting a commit.",
+	if dbSession == nil || dbSession.database == nil || dbSession.database.Tx == nil {
+		return "Ensure that a database transaction has been properly started before attempting a commit",
 			http.StatusBadRequest,
 			errors.New("commit: no active transaction to commit")
 	}
@@ -215,51 +219,65 @@ func (dbSession *DBSession) Commit() (string, int, error) {
 	dbSession.database.Tx = nil
 
 	if err != nil {
-		return "Ensure the database connection remains active, there are no unhandled constraint violations, " +
-				"and the transaction has not timed out.",
+		return "Ensure the database connection is active and the transaction has not timed out",
 			http.StatusInternalServerError,
-			fmt.Errorf("commit failed: %w", err)
+			fmt.Errorf("commit: %w", err)
 	}
 
-	return "", http.StatusOK, nil
+	return "Transaction committed successfully", http.StatusOK, nil
 }
 
+// Close shuts down all application services (redis, database, logger).
+// Every service is attempted even if a previous one fails; errors are joined.
 func (app *App) Close() (string, int, error) {
-	if app.redis != nil {
-		message, err := app.redis.Close()
-		if err != nil {
-			app.Log(Map{
-				LogFieldKeyError: err,
-			}).Error(message)
+	if app == nil {
+		return "Application is not initialized", http.StatusBadRequest,
+			errors.New("close: app is nil")
+	}
 
-			return message, http.StatusInternalServerError, fmt.Errorf("%w", err)
+	var (
+		errs     []error
+		message  string
+		httpCode = http.StatusOK
+	)
+
+	if app.redis != nil {
+		msg, err := app.redis.Close()
+		if err != nil {
+			app.Log(Map{LogFieldKeyError: err}).Error(msg)
+
+			message, httpCode = msg, http.StatusInternalServerError
+			errs = append(errs, fmt.Errorf("failed to disconnect redis: %w", err))
 		}
 	}
 
 	if app.database != nil {
-		timeout := app.config.database.Timeout
-
-		ctx, cancel := app.NewContext(timeout)
+		ctx, cancel := app.NewContext(app.config.database.Timeout)
 		defer cancel()
 
-		message, httpCode, err := app.database.Close(ctx, app.config.database)
+		msg, code, err := app.database.Close(ctx, app.config.database)
 		if err != nil {
-			app.Log(Map{
-				LogFieldKeyError: err,
-			}).Error(message)
+			app.Log(Map{LogFieldKeyError: err}).Error(msg)
 
-			return message, httpCode, fmt.Errorf("failed to disconnect database: %w", err)
+			message, httpCode = msg, code
+			errs = append(errs, fmt.Errorf("failed to disconnect database: %w", err))
 		}
 	}
 
+	// Logger is closed last so other services can still log during shutdown.
 	if app.log != nil {
-		message, httpCode, err := app.log.Close()
+		msg, code, err := app.log.Close()
 		if err != nil {
-			return message, httpCode, fmt.Errorf("failed to disconnect logger: %w. %s", err, message)
+			message, httpCode = msg, code
+			errs = append(errs, fmt.Errorf("failed to disconnect logger: %w", err))
 		}
 	}
 
-	return "", http.StatusOK, nil
+	if len(errs) > 0 {
+		return message, httpCode, errors.Join(errs...)
+	}
+
+	return "Application closed successfully", http.StatusOK, nil
 }
 
 func (dbSession *DBSession) Table(table string) *orm.ORM {
