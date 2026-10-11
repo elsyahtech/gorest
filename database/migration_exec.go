@@ -21,7 +21,11 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 		tableName, columnName = seederTableName, seederColumnName
 	}
 
-	log.Info(fmt.Sprintf("starting %s %ss", driver, execType))
+	log.With(
+		zap.String("driver", driver),
+		zap.String("directory", subDir),
+		zap.String("execType", string(execType)),
+	).Info(fmt.Sprintf("starting %s %ss", driver, execType))
 
 	// 1. Read files
 	files, message, err := readFiles(driver, subDir, execType)
