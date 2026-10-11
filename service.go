@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	golog "log"
+	"slices"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/log"
@@ -13,10 +14,10 @@ import (
 )
 
 func (app *App) registerService(name string) {
-	for _, m := range app.modules {
-		if m == name {
-			return // has been registered, ignore!
-		}
+	app.Log(nil, true).Info(fmt.Sprintf("initializing %s", name))
+
+	if slices.Contains(app.modules, name) {
+		return // has been registered, ignore!
 	}
 
 	app.modules = append(app.modules, name)

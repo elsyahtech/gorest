@@ -70,7 +70,6 @@ func configDefault(config ...Config) Config {
 	cfg := config[0]
 
 	cfg.log = ConfigDefault.log
-	cfg.server = ConfigDefault.server
 	cfg.redis = ConfigDefault.redis
 	cfg.database = ConfigDefault.database
 

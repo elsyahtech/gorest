@@ -26,7 +26,6 @@ func New(config ...Config) *App {
 	app.logInit()
 
 	// initialize the server
-	app.Log(nil, true).Info("initializing server")
 	app.serverInit()
 
 	return app

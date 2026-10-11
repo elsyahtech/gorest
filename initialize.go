@@ -87,7 +87,7 @@ func (app *App) databaseInit() {
 	app.Log(nil, true).Info("database initialized successfully")
 }
 
-func (app *App) serverInit() {
+func (app *App) newServer() {
 	if app.log == nil {
 		golog.Fatalf("failed initializing server: " +
 			"logger is not running. message: Ensure the logger is running before initializing the server, " +
@@ -109,4 +109,42 @@ func (app *App) serverInit() {
 	app.server = serverInitialized
 
 	app.Log(nil, true).Info("server initialized successfully")
+}
+
+func (app *App) reconfigureServer() {
+	if app.log == nil {
+		golog.Fatalf("failed initializing server: " +
+			"logger is not running. message: Ensure the logger is running before initializing the server, " +
+			"or run redis.Run(redis.Config{...}) in your app")
+	}
+
+	app.registerService("Server")
+
+	serverInitialized, message, err := server.New(app.config.server)
+	if err != nil {
+		app.Log(map[string]any{
+			LogFieldKeyError:   err,
+			LogFieldKeyMessage: message,
+		}, true).Error("failed to initializing server")
+
+		golog.Fatalf("failed initializing server: %v. message: %v", err, message)
+	}
+
+	app.server = serverInitialized
+}
+
+// ensureServer initializes the server once, using the handler's config if provided,
+// otherwise the default config. Safe to call multiple times.
+func (app *App) serverInit() {
+	if app.config.server == nil {
+		def := server.ConfigDefault
+
+		app.config.server = &def
+
+		app.Log(nil, true).Info("initializing server")
+
+		app.newServer()
+	} else {
+		app.reconfigureServer()
+	}
 }
