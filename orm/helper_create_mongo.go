@@ -16,6 +16,9 @@ func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableNam
 		return orm.setError(message, err, httpCode)
 	}
 
+	orm.Message = message
+	orm.HTTPCode = httpCode
+
 	buildMessage := func() string {
 		return "MongoDB error detected. " +
 			"Check your collection schema, document structure, duplicate keys (unique index violation), or network connection."

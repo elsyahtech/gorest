@@ -327,8 +327,6 @@ func (orm *ORM) extractResultCreateSQL(result sql.Result, primaryKeyIndex []int,
 	if orm.IsUpsert {
 		orm.Message = "Data saved successfully"
 		idKey = upsertedID
-	} else {
-		orm.Message = "Data created successfully"
 	}
 
 	orm.Result = map[string]any{

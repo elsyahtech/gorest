@@ -3,7 +3,6 @@ package orm
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 )
 
@@ -74,7 +73,8 @@ func (orm *ORM) createSQL(data any) error {
 	}
 
 	orm.Result = result
-	orm.HTTPCode = http.StatusOK
+	orm.HTTPCode = httpCode
+	orm.Message = message
 
 	// 10. Assign final result to ORM instance for handler consumption
 	if result != nil {

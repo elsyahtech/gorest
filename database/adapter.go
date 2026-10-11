@@ -68,7 +68,7 @@ func (db *Database) ExecSQL(ctx context.Context, query string, args ...any) (sql
 		return nil, message, code, err
 	}
 
-	return result, "", http.StatusOK, nil
+	return result, "Data saved successfully", http.StatusOK, nil
 }
 
 func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
@@ -119,7 +119,7 @@ func (db *Database) QuerySQL(ctx context.Context, query string, args ...any) (*s
 		return nil, message, code, err
 	}
 
-	return result, "", http.StatusOK, nil
+	return result, "Data retrieved successfully", http.StatusOK, nil
 }
 
 func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, int, error) {
@@ -164,7 +164,8 @@ func (db *Database) BeginTx(opts ...*sql.TxOptions) (*Database, string, int, err
 	txDB := *db
 	txDB.Tx = transaction
 
-	return &txDB, "", http.StatusOK, nil
+	// Pesan suksesnya bener ngga bro?
+	return &txDB, "Transaction started successfully", http.StatusOK, nil
 }
 
 // ========================================================================================================
@@ -183,7 +184,7 @@ func (db *Database) Collection(config *Config, collectionName string) (*mongo.Co
 
 	if collectionName == "" {
 		message, code, err := setError(
-			"ensure collection name is not empty.",
+			"Ensure collection name is not empty.",
 			errors.New("collection: collection name cannot be empty"),
 			http.StatusBadRequest,
 		)
@@ -191,10 +192,12 @@ func (db *Database) Collection(config *Config, collectionName string) (*mongo.Co
 		return nil, message, code, err
 	}
 
-	return db.Mongo.Database(config.Name).Collection(collectionName), "", http.StatusOK, nil
+	return db.Mongo.Database(config.Name).Collection(collectionName), "Operation completed successfully", http.StatusOK, nil
 }
 
-// CreateCollection creates a new collection in MongoDB with optional configurations (like schema validator).
+// CreateCollection creates a new MongoDB collection in the configured database.
+// Returns 400 Bad Request if the collection name is empty, 409 Conflict if the collection already exists,
+// and 500 Internal Server Error for other failures.
 func (db *Database) CreateCollection(
 	ctx context.Context,
 	config *Config,
@@ -204,17 +207,17 @@ func (db *Database) CreateCollection(
 	if db == nil || db.Mongo == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
-				"To use Collection, the application must use MONGO",
+				"To use CreateCollection, the application must use MONGO",
 			errors.New("createCollection: mongo service is not running"),
 		)
 
 		return message, code, err
 	}
 
-	if ctx == nil || collectionName == "" {
+	if collectionName == "" {
 		message, code, err := setError(
-			"ensure the context and collection name are not empty",
-			errors.New("createCollection: context and collection name cannot be empty"),
+			"Ensure the collection name is not empty",
+			errors.New("createCollection: collection name cannot be empty"),
 			http.StatusBadRequest,
 		)
 
@@ -223,15 +226,28 @@ func (db *Database) CreateCollection(
 
 	err := db.Mongo.Database(config.Name).CreateCollection(ctx, collectionName, opts...)
 	if err != nil {
+		// NamespaceExists (code 48): the collection already exists, a client-side conflict.
+		var cmdErr mongo.CommandError
+
+		if errors.As(err, &cmdErr) && cmdErr.Code == 48 {
+			message, code, err := setError(
+				"Collection already exists, use a different name or skip creation",
+				fmt.Errorf("createCollection: %w", err),
+				http.StatusConflict,
+			)
+
+			return message, code, err
+		}
+
 		message, code, err := setError(
-			"verify the database user permissions, network state, or if the collection already exists",
+			"Verify the database user permissions and network connectivity",
 			fmt.Errorf("createCollection: %w", err),
 		)
 
 		return message, code, err
 	}
 
-	return "", http.StatusOK, nil
+	return "Collection created successfully", http.StatusOK, nil
 }
 
 // ========================================================================================================
@@ -269,7 +285,7 @@ func (db *Database) ExecCQL(ctx context.Context, query string, args ...any) (str
 		return message, code, err
 	}
 
-	return "", http.StatusOK, nil
+	return "Data saved successfully", http.StatusOK, nil
 }
 
 func (db *Database) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
@@ -293,7 +309,7 @@ func (db *Database) QueryCQL(ctx context.Context, query string, args ...any) (*g
 		return nil, message, code, err
 	}
 
-	return db.Scylla.Query(query, args...).IterContext(ctx), "", http.StatusOK, nil
+	return db.Scylla.Query(query, args...).IterContext(ctx), "Data retrieved successfully", http.StatusOK, nil
 }
 
 func (db *Database) ScanCQL(ctx context.Context, query string, args ...any) (applied bool, troubleshoot string, httpCode int, err error) {
@@ -330,7 +346,7 @@ func (db *Database) ScanCQL(ctx context.Context, query string, args ...any) (app
 		return false, message, code, err
 	}
 
-	return applied, "", http.StatusOK, nil
+	return applied, "Operation completed successfully", http.StatusOK, nil
 }
 
 func (db *Database) ExecBatchCQL(ctx context.Context, queries []string, batchArgs [][]any) (string, int, error) {
@@ -381,7 +397,7 @@ func (db *Database) ExecBatchCQL(ctx context.Context, queries []string, batchArg
 		return message, code, err
 	}
 
-	return "", http.StatusOK, nil
+	return "Data saved successfully", http.StatusOK, nil
 }
 
 //nolint:revive
@@ -475,5 +491,5 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 		return msg, code, err
 	}
 
-	return "", http.StatusOK, nil
+	return "Database connection closed successfully", http.StatusOK, nil
 }
