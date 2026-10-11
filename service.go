@@ -14,8 +14,6 @@ import (
 )
 
 func (app *App) registerService(name string) {
-	app.Log(nil, true).Info(fmt.Sprintf("initializing %s", name))
-
 	if slices.Contains(app.modules, name) {
 		return // has been registered, ignore!
 	}
