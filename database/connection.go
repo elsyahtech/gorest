@@ -244,16 +244,10 @@ func generateSQLiteDatabase(cfg *Config) error {
 	}
 
 	// Default: "./database"
-	dbDir := DefaultDatabaseDirectory
-
-	if cfg.DatabaseDirectory != "" {
-		dbDir = cfg.DatabaseDirectory
-	}
-
-	dbPath := filepath.Join(dbDir, dbName)
+	dbPath := filepath.Join(cfg.DatabaseDirectory, dbName)
 
 	// MkdirAll is idempotent: no error if the directory already exists.
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfg.DatabaseDirectory), 0o755); err != nil {
 		return fmt.Errorf("generate sqlite database: create directory: %w", err)
 	}
 
