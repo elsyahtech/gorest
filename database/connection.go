@@ -227,47 +227,6 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 // An existing database file is never truncated.
 func generateSQLiteDatabase(cfg *Config) (string, error) {
 	if cfg == nil {
-		return "", errors.New("GenerateSQLiteDatabase - config is nil")
-	}
-
-	dbName := cfg.Name
-	if dbName == "" {
-		return "", errors.New("GenerateSQLiteDatabase - database name is empty")
-	}
-
-	// Ensure .db extension
-	if !strings.HasSuffix(dbName, ".db") {
-		dbName += ".db"
-	}
-
-	dbDir := DefaultDatabaseDirectory
-
-	if cfg.DatabaseDirectory != "" {
-		dbDir = cfg.DatabaseDirectory
-	}
-
-	dbPath := filepath.Join(dbDir, dbName)
-
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return "", fmt.Errorf("generate sqlite database: create directory: %w", err)
-	}
-
-	// Create the database file if it doesn't exist
-	file, err := os.OpenFile(dbPath, os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		return "", fmt.Errorf("GenerateSQLiteDatabase - create database file: %w", err)
-	}
-
-	err = file.Close()
-	if err != nil {
-		return "", fmt.Errorf("GenerateSQLiteDatabase - close database file: %w", err)
-	}
-
-	return dbPath, nil
-}
-
-func generateSQLiteDatabasse(cfg *Config) (string, error) {
-	if cfg == nil {
 		return "", errors.New("generate sqlite database: config is nil")
 	}
 
