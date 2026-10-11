@@ -159,12 +159,9 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 	}
 
 	if driver == SQLITE {
-		dbPath, err := generateSQLiteDatabase(cfg)
-		if err != nil {
+		if _, err := generateSQLiteDatabase(cfg); err != nil {
 			return nil, "Ensure the database name and directory are configured correctly", err
 		}
-
-		cfg.Name = dbPath
 	}
 
 	dsn := dsnBuilder(cfg, timezone)
@@ -230,29 +227,15 @@ func generateSQLiteDatabase(cfg *Config) (string, error) {
 		return "", errors.New("generate sqlite database: config is nil")
 	}
 
-	dbName := cfg.Name
-	if dbName == "" {
-		return "", errors.New("generate sqlite database: database name is empty")
+	dbPath, err := sqliteFilePath(cfg)
+	if err != nil {
+		return "", err
 	}
 
-	// In-memory databases have no file to create.
-	if dbName == ":memory:" {
-		return dbName, nil
+	// In-memory database has no file to create.
+	if dbPath == ":memory:" {
+		return dbPath, nil
 	}
-
-	// Ensure .db extension
-	if !strings.HasSuffix(dbName, ".db") {
-		dbName += ".db"
-	}
-
-	// Default: "./database"
-	dbDir := DefaultDatabaseDirectory
-
-	if cfg.DatabaseDirectory != "" {
-		dbDir = cfg.DatabaseDirectory
-	}
-
-	dbPath := filepath.Join(dbDir, dbName)
 
 	// MkdirAll is idempotent: no error if the directory already exists.
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -270,4 +253,28 @@ func generateSQLiteDatabase(cfg *Config) (string, error) {
 	}
 
 	return dbPath, nil
+}
+
+// sqliteFilePath returns the final SQLite file path. Single source of truth.
+func sqliteFilePath(cfg *Config) (string, error) {
+	name := cfg.Name
+
+	if name == "" {
+		return "", errors.New("generate sqlite database: database name is empty")
+	}
+
+	if name == ":memory:" {
+		return name, nil
+	}
+
+	if !strings.HasSuffix(name, ".db") {
+		name += ".db"
+	}
+
+	dir := DefaultDatabaseDirectory
+	if cfg.DatabaseDirectory != "" {
+		dir = cfg.DatabaseDirectory
+	}
+
+	return filepath.Join(dir, name), nil
 }

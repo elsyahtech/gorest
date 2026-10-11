@@ -3,8 +3,6 @@ package database
 import (
 	"fmt"
 	"net/url"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/godror/godror"
@@ -83,19 +81,11 @@ func postgresDSN(cfg *Config, _ string) string {
 	return dsn
 }
 
-// SQLite DSN builders.
+// SQLite DSN builder.
 func sqliteDSN(cfg *Config, _ string) string {
-	fileName := cfg.Name
+	filePath, _ := sqliteFilePath(cfg)
 
-	const id = ".id"
-
-	if !strings.HasSuffix(fileName, ".db") {
-		fileName += id
-	}
-
-	filePath := filepath.Join(DefaultDatabaseDirectory, fileName)
-
-	return fmt.Sprintf("file:%s", filePath)
+	return "file:" + filePath
 }
 
 // Oracle DSN builder dengan wallet (TLS) dan Instant Client support (godror/OCI).
