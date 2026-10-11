@@ -37,7 +37,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 	if len(files) == 0 {
 		log.WithOptions(zap.WithCaller(false)).With(
 			zap.String("driver", driver),
-			zap.String("directory ./", subDir),
+			zap.String("directory", fmt.Sprintf("./%s", subDir)),
 			zap.String("sample_file", sampleFile(driver, execType))).
 			Info(fmt.Sprintf("%s migration ignored! %s files not found", driver, execType))
 
