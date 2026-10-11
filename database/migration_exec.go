@@ -22,7 +22,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 		tableName, columnName = seederTableName, seederColumnName
 	}
 
-	log.Info(fmt.Sprintf("starting %s %ss", driver, execType))
+	log.WithOptions(zap.WithCaller(false)).Info(fmt.Sprintf("starting %s %ss", driver, execType))
 
 	if message, err := ensureDir(subDir, execType); err != nil {
 		return message, err
@@ -35,7 +35,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 	}
 
 	if len(files) == 0 {
-		log.With(
+		log.WithOptions(zap.WithCaller(false)).With(
 			zap.String("driver", driver),
 			zap.String("directory", subDir)).
 			Info(fmt.Sprintf("%s migration ignored! %s files not found", driver, execType))
@@ -43,7 +43,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 		return "", nil
 	}
 
-	log.With(
+	log.WithOptions(zap.WithCaller(false)).With(
 		zap.Int("count", len(files)),
 		zap.String("driver", driver),
 		zap.Strings("files", getNames(files))).
@@ -58,7 +58,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 	// 3. Filter Pending
 	pendingFiles := filterPendingMigrationExec(files, executedRecords)
 	if len(pendingFiles) == 0 {
-		log.With(zap.String("driver", driver)).
+		log.WithOptions(zap.WithCaller(false)).With(zap.String("driver", driver)).
 			Info(fmt.Sprintf("%s database %s ignored! all were already executed", driver, execType))
 
 		return "", nil
@@ -68,7 +68,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 	for i, fileItem := range pendingFiles {
 		nameField := zap.String(string(execType)+"_name", fileItem.Name)
 
-		log.With(zap.Int("steps", i+1), zap.Int("total", len(pendingFiles)), nameField).
+		log.WithOptions(zap.WithCaller(false)).With(zap.Int("steps", i+1), zap.Int("total", len(pendingFiles)), nameField).
 			Info(fmt.Sprintf("executing %s %s", driver, execType))
 
 		message, err = dataMigrationExec(ctx, driver, database, config, execType, fileItem, tableName, columnName)
@@ -76,7 +76,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 			return message, fmt.Errorf("execute %s %s %s failed: %w", driver, execType, fileItem.Name, err)
 		}
 
-		log.With(nameField).Info(fmt.Sprintf("%s %s executed successfully", driver, execType))
+		log.WithOptions(zap.WithCaller(false)).With(nameField).Info(fmt.Sprintf("%s %s executed successfully", driver, execType))
 	}
 
 	log.With(zap.Int("count", len(pendingFiles)), zap.String("driver", driver)).
