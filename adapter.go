@@ -11,6 +11,7 @@ import (
 	"time"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/orm"
 	gorestredis "github.com/elsyahtech/gorest/redis"
@@ -70,6 +71,14 @@ func (app *App) NewContext(timeout time.Duration) (context.Context, context.Canc
 
 // Getter native exec SQL queries.
 func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	result, message, httpCode, err := dbSession.database.ExecSQL(ctx, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
@@ -80,6 +89,14 @@ func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...a
 
 // Getter native query SQL queries.
 func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	rows, message, httpCode, err := dbSession.database.QuerySQL(ctx, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
@@ -90,6 +107,14 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 
 // Getter native Mongo collectionqueries.
 func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	coll, message, httpCode, err := dbSession.database.Collection(dbSession.config, collectionName)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
@@ -99,10 +124,26 @@ func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Colle
 }
 
 func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest)
 }
 
 func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	return dbSession.database.EncodeMongoCollection(dest)
 }
 
@@ -112,6 +153,14 @@ func (dbSession *DBSession) MongoCreateCollection(
 	collectionName string,
 	opts ...options.Lister[options.CreateCollectionOptions],
 ) (string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	message, httpCode, err := dbSession.database.CreateCollection(ctx, dbSession.config, collectionName, opts...)
 	if err != nil {
 		return message, httpCode, fmt.Errorf("%w", err)
@@ -122,6 +171,14 @@ func (dbSession *DBSession) MongoCreateCollection(
 
 // Getter native exec Scylla queries.
 func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	message, httpCode, err := dbSession.database.ExecCQL(ctx, query, args...)
 	if err != nil {
 		return message, httpCode, fmt.Errorf("%w", err)
@@ -132,6 +189,14 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 
 // Getter native query Scylla queries.
 func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
 	iter, message, httpCode, err := dbSession.database.QueryCQL(ctx, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
@@ -145,6 +210,10 @@ type QueryBuilderSQL func(ctx context.Context, db *sql.DB) error
 
 // Escape Hatch: If handler needs direct raw SQL queries (e.g., for complex joins, CTEs, etc.)
 func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
+	if dbSession == nil || dbSession.database == nil {
+		return errors.New("database service is not running")
+	}
+
 	if err := fn(ctx, dbSession.database.SQL); err != nil {
 		return fmt.Errorf("%w", err)
 	}
@@ -156,8 +225,8 @@ func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL)
 type QueryBuilderMongo func(ctx context.Context, client *mongo.Client) error
 
 // Escape Hatch: If handler needs direct raw MongoDB queries.
-func (app *App) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) error {
-	if err := fn(ctx, app.database.Mongo); err != nil {
+func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) error {
+	if err := fn(ctx, dbSession.database.Mongo); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
@@ -169,6 +238,10 @@ type QueryBuilderScylla func(ctx context.Context, session *gocql.Session) error
 
 // Escape Hatch: If handler needs direct raw ScyllaDB queries.
 func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) error {
+	if dbSession == nil || dbSession.database == nil {
+		return errors.New("database service is not running")
+	}
+
 	if err := fn(ctx, dbSession.database.Scylla); err != nil {
 		return fmt.Errorf("%w", err)
 	}
@@ -177,6 +250,18 @@ func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderS
 }
 
 func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
+	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
+		return dbSession, "", http.StatusOK, nil
+	}
+
 	txDB, message, httpCode, err := dbSession.database.BeginTx(opts...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
@@ -192,7 +277,19 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 // Returns 400 Bad Request if there is no active transaction,
 // and 500 Internal Server Error if the rollback fails.
 func (dbSession *DBSession) Rollback() (string, int, error) {
-	if dbSession == nil || dbSession.database == nil || dbSession.database.Tx == nil {
+	if dbSession == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
+	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
+		return "", http.StatusOK, nil
+	}
+
+	if dbSession.database.Tx == nil {
 		return "Ensure that a database transaction has been properly started before attempting a rollback",
 			http.StatusBadRequest,
 			errors.New("rollback: no active transaction to rollback")
@@ -214,7 +311,19 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 // Returns 400 Bad Request if there is no active transaction,
 // and 500 Internal Server Error if the commit fails.
 func (dbSession *DBSession) Commit() (string, int, error) {
-	if dbSession == nil || dbSession.database == nil || dbSession.database.Tx == nil {
+	if dbSession == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
+	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
+		return "", http.StatusOK, nil
+	}
+
+	if dbSession.database.Tx == nil {
 		return "Ensure that a database transaction has been properly started before attempting a commit",
 			http.StatusBadRequest,
 			errors.New("commit: no active transaction to commit")
@@ -292,6 +401,8 @@ func (dbSession *DBSession) Table(table string) *orm.ORM {
 			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
 
 		golog.Fatalf("Gorest detected ORM Query in your application, but database is not running. Message: %s", message)
+
+		return nil
 	}
 
 	return &orm.ORM{
