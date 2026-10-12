@@ -2,9 +2,11 @@
 
 An opinionated Go application framework for building websites, REST APIs, and backend services.
 
-GOREST provides a structured application foundation with integrated infrastructure for HTTP servers, configuration, logging, databases, Redis, migrations, seeders, and data access.
+GOREST provides a structured application foundation with integrated infrastructure for HTTP servers, databases and data access.
 
 Its goal is simple: reduce repetitive infrastructure work, establish consistent application conventions, and help development teams focus on business functionality without giving up control of Go.
+
+
 
 ---
 
@@ -18,10 +20,10 @@ If you need to install or upgrade Go, visit the [official Go download page](http
 
 ### Supported Databases
 GOREST provides modular support for:
+- Oracle
+- SQL Server
 - PostgreSQL
 - MySQL
-- SQL Server
-- Oracle
 - SQLite
 - MongoDB
 - ScyllaDB
@@ -31,12 +33,12 @@ GOREST provides modular support for:
 ## 💡 Why GOREST?
 Go gives developers a simple language, strong performance, and a flexible ecosystem.
 
-That flexibility is valuable, but building a production backend still requires decisions about application structure, routing, configuration, logging, database access, migrations, caching, and application lifecycle.
+While flexibility provides significant benefits, engineering a production grade backend requires establishing robust standards for system architecture, data access, logging, configuration, and overall application lifecycle governance.
 
 Without a common foundation, different applications can gradually adopt different structures and conventions:
-- **Project A** → Router A + ORM A + Migration A
-- **Project B** → Router B + ORM B + Migration B
-- **Project C** → Custom structure + Custom conventions
+- **Project A** → Structure A + Conventions A + Configuration A
+- **Project B** → Structure B + Conventions B + Configuration B
+- **Project C** → Custom structure + Custom conventions + Custom Configuration
 
 This is not necessarily a problem for a single project. At team or organizational scale, however, architectural differences can make applications harder to understand, maintain, and transfer between developers.
 
@@ -253,9 +255,20 @@ Your application is now running.
 
 <img src="./docs/home-page.png" alt="Gorest Home Page" width="600">
 
+---
+
+### Looking for a Complete Application Using Gorest?
+The minimal setup above is all you need to get GOREST running. If you want to explore a more complete application with practical implementation examples, check out the official starter project:
+
+👉 **[Golang REST API Starter](https://github.com/elsyahtech/golang-rest-api-starter)**
+
+The starter provides practical examples of CRUD operations, database transactions, migrations, and native database queries to help you understand how to build an application with GOREST.
+
+---
+
 ## 🔧 Customize When You Need To
 
-When you need to customize application settings, you can provide configuration is centralized inside gorest.New(...), giving you full code-level visibility without messing with complex, fragmented configuration XML files.
+When you need to customize application settings, you can pass a configuration object to gorest.New(...). This keeps configuration explicit and accessible in your Go code.
 
 ---
 
@@ -332,3 +345,14 @@ Read the full guide: [Guide Documentation](./docs/guide.md)
 
 # 🔧 Troubleshoot
 Read the full troubleshoot guide: [Troubleshoot Documentation](./docs/guide.md)
+
+# 🎧 Support
+
+If you need help, have questions, or want to report an issue, you can reach out through the following channels:
+
+* **Issues & Bug Reports:** Use the [GitHub Issues](https://github.com/elsyahtech/gorest/issues) page to report bugs or request new features.
+* **Discussions:** Join our [GitHub Discussions](https://github.com/elsyahtech/gorest/discussions) to ask questions, share ideas, or discuss best practices with other community members.
+* **Documentation:** Explore the full [Guides & Documentation](./docs/guide.md) for detailed architecture, configuration, and API references.
+
+### Contributing
+Contributions are always welcome! If you'd like to contribute to GOREST, please check out our [Contribution Guidelines](./CONTRIBUTING.md) to get started.

@@ -21,12 +21,12 @@ BEGIN
                 
                 PRIMARY KEY (id),
                 CONSTRAINT FK_orders_users FOREIGN KEY (user_id) REFERENCES users(id),
-                CONSTRAINT CHK_orders_active CHECK (is_active IN (0, 1)),
+                CONSTRAINT CHK_orders_active CHECK (is_active IN (0, 1))
             )
         ';
 
         EXECUTE IMMEDIATE '
-            CREATE INDEX idx_orders_order_number ON users (order_number)
+            CREATE INDEX idx_orders_order_number ON ORDERS (order_number)
         ';
     END IF;
 END;

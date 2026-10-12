@@ -12,5 +12,6 @@ CREATE TABLE IF NOT EXISTS orders (
     
     PRIMARY KEY (id),
     FOREIGN KEY (user_id) REFERENCES users(id)
-    UNIQUE INDEX uk_orders_order_number (order_number)
 );
+
+CREATE INDEX IF NOT EXISTS uk_orders_order_number ON orders (order_number);

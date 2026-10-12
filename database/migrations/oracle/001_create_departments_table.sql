@@ -16,12 +16,12 @@ BEGIN
                 updated_at TIMESTAMP NULL,
                 deleted_at TIMESTAMP NULL,
                 PRIMARY KEY (id),
-                CONSTRAINT CHK_dept_active CHECK (is_active IN (0, 1)),
+                CONSTRAINT CHK_dept_active CHECK (is_active IN (0, 1))
             )
         ';
 
         EXECUTE IMMEDIATE '
-            CREATE INDEX idx_departments_name ON departments (name)
+            CREATE INDEX idx_departments_name ON DEPARTMENTS (name)
         ';
     END IF;
 END;

@@ -135,5 +135,11 @@ func (orm *ORM) setScyllaFindError(message string, err error, code ...int) error
 		return orm.setError(message, err, http.StatusBadRequest)
 	}
 
+	if strings.Contains(errText, "order by is only supported when the partition key is restricted by an eq or an in") {
+		message = "ScyllaDB allows ORDER BY only within a partition. Restrict the partition key in WHERE with = or IN, and order by clustering columns in the table's defined order or its reverse. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html#ordering-results"
+
+		return orm.setError(message, err, http.StatusBadRequest)
+	}
+
 	return orm.setError(message, err, code...)
 }

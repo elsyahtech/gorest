@@ -18,12 +18,12 @@ BEGIN
                 deleted_at TIMESTAMP NULL,
                 PRIMARY KEY (id),
                 CONSTRAINT UQ_users_email UNIQUE (email),
-                CONSTRAINT CHK_users_active CHECK (is_active IN (0, 1)),
+                CONSTRAINT CHK_users_active CHECK (is_active IN (0, 1))
             )
         ';
 
         EXECUTE IMMEDIATE '
-            CREATE INDEX idx_users_department_id ON users (department_id)
+            CREATE INDEX idx_users_department_id ON USERS (department_id)
         ';
     END IF;
 END;

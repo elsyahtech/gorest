@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS departments (
     PRIMARY KEY (id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_departments_name ON users (name);
+CREATE INDEX IF NOT EXISTS idx_departments_name ON departments (name);
