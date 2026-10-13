@@ -89,7 +89,7 @@ func (orm *ORM) findScylla(data any) error {
 	defer cancel()
 
 	// 15. Execute database query
-	iter, message, httpCode, err := orm.Database.QueryCQL(execCtx, queryStr, valueArgs...)
+	iter, message, httpCode, err := orm.Database.QueryCQL(execCtx, orm.DatabaseConfig, queryStr, valueArgs...)
 	if err != nil {
 		return orm.setScyllaFindError(message, err, httpCode)
 	}

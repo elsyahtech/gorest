@@ -462,14 +462,14 @@ func (orm *ORM) buildScyllaInQuery(table, col, currentSelectCols string, keys []
 }
 
 func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each func(row map[string]any) error) error {
-	iter, message, httpCode, err := orm.Database.QueryCQL(ctx, cql, args...)
+	iter, message, httpCode, err := orm.Database.QueryCQL(ctx, orm.DatabaseConfig, cql, args...)
 	if err != nil {
 		return orm.setError(message, err, httpCode)
 	}
 
 	defer func() {
 		if err := iter.Close(); err != nil {
-			log.Printf("failed to close iterator: %v", err) // Atau pakai logger project-mu
+			log.Printf("failed to close iterator: %v", err)
 		}
 	}()
 

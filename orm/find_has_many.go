@@ -303,7 +303,7 @@ func (orm *ORM) execLoadHasMany(
 	childLookup map[string]*structFieldInfo,
 	grouped map[string][]reflect.Value,
 ) error {
-	rows, message, httpCode, err := orm.Database.QuerySQL(ctx, query, args...)
+	rows, message, httpCode, err := orm.Database.QuerySQL(ctx, orm.DatabaseConfig, query, args...)
 	if err != nil {
 		return orm.setError(message, err, httpCode)
 	}

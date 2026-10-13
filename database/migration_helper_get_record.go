@@ -81,10 +81,10 @@ func getMongoRecords(ctx context.Context, database *Database, config *Config, co
 // ======================================================================================
 // getExecutedSQLRecords - Generic helper for migrations & seeders
 // ======================================================================================.
-func getSQLRecords(ctx context.Context, database *Database, tableName, columnName string) ([]string, string, error) {
+func getSQLRecords(ctx context.Context, database *Database, config *Config, tableName, columnName string) ([]string, string, error) {
 	query := fmt.Sprintf("SELECT %s FROM %s ORDER BY executed_at ASC", columnName, tableName)
 
-	rows, message, _, err := database.QuerySQL(ctx, query)
+	rows, message, _, err := database.QuerySQL(ctx, config, query)
 	if err != nil {
 		msg := fmt.Sprintf("query the '%s' table failed. Ensure table exists, "+
 			"database connection is healthy, or %s", tableName, message)
@@ -122,10 +122,10 @@ func getSQLRecords(ctx context.Context, database *Database, tableName, columnNam
 // ======================================================================================
 // getExecutedSQLRecords - Generic helper for migrations & seeders
 // ======================================================================================.
-func getScyllaRecords(ctx context.Context, database *Database, tableName, columnName string) ([]string, string, error) {
+func getScyllaRecords(ctx context.Context, database *Database, config *Config, tableName, columnName string) ([]string, string, error) {
 	query := fmt.Sprintf("SELECT %s FROM %s", columnName, tableName)
 
-	iter, message, _, err := database.QueryCQL(ctx, query)
+	iter, message, _, err := database.QueryCQL(ctx, config, query)
 	if err != nil {
 		msg := fmt.Sprintf("query the %s table in ScyllaDB failed. Ensure that the table exists "+
 			"and the database connection is healthy, or %s", tableName, message)

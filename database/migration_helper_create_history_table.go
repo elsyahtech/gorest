@@ -42,20 +42,20 @@ func createHistoryTable(
 			return nil, message, fmt.Errorf("get %s %s history table failed: %w", driver, execType, err)
 		}
 	case MYSQL, POSTGRES, SQLSERVER, SQLITE, ORACLE:
-		if message, err := createSQLHistoryTable(ctx, database, driver, tableName, columnName); err != nil {
+		if message, err := createSQLHistoryTable(ctx, database, config, driver, tableName, columnName); err != nil {
 			return nil, message, fmt.Errorf("create %s %s history table failed: %w", driver, execType, err)
 		}
 
-		executedRecords, message, err = getSQLRecords(ctx, database, tableName, columnName)
+		executedRecords, message, err = getSQLRecords(ctx, database, config, tableName, columnName)
 		if err != nil {
 			return nil, message, fmt.Errorf("get %s %s history table failed: %w", driver, execType, err)
 		}
 	case SCYLLA:
-		if message, err := createScylaHistoryTable(ctx, database, tableName, columnName); err != nil {
+		if message, err := createScylaHistoryTable(ctx, database, config, tableName, columnName); err != nil {
 			return nil, message, fmt.Errorf("create %s %s history table failed: %w", driver, execType, err)
 		}
 
-		executedRecords, message, err = getScyllaRecords(ctx, database, tableName, columnName)
+		executedRecords, message, err = getScyllaRecords(ctx, database, config, tableName, columnName)
 		if err != nil {
 			return nil, message, fmt.Errorf("get %s %s history table failed: %w", driver, execType, err)
 		}
@@ -104,7 +104,7 @@ func createMongoHistoryTable(ctx context.Context, database *Database, config *Co
 // ======================================================================================
 // createSQLHistoryTable - Generic helper for migration & seeder history
 // ======================================================================================.
-func createSQLHistoryTable(ctx context.Context, database *Database, driver, tableName, columnName string) (string, error) {
+func createSQLHistoryTable(ctx context.Context, database *Database, config *Config, driver, tableName, columnName string) (string, error) {
 	var createTableSQL string
 
 	switch driver {
@@ -147,7 +147,7 @@ func createSQLHistoryTable(ctx context.Context, database *Database, driver, tabl
 		return message, fmt.Errorf("unsupported database driver: %s", driver)
 	}
 
-	if _, message, _, err := database.ExecSQL(ctx, createTableSQL); err != nil {
+	if _, message, _, err := database.ExecSQL(ctx, config, createTableSQL); err != nil {
 		msg := fmt.Sprintf("failed to create '%s' table in %s. %s", tableName, driver, message)
 		return msg, fmt.Errorf("create table failed: %w", err)
 	}
@@ -158,7 +158,7 @@ func createSQLHistoryTable(ctx context.Context, database *Database, driver, tabl
 // ======================================================================================
 // createScyllaHistoryTable
 // ======================================================================================.
-func createScylaHistoryTable(ctx context.Context, database *Database, keyspaceName, columnName string) (string, error) {
+func createScylaHistoryTable(ctx context.Context, database *Database, config *Config, keyspaceName, columnName string) (string, error) {
 	// Step 1: Create collection (idempotent)
 	createTableCQL := fmt.Sprintf(`
     CREATE TABLE IF NOT EXISTS %s (
@@ -168,7 +168,7 @@ func createScylaHistoryTable(ctx context.Context, database *Database, keyspaceNa
     );
     `, keyspaceName, columnName, columnName)
 
-	if message, _, err := database.ExecCQL(ctx, createTableCQL); err != nil {
+	if message, _, err := database.ExecCQL(ctx, config, createTableCQL); err != nil {
 		msg := fmt.Sprintf("failed to execute CQL statement for creating the 'gorest_migration' table in ScyllaDB. "+
 			"Verify database keyspace, user privileges, connection state, or %s", message)
 

@@ -336,7 +336,7 @@ func (orm *ORM) execReturn(
 }
 
 func (orm *ORM) queryReturnRows(execCtx context.Context, queryStr string, args []any, plan *returnPlan) ([]reflect.Value, error) {
-	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, queryStr, args...)
+	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
 	if err != nil {
 		return nil, orm.setError(message, err, httpCode)
 	}

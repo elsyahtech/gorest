@@ -38,12 +38,12 @@ func dataMigrationExec(
 			}
 		}
 	case MYSQL, POSTGRES, SQLSERVER, SQLITE, ORACLE:
-		message, err = sqlDataMigrationExec(ctx, driver, database, fileItem, tableName, columnName)
+		message, err = sqlDataMigrationExec(ctx, database, config, fileItem, tableName, columnName)
 		if err != nil {
 			return message, fmt.Errorf("%w", err)
 		}
 	case SCYLLA:
-		message, err = scyllaDataMigrationExec(ctx, database, fileItem, tableName, columnName)
+		message, err = scyllaDataMigrationExec(ctx, database, config, fileItem, tableName, columnName)
 		if err != nil {
 			return message, fmt.Errorf("%w", err)
 		}
@@ -342,13 +342,13 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 // sqlDataMigrationExec executes a single migration SQL file and records it in history
 // Executes the SQL, then inserts record in gorest_migration table
 // If any step fails, returns error (entire migration considered failed).
-func sqlDataMigrationExec(ctx context.Context, driver string, database *Database, file File, tableName, columnName string) (string, error) {
+func sqlDataMigrationExec(ctx context.Context, database *Database, config *Config, file File, tableName, columnName string) (string, error) {
 	queryPostgres := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES ($1, $2)"
 	queryMssql := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (@p1, @p2)"
 	queryMysql := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (?, ?)"
 	queryOracle := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (:1, :2)"
 
-	if _, message, _, err := database.ExecSQL(ctx, file.Content); err != nil {
+	if _, message, _, err := database.ExecSQL(ctx, config, file.Content); err != nil {
 		msg := fmt.Sprintf("execute SQL statements inside migration file '%s' failed. "+
 			"Check the migration script syntax, schema constraints, or "+
 			"potential SQL runtime errors or %s", file.Name, message)
@@ -358,7 +358,7 @@ func sqlDataMigrationExec(ctx context.Context, driver string, database *Database
 
 	var insertQuery string
 
-	switch driver {
+	switch config.Driver {
 	case POSTGRES:
 		insertQuery = queryPostgres
 	case SQLSERVER:
@@ -369,13 +369,13 @@ func sqlDataMigrationExec(ctx context.Context, driver string, database *Database
 		insertQuery = queryOracle
 	default:
 		message := fmt.Sprintf("the database driver '%s' is unsupported for recording migration history. "+
-			"Check your configuration driver", driver)
+			"Check your configuration driver", config.Driver)
 
-		return message, fmt.Errorf("unsupported database driver: %s", driver)
+		return message, fmt.Errorf("unsupported database driver: %s", config.Driver)
 	}
 
 	// Record migration in gorest_migration table (mark as executed)
-	if _, message, _, err := database.ExecSQL(ctx, insertQuery, file.Name, time.Now()); err != nil {
+	if _, message, _, err := database.ExecSQL(ctx, config, insertQuery, file.Name, time.Now()); err != nil {
 		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into the 'gorest_migration' table. "+
 			"Check database write permissions or unique index constraints or %s", file.Name, message)
 
@@ -385,7 +385,7 @@ func sqlDataMigrationExec(ctx context.Context, driver string, database *Database
 	return "", nil
 }
 
-func scyllaDataMigrationExec(ctx context.Context, database *Database, migration File, tableName, columnName string) (string, error) {
+func scyllaDataMigrationExec(ctx context.Context, database *Database, config *Config, migration File, tableName, columnName string) (string, error) {
 	// Split berdasarkan titik koma
 	rawStatements := strings.Split(migration.Content, ";")
 
@@ -402,7 +402,7 @@ func scyllaDataMigrationExec(ctx context.Context, database *Database, migration 
 	}
 
 	for _, stmt := range statements {
-		if message, _, err := database.ExecCQL(ctx, stmt); err != nil {
+		if message, _, err := database.ExecCQL(ctx, config, stmt); err != nil {
 			msg := fmt.Sprintf("execute CQL statement inside migration file '%s' failed. "+
 				"Statement: [%s]. Check the CQL syntax, keyspace settings, or runtime errors or %s",
 				migration.Name, stmt, message)
@@ -412,7 +412,7 @@ func scyllaDataMigrationExec(ctx context.Context, database *Database, migration 
 	}
 
 	query := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (?, ?)"
-	if message, _, err := database.ExecCQL(ctx, query, migration.Name, time.Now()); err != nil {
+	if message, _, err := database.ExecCQL(ctx, config, query, migration.Name, time.Now()); err != nil {
 		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into ScyllaDB. "+
 			"Check database write permissions or %s", migration.Name, message)
 

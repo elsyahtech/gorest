@@ -46,7 +46,7 @@ func (orm *ORM) createScylla(data any) error {
 	defer cancel()
 
 	// 8. Execute Query DB
-	message, httpCode, err := orm.Database.ExecCQL(execCtx, resultArg.queryStr, resultArg.valueArgs...)
+	message, httpCode, err := orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)
 	if err != nil {
 		return orm.setError(message, err, httpCode)
 	}

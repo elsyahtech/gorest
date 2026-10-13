@@ -89,7 +89,7 @@ func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...a
 			errors.New("database service is not running")
 	}
 
-	result, message, httpCode, err := dbSession.database.ExecSQL(ctx, query, args...)
+	result, message, httpCode, err := dbSession.database.ExecSQL(ctx, dbSession.config, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -110,7 +110,7 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 			errors.New("database service is not running")
 	}
 
-	rows, message, httpCode, err := dbSession.database.QuerySQL(ctx, query, args...)
+	rows, message, httpCode, err := dbSession.database.QuerySQL(ctx, dbSession.config, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -204,7 +204,7 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 			errors.New("database service is not running")
 	}
 
-	message, httpCode, err := dbSession.database.ExecCQL(ctx, query, args...)
+	message, httpCode, err := dbSession.database.ExecCQL(ctx, dbSession.config, query, args...)
 	if err != nil {
 		return message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -224,7 +224,7 @@ func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...
 			errors.New("database service is not running")
 	}
 
-	iter, message, httpCode, err := dbSession.database.QueryCQL(ctx, query, args...)
+	iter, message, httpCode, err := dbSession.database.QueryCQL(ctx, dbSession.config, query, args...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -245,7 +245,7 @@ func (dbSession *DBSession) ScanCQL(ctx context.Context, query string, args ...a
 			errors.New("database service is not running")
 	}
 
-	applied, message, httpCode, err := dbSession.database.ScanCQL(ctx, query, args...)
+	applied, message, httpCode, err := dbSession.database.ScanCQL(ctx, dbSession.config, query, args...)
 	if err != nil {
 		return false, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -330,7 +330,7 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 		return dbSession, "", http.StatusOK, nil
 	}
 
-	txDB, message, httpCode, err := dbSession.database.BeginTx(opts...)
+	txDB, message, httpCode, err := dbSession.database.BeginTx(dbSession.config, opts...)
 	if err != nil {
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
