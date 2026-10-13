@@ -23,19 +23,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// Getter to get app name.
+// Name is a getter for the application name set in the config.
 func (app *App) Name() string { return app.config.AppName }
 
-// Getter to get app version.
+// Version is a getter for the application version set in the config.
 func (app *App) Version() string { return app.config.Version }
 
-// Getter to get app environment.
+// Environment is a getter for the application environment set in the config
+// (for example "Development" or "Production").
 func (app *App) Environment() string { return app.config.Environment }
 
-// Getter to get app timezone.
+// Timezone is a getter for the timezone name used by the application
+// (for example "Asia/Jakarta").
 func (app *App) Timezone() string { return app.config.Timezone }
 
-// Getter to get app debug status.
+// IsDebug is a getter that reports whether debug mode is enabled in the config.
 func (app *App) IsDebug() bool { return app.config.Debug }
 
 // Database returns a sterile, thread-safe DBSession instance.
@@ -54,6 +56,11 @@ func (app *App) Database() *DBSession {
 	}
 }
 
+// NewContext creates a context for an operation, derived from the application context
+// (or context.Background() if none is set).
+// If timeout is greater than zero and the context has no deadline yet, the returned context
+// is canceled after the timeout. Otherwise the context is returned as is.
+// Always call the returned cancel function (usually with defer) to release resources.
 func (app *App) NewContext(timeout time.Duration) (context.Context, context.CancelFunc) {
 	ctx := app.context
 	if ctx == nil {
@@ -69,7 +76,10 @@ func (app *App) NewContext(timeout time.Duration) (context.Context, context.Canc
 	return ctx, func() {}
 }
 
-// Getter native exec SQL queries.
+// ExecSQL executes a native SQL statement (INSERT, UPDATE, DELETE, or DDL) within this session.
+// Use "?" or the driver's placeholder style for args, never build the query from user input.
+// Returns 501 Not Implemented if the database service is not running, otherwise the result,
+// message, and status code from the underlying database.
 func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -87,7 +97,10 @@ func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...a
 	return result, message, httpCode, nil
 }
 
-// Getter native query SQL queries.
+// QuerySQL executes a native SQL query (typically SELECT) within this session and returns the resulting rows.
+// Use placeholders for args; never build the query from user input.
+// The caller must close the returned *sql.Rows (usually with defer rows.Close()) and check rows.Err()
+// after iterating, otherwise the connection is not released back to the pool.
 func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -105,7 +118,10 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 	return rows, message, httpCode, nil
 }
 
-// Getter native Mongo collectionqueries.
+// MongoCollection returns a handle to the named MongoDB collection in the configured database.
+// It does not contact the server or create the collection; it only prepares the handle for operations
+// such as InsertOne, Find, UpdateOne, and DeleteOne.
+// Returns 400 Bad Request if collectionName is empty, and 501 Not Implemented if the MongoDB service is not running.
 func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -123,6 +139,9 @@ func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Colle
 	return coll, message, httpCode, nil
 }
 
+// DecodeMongoCursor decodes all documents from a MongoDB cursor into dest, which must be a pointer to a slice
+// (for example *[]entity.User). The cursor is closed after decoding, so the caller does not need to close it.
+// Returns 400 Bad Request if the cursor or dest is invalid, and 500 Internal Server Error if decoding fails.
 func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -135,6 +154,9 @@ func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo
 	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest)
 }
 
+// EncodeMongoCollection converts a struct (or other value) into a bson.M document,
+// for example to build an update or filter document from an entity.
+// Field names follow the `bson` struct tags, so make sure they match your collection schema.
 func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -147,7 +169,9 @@ func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int
 	return dbSession.database.EncodeMongoCollection(dest)
 }
 
-// Getter native Mongo create collection queries.
+// MongoCreateCollection creates a new MongoDB collection in the configured database.
+// Returns 400 Bad Request if the collection name is empty, 409 Conflict if the collection already exists,
+// and 500 Internal Server Error for other failures.
 func (dbSession *DBSession) MongoCreateCollection(
 	ctx context.Context,
 	collectionName string,
@@ -169,7 +193,8 @@ func (dbSession *DBSession) MongoCreateCollection(
 	return message, httpCode, nil
 }
 
-// Getter native exec Scylla queries.
+// ExecCQL executes a CQL statement (INSERT, UPDATE, DELETE, or DDL) on ScyllaDB.
+// Use placeholders (?) for args; never build the query from user input.
 func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -187,7 +212,9 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 	return message, httpCode, nil
 }
 
-// Getter native query Scylla queries.
+// QueryCQL executes a CQL query (typically SELECT) and returns an iterator over the resulting rows.
+// The caller must close the returned *gocql.Iter (usually with defer iter.Close()),
+// and check the error returned by Close after iterating.
 func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -205,10 +232,35 @@ func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...
 	return iter, message, httpCode, nil
 }
 
-// QueryBuilderSQL defines the signature for raw SQL complex queries.
+// ScanCQL executes a lightweight transaction (a CQL statement with an IF clause) and reports
+// whether the condition was met and the change was applied.
+// A false result with a nil error means the condition was not met; the caller decides how to handle it
+// (for example 404 for IF EXISTS, 409 for IF NOT EXISTS).
+func (dbSession *DBSession) ScanCQL(ctx context.Context, query string, args ...any) (bool, string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return false, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ORM, the application must use one of the following databases: " +
+				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+			http.StatusNotImplemented,
+			errors.New("database service is not running")
+	}
+
+	applied, message, httpCode, err := dbSession.database.ScanCQL(ctx, query, args...)
+	if err != nil {
+		return false, message, httpCode, fmt.Errorf("%w", err)
+	}
+
+	return applied, message, httpCode, nil
+}
+
+// QueryBuilderSQL is a function that receives the SQL connection and builds or runs queries on it
+// using a third-party query builder or ORM (for example sqlx).
+// It is executed by RawQuerySQL.
 type QueryBuilderSQL func(ctx context.Context, db *sql.DB) error
 
-// Escape Hatch: If handler needs direct raw SQL queries (e.g., for complex joins, CTEs, etc.)
+// RawQuerySQL runs fn with the underlying *sql.DB, for cases where the built-in helpers are not enough.
+// Prefer ExecSQL and QuerySQL when possible. Queries run through fn bypass the transaction of this session,
+// so they are not rolled back with Rollback.
 func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
 	if dbSession == nil || dbSession.database == nil {
 		return errors.New("database service is not running")
@@ -221,11 +273,19 @@ func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL)
 	return nil
 }
 
-// QueryBuilderMongo defines the signature for raw MongoDB complex queries.
+// QueryBuilderMongo is a function that receives the MongoDB client and runs operations on it directly,
+// for cases where the built-in helpers are not enough.
+// It is executed by RawQueryMongo.
 type QueryBuilderMongo func(ctx context.Context, client *mongo.Client) error
 
-// Escape Hatch: If handler needs direct raw MongoDB queries.
+// RawQueryMongo runs fn with the underlying *mongo.Client, as an escape hatch when the handler
+// needs direct raw MongoDB operations.
+// Prefer the built-in helpers (MongoCollection, DecodeMongoCursor, etc.) when possible.
 func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) error {
+	if dbSession == nil || dbSession.database == nil {
+		return errors.New("database service is not running")
+	}
+
 	if err := fn(ctx, dbSession.database.Mongo); err != nil {
 		return fmt.Errorf("%w", err)
 	}
@@ -233,10 +293,14 @@ func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMo
 	return nil
 }
 
-// QueryBuilderScylla defines the signature for raw ScyllaDB complex queries.
+// QueryBuilderScylla is a function that receives the ScyllaDB session and runs queries on it directly,
+// for cases where the built-in helpers are not enough.
+// It is executed by RawQueryScylla.
 type QueryBuilderScylla func(ctx context.Context, session *gocql.Session) error
 
-// Escape Hatch: If handler needs direct raw ScyllaDB queries.
+// RawQueryScylla runs fn with the underlying *gocql.Session, as an escape hatch for cases
+// where the built-in helpers are not enough.
+// Prefer ExecCQL, QueryCQL, and ScanCQL when possible.
 func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) error {
 	if dbSession == nil || dbSession.database == nil {
 		return errors.New("database service is not running")
@@ -249,6 +313,10 @@ func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderS
 	return nil
 }
 
+// BeginTx starts a SQL transaction and returns a new DBSession bound to it.
+// Use the returned session for all statements that belong to the transaction,
+// then finish with Commit or Rollback.
+// Returns 409 Conflict if a transaction is already active, and 500 Internal Server Error if it cannot be started.
 func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -273,9 +341,8 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 	}, message, httpCode, nil
 }
 
-// Rollback aborts the active transaction.
-// Returns 400 Bad Request if there is no active transaction,
-// and 500 Internal Server Error if the rollback fails.
+// Rollback aborts the active transaction, discarding all changes made since BeginTx.
+// Returns 400 Bad Request if there is no active transaction, and 500 Internal Server Error if the rollback fails.
 func (dbSession *DBSession) Rollback() (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -307,9 +374,9 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 	return "Transaction rolled back successfully", http.StatusOK, nil
 }
 
-// Commit commits the active transaction.
-// Returns 400 Bad Request if there is no active transaction,
-// and 500 Internal Server Error if the commit fails.
+// Commit saves all changes made in the active transaction.
+// Returns 400 Bad Request if there is no active transaction, and 500 Internal Server Error if the commit fails.
+// After Commit, the transaction is finished and Rollback has nothing left to undo.
 func (dbSession *DBSession) Commit() (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -341,8 +408,7 @@ func (dbSession *DBSession) Commit() (string, int, error) {
 	return "Transaction committed successfully", http.StatusOK, nil
 }
 
-// Close shuts down all application services (redis, database, logger).
-// Every service is attempted even if a previous one fails; errors are joined.
+// Close shuts down all application services
 func (app *App) Close() (string, int, error) {
 	if app == nil {
 		return "Application is not initialized", http.StatusBadRequest,
@@ -394,8 +460,14 @@ func (app *App) Close() (string, int, error) {
 	return "Application closed successfully", http.StatusOK, nil
 }
 
+// Table starts an ORM query chain for the given table (or collection, for MongoDB).
+// Chain methods such as Where, Select, Join, OrderBy, Limit, and Offset to build the query,
+// then finish with an operation such as Create, Update, Delete, or Find.
+// If the transaction is active in this session, the query runs inside it.
+// The program exits (log.Fatalf) if the database service is not running, so make sure
+// database.Run(...) is registered with app.Use(...) before calling Table.
 func (dbSession *DBSession) Table(table string) *orm.ORM {
-	if dbSession.database == nil || dbSession.config == nil {
+	if dbSession == nil || dbSession.database == nil || dbSession.config == nil {
 		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 			"To use ORM, the application must use one of the following databases: " +
 			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
@@ -444,12 +516,13 @@ func (dbSession *DBSession) Table(table string) *orm.ORM {
 	}
 }
 
-// Getter to get log configuration.
+// GetLogConfig is a getter for the logger configuration used by the application,
+// as set with app.Use(log.Run(...)).
 func (app *App) GetLogConfig() log.Config {
 	return *app.config.log
 }
 
-// Getter to get global logger.
+// Log is
 func (app *App) Log(field map[string]any, args ...bool) *zap.Logger {
 	if app == nil {
 		golog.Fatalf("gorest is not running")
@@ -466,12 +539,15 @@ func (app *App) Log(field map[string]any, args ...bool) *zap.Logger {
 	return app.log.Log(field, args...)
 }
 
-// Getter to get redis configuration.
+// GetRedisConfig is a getter for the Redis configuration used by the application,
+// as set with app.Use(redis.Run(...)).
 func (app *App) GetRedisConfig() gorestredis.Config {
 	return *app.config.redis
 }
 
-// Getter to get redis query.
+// Redis returns the Redis client so the handler can run Redis commands directly.
+// It returns an error with a troubleshooting message if Redis is not running, for example when
+// redis.Run(...) is not registered with app.Use(...) or Enabled is false in the config.
 func (app *App) Redis() (*redis.Client, string, error) {
 	client, message, err := app.redis.Redis()
 	if err != nil {

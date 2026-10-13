@@ -144,7 +144,7 @@ func (orm *ORM) buildOracleMergeSQL(tableName string, columns, pkCols []string, 
 		upsertMergeOn(orm.UpsertConflictCols, target, source),
 	))
 
-	// Kalau nggak ada kolom yang di-update, WHEN MATCHED dilewati (jadi insert-if-not-exists)
+	// If no columns are updated, the WHEN MATCHED clause is skipped (resulting in an insert-if-not-exists operation).
 	updateCols := resolveUpsertUpdateCols(columns, orm.UpsertConflictCols, pkCols, orm.UpsertUpdateCols)
 
 	if len(updateCols) > 0 {

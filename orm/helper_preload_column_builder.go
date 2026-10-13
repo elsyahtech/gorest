@@ -37,7 +37,6 @@ func buildPreloadColumns(
 			continue
 		}
 
-		// KUNCI UTAMA: Ambil nama kolom bersih sebelum tanda koma (mengabaikan ", primary_key")
 		parts := strings.Split(dbTag, ",")
 		cleanCol := strings.TrimSpace(parts[0])
 
