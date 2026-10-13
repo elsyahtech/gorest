@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 )
@@ -44,7 +45,14 @@ func (orm *ORM) updateSingleSQL(
 			return orm.setNotFound("update")
 		}
 
-		return orm.finishReturn(retPlan, scanned, rowsVal)
+		if err := orm.finishReturn(retPlan, scanned, rowsVal); err != nil {
+			return err
+		}
+
+		orm.Message = "Data updated successfully"
+		orm.HTTPCode = http.StatusOK
+
+		return nil
 	}
 	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.args...)
 	if err != nil {
@@ -184,15 +192,16 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 
 		chunkRows := req.rowsVal[idx:end]
 
-		var (
-			query *resBuildQueryUpdateSQL
-		)
-
+		query := &resBuildQueryUpdateSQL{}
 		argCounter := 1
 
 		for _, col := range req.updatableCols {
-			query = orm.buildQueryUpdateSQL(chunkRows, req.meta, argCounter, &col, req.activeDriver)
+			columnQuery := orm.buildQueryUpdateSQL(chunkRows, req.meta, argCounter, &col, req.activeDriver)
+			query.clauses = append(query.clauses, columnQuery.clauses...)
+			query.args = append(query.args, columnQuery.args...)
+			argCounter = columnQuery.argCounter
 		}
+		query.argCounter = argCounter
 
 		// Build the array WHERE clause
 		whereClauses, err := orm.buildBulkWhereClause(
@@ -208,6 +217,7 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 			return 0, nil, orm.Error
 		}
 
+		orm.StringBuilder.Reset()
 		orm.safeWriteString(buildUpdateStatement(
 			req.tableName,
 			strings.Join(query.clauses, ", "),
@@ -265,17 +275,17 @@ func (orm *ORM) buildQueryUpdateSQL(
 	activeDriver string,
 ) *resBuildQueryUpdateSQL {
 	var (
-		setClauses = make([]string, 0, 1)
-		valueArgs  = make([]any, 0, (len(meta.primaryKeyIndex)+1)*len(chunkRows))
+		valueArgs = make([]any, 0, (len(meta.primaryKeyIndex)+1)*len(chunkRows))
+		clause    strings.Builder
 	)
 
 	currentArgCounter := argCounter
 
-	orm.safeWriteString(col.name)
-	orm.safeWriteString(" = CASE")
+	clause.WriteString(col.name)
+	clause.WriteString(" = CASE")
 
 	for _, row := range chunkRows {
-		orm.safeWriteString(" WHEN ")
+		clause.WriteString(" WHEN ")
 
 		pkConditions := make([]string, 0, len(meta.primaryKeyIndex))
 
@@ -288,27 +298,25 @@ func (orm *ORM) buildQueryUpdateSQL(
 			currentArgCounter++
 		}
 
-		orm.safeWriteString(strings.Join(pkConditions, " AND "))
-		orm.safeWriteString(" THEN ")
+		clause.WriteString(strings.Join(pkConditions, " AND "))
+		clause.WriteString(" THEN ")
 
 		valPlaceholder := getPlaceholder(activeDriver, currentArgCounter)
 
-		orm.safeWriteString(valPlaceholder)
+		clause.WriteString(valPlaceholder)
 
 		valueArgs = append(valueArgs, row.Field(col.idx).Interface())
 
 		currentArgCounter++
 	}
 
-	orm.safeWriteString(" ELSE ")
-	orm.safeWriteString(col.name)
-	orm.safeWriteString(" END")
-
-	setClauses = append(setClauses, orm.StringBuilder.String())
+	clause.WriteString(" ELSE ")
+	clause.WriteString(col.name)
+	clause.WriteString(" END")
 
 	return &resBuildQueryUpdateSQL{
 		args:       valueArgs,
-		clauses:    setClauses,
+		clauses:    []string{clause.String()},
 		argCounter: currentArgCounter,
 	}
 } //nolint:revive
