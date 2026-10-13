@@ -2,6 +2,9 @@ package orm
 
 import (
 	"errors"
+	"net/http"
+
+	"github.com/elsyahtech/gorest/database"
 )
 
 func (orm *ORM) updateSQL(data any) error {
@@ -62,6 +65,18 @@ func (orm *ORM) updateSQL(data any) error {
 	// 7. Set context timeout
 	execCtx, cancel := orm.newContext()
 	defer cancel()
+
+	if retPlan != nil && activeDriver == database.ORACLE {
+		if len(rowsVal) != 1 {
+			return orm.setError(
+				"Oracle Update().Return() currently supports one record per call. Update records individually or without Return().",
+				errors.New("update: Oracle Return() does not support batch updates yet"),
+				http.StatusBadRequest,
+			)
+		}
+
+		return orm.updateOracleWithReturn(execCtx, tableName, rowsVal, meta, retPlan)
+	}
 
 	// Set single or bulk update
 	isBatch := len(rowsVal) > 1
