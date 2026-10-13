@@ -30,6 +30,11 @@ func (orm *ORM) extractColumnMetaData(rowsVal []reflect.Value, opName string) co
 		if isPK {
 			data = defineDataPKExtractColumnMetaData(data, opName, columnName, rowsVal, idx)
 		} else {
+			field := typ.Field(idx)
+			if opName == "Update" && isImmutableUpdateField(field) {
+				continue
+			}
+
 			// If it is not a PK, ignore it during a pure Delete operation (usually, Delete only requires the PK)
 			//nolint:staticcheck
 			data, isOk = defineDataNonPKExtractColumnMetaData(data, opName, columnName, idx)
@@ -48,6 +53,24 @@ func (orm *ORM) extractColumnMetaData(rowsVal []reflect.Value, opName string) co
 		primaryKeyIndex:        data.primaryKeyIndexValue,
 		allColumnPrimaryKeyIdx: allColFieldIdx,
 	}
+}
+
+// isImmutableUpdateField identifies creation-time fields by their Go field
+// name, so a custom gorest column mapping does not change update behavior.
+// The `immutable` gorest option can mark any other field as non-updatable.
+func isImmutableUpdateField(field reflect.StructField) bool {
+	if strings.EqualFold(field.Name, "CreatedAt") {
+		return true
+	}
+
+	parts := strings.Split(field.Tag.Get("gorest"), ",")
+	for _, part := range parts[1:] {
+		if strings.EqualFold(strings.TrimSpace(part), "immutable") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func buildColFieldIndex(typ reflect.Type) map[string]int {
