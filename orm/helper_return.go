@@ -223,8 +223,14 @@ func (orm *ORM) buildColInPlanReturn(addQueryCol func(name string), destCols []s
 
 	if len(orm.ReturnCols) > 0 {
 		userCols = nil
+		allColumns := false
 
 		for _, col := range orm.ReturnCols {
+			if strings.TrimSpace(col) == "*" {
+				allColumns = true
+				break
+			}
+
 			colToCheck := col
 
 			if dot := strings.LastIndex(col, "."); dot != -1 {
@@ -238,6 +244,10 @@ func (orm *ORM) buildColInPlanReturn(addQueryCol func(name string), destCols []s
 			}
 
 			userCols = append(userCols, colToCheck)
+		}
+
+		if allColumns {
+			userCols = destCols
 		}
 	}
 

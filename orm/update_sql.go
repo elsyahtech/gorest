@@ -56,6 +56,10 @@ func (orm *ORM) updateSQL(data any) error {
 	var retPlan *returnPlan
 
 	if orm.IsReturn {
+		if activeDriver == database.ORACLE && len(orm.ReturnCols) == 0 {
+			orm.ReturnCols = []string{"*"}
+		}
+
 		retPlan, err = orm.planReturn(data, rowsVal, meta, activeDriver)
 		if err != nil {
 			return err
