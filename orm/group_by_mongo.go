@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -27,6 +28,7 @@ func (orm *ORM) buildMongoGroupPipeline(
 	filter bson.M,
 	sort bson.D,
 	isSlice bool,
+	structType reflect.Type,
 ) (mongo.Pipeline, error) {
 	if len(orm.Preloads) > 0 {
 		return nil, orm.setError(
@@ -37,6 +39,7 @@ func (orm *ORM) buildMongoGroupPipeline(
 	}
 
 	groupColumns := splitMongoSelectColumns(orm.GroupByClauses)
+
 	if len(groupColumns) == 0 {
 		return nil, orm.setError("GroupBy() requires at least one column for MongoDB aggregation.",
 			errors.New("find: MongoDB aggregation requires group columns"), http.StatusBadRequest)
@@ -44,9 +47,24 @@ func (orm *ORM) buildMongoGroupPipeline(
 
 	groupKeys := make(map[string]string, len(groupColumns))
 	groupID := bson.M{}
+	knownColumns := make(map[string]string)
+
+	columns, _ := taggedColumns(structType)
+
+	for _, column := range columns {
+		knownColumns[strings.ToLower(column)] = column
+	}
 
 	for _, col := range groupColumns {
 		field := mongoFieldName(col, collection)
+		canonical, ok := knownColumns[strings.ToLower(field)]
+		if !ok {
+			return nil, orm.mongoGroupInputError(
+				fmt.Sprintf("GroupBy() column %q is not tagged with gorest on %s.", col, structType.Name()),
+				"unknown MongoDB group column",
+			)
+		}
+		field = canonical
 
 		groupKeys[strings.ToLower(field)] = field
 
@@ -72,6 +90,13 @@ func (orm *ORM) buildMongoGroupPipeline(
 
 		operation := strings.ToUpper(match[1])
 		field := mongoFieldName(match[2], collection)
+		if field != "*" {
+			canonical, ok := knownColumns[strings.ToLower(field)]
+			if !ok {
+				return mongoGroupAccumulator{}, fmt.Errorf("aggregate field %q is not tagged with gorest on %s", field, structType.Name())
+			}
+			field = canonical
+		}
 		identity := strings.ToLower(operation + "(" + field + ")")
 
 		if field == "*" {

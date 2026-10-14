@@ -71,7 +71,7 @@ func (orm *ORM) findMongo(data any) error {
 		pipeline mongo.Pipeline
 	)
 	if grouped {
-		pipeline, err = orm.buildMongoGroupPipeline(tableName, filter, sort, isSlice)
+		pipeline, err = orm.buildMongoGroupPipeline(tableName, filter, sort, isSlice, structInfo.structType)
 	} else {
 		findOpts, err = orm.buildMongoOptionFindMongo(tableName, preload, sort, isSlice)
 	}
@@ -97,6 +97,13 @@ func (orm *ORM) findMongo(data any) error {
 		cursor, err = coll.Find(execCtx, filter, findOpts)
 	}
 	if err != nil {
+		if grouped {
+			return orm.setError(
+				"MongoDB could not execute the aggregation pipeline. Check GroupBy(), Having(), and aggregate field names, and verify that the collection is available.",
+				err,
+			)
+		}
+
 		const findMessage = "Check your filter, sort, or index configuration."
 
 		return orm.setError(findMessage, err)

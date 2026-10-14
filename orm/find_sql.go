@@ -81,7 +81,7 @@ func (orm *ORM) findSQL(data any) error {
 	// 12. Execute database query
 	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.valueArgs...)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setFindSQLQueryError(activeDriver, message, err, httpCode)
 	}
 
 	defer func() {
