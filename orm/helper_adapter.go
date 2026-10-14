@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"errors"
 	"fmt"
 	golog "log"
 	"net/http"
@@ -50,4 +51,24 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	}
 
 	return orm
+}
+
+func (orm *ORM) validateLimit() error {
+	if orm.LimitVal < 0 {
+		return orm.setError(
+			"Limit() must be a positive integer.",
+			errors.New("find: limit cannot be negative"),
+			http.StatusBadRequest,
+		)
+	}
+
+	if orm.LimitVal == 0 {
+		return orm.setError(
+			"Limit() must be greater than 0",
+			errors.New("find: limit cannot be 0"),
+			http.StatusBadRequest,
+		)
+	}
+
+	return nil
 }

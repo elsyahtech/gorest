@@ -20,6 +20,10 @@ func (orm *ORM) Delete(data any) *ORM {
 }
 
 func (orm *ORM) Find(data any) *ORM {
+	if err := orm.validateLimit(); err != nil {
+		return orm
+	}
+
 	if orm.orderByInvalid {
 		return orm
 	}
@@ -101,6 +105,8 @@ func (orm *ORM) Join(clause string) *ORM {
 
 func (orm *ORM) Limit(limit int) *ORM {
 	orm.LimitVal = limit
+
+	_ = orm.validateLimit()
 
 	return orm
 }
