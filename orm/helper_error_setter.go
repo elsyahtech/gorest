@@ -20,7 +20,7 @@ func (orm *ORM) setError(message string, err error, code ...int) error {
 
 func (orm *ORM) setNotFound(opName string) error {
 	return orm.setError(
-		"Ensure that the record is exists and that the WHERE condition for "+opName+" matches the intended record.",
+		"Ensure that the record is exists and that the filter condition for "+opName+" matches the intended record.",
 		errors.New("record not found"),
 		http.StatusNotFound)
 }
