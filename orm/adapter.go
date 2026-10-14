@@ -20,6 +20,10 @@ func (orm *ORM) Delete(data any) *ORM {
 }
 
 func (orm *ORM) Find(data any) *ORM {
+	if err := orm.validateSelectColumns(); err != nil {
+		return orm
+	}
+
 	if len(orm.DistinctCols) > 0 {
 		if len(orm.SelectedCols) > 0 {
 			orm.Message = "Use either Select() or Distinct(columns), not both. Distinct(columns) selects the distinct columns."
@@ -39,25 +43,27 @@ func (orm *ORM) Find(data any) *ORM {
 }
 
 func (orm *ORM) Select(cols ...string) *ORM {
-	if len(cols) > 0 {
-		for _, column := range cols {
-			if strings.TrimSpace(column) == "" {
-				orm.setError(
+	orm.SelectedCols = cols
+
+	_ = orm.validateSelectColumns()
+
+	return orm
+}
+
+func (orm *ORM) validateSelectColumns() error {
+	for _, column := range orm.SelectedCols {
+		for _, expression := range strings.Split(column, ",") {
+			if strings.TrimSpace(expression) == "" {
+				return orm.setError(
 					`Use Select("*") to select all columns, or provide one or more valid column names.`,
-					errors.New("Invalid SELECT clause: column expression cannot be empty."),
+					errors.New("invalid SELECT clause: column expression cannot be empty"),
 					http.StatusBadRequest,
 				)
-
-				break
 			}
-
-			continue
 		}
 	}
 
-	orm.SelectedCols = cols
-
-	return orm
+	return nil
 }
 
 func (orm *ORM) Where(query string, args ...any) *ORM {
