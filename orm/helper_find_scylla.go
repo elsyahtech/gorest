@@ -72,7 +72,7 @@ func (orm *ORM) buildWhereClauseFindScylla(currrentIsSlice bool, prefix string) 
 				errors.New("find: unused arguments provided to .Where()"),
 			)
 		}
-	} else if !isSlice && limitVal <= 0 {
+	} else if !isSlice && !orm.limitSet && limitVal <= 0 {
 		// Single struct tanpa Where: implicit LIMIT 1
 		limitVal = 1
 	}

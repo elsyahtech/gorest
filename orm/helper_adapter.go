@@ -5,7 +5,6 @@ import (
 	"fmt"
 	golog "log"
 	"net/http"
-	"strings"
 
 	"github.com/elsyahtech/gorest/database"
 )
@@ -54,35 +53,18 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	return orm
 }
 
-func (orm *ORM) validateSelectColumns() error {
-	for _, column := range orm.SelectedCols {
-		for _, expression := range strings.Split(column, ",") {
-			if strings.TrimSpace(expression) == "" {
-				return orm.setError(
-					"Use Select('*') to select all columns, or provide one or more valid column names.",
-					errors.New("invalid SELECT clause: column expression cannot be empty"),
-					http.StatusBadRequest,
-				)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (orm *ORM) validateLimit() error {
+func (orm *ORM) validateLimitOffset() error {
 	if orm.LimitVal < 0 {
 		return orm.setError(
-			"Limit() must be a positive integer.",
+			"Limit() must be zero or a positive integer.",
 			errors.New("find: limit cannot be negative"),
 			http.StatusBadRequest,
 		)
 	}
-
-	if orm.LimitVal == 0 {
+	if orm.OffsetVal < 0 {
 		return orm.setError(
-			"Limit() must be greater than 0",
-			errors.New("find: limit cannot be 0"),
+			"Offset() must be zero or a positive integer.",
+			errors.New("find: offset cannot be negative"),
 			http.StatusBadRequest,
 		)
 	}

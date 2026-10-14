@@ -58,7 +58,7 @@ func (orm *ORM) buildMongoOptionFindMongo(
 	// 11. Build LIMIT clauses
 	limitVal := orm.LimitVal
 
-	if !isSlice && limitVal <= 0 {
+	if !isSlice && !orm.limitSet && limitVal <= 0 {
 		limitVal = 1
 	}
 

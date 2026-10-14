@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -57,6 +58,14 @@ func (orm *ORM) findMongo(data any) error {
 	filter, err := orm.buildMongoFilter(orm.WhereClauses, orm.WhereArgs, tableName, tagInfo.objectIDColumns)
 	if err != nil {
 		return orm.Error
+	}
+	if orm.limitSet && orm.LimitVal == 0 {
+		alwaysFalse := bson.M{"$expr": bson.M{"$eq": bson.A{1, 0}}}
+		if len(filter) == 0 {
+			filter = alwaysFalse
+		} else {
+			filter = bson.M{"$and": bson.A{filter, alwaysFalse}}
+		}
 	}
 
 	// 8. Build Sort clauses

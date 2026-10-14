@@ -1,8 +1,10 @@
 package orm
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 func (orm *ORM) Create(data any) *ORM {
@@ -18,7 +20,7 @@ func (orm *ORM) Delete(data any) *ORM {
 }
 
 func (orm *ORM) Find(data any) *ORM {
-	if err := orm.validateLimit(); err != nil {
+	if err := orm.validateLimitOffset(); err != nil {
 		return orm
 	}
 
@@ -56,6 +58,22 @@ func (orm *ORM) Select(cols ...string) *ORM {
 	return orm
 }
 
+func (orm *ORM) validateSelectColumns() error {
+	for _, column := range orm.SelectedCols {
+		for _, expression := range strings.Split(column, ",") {
+			if strings.TrimSpace(expression) == "" {
+				return orm.setError(
+					"Use Select('*') to select all columns, or provide one or more valid column names.",
+					errors.New("invalid SELECT clause: column expression cannot be empty"),
+					http.StatusBadRequest,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (orm *ORM) Where(query string, args ...any) *ORM {
 	orm.WhereClauses = append(orm.WhereClauses, query)
 
@@ -87,14 +105,15 @@ func (orm *ORM) Join(clause string) *ORM {
 
 func (orm *ORM) Limit(limit int) *ORM {
 	orm.LimitVal = limit
-
-	_ = orm.validateLimit()
+	orm.limitSet = true
+	_ = orm.validateLimitOffset()
 
 	return orm
 }
 
 func (orm *ORM) Offset(offset int) *ORM {
 	orm.OffsetVal = offset
+	_ = orm.validateLimitOffset()
 
 	return orm
 }

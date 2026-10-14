@@ -282,7 +282,7 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 				errors.New("find: unused arguments provided to .Where()"),
 			)
 		}
-	} else if !req.isSlice {
+	} else if !req.isSlice && !orm.limitSet {
 		if orm.LimitVal <= 0 {
 			limitVal = 1
 		}
@@ -354,7 +354,7 @@ type structBuildLimitOffsetFindSQL struct {
 }
 
 func (orm *ORM) buildLimitOffsetFindSQL(req *structBuildLimitOffsetFindSQL) []any {
-	if req.limitVal > 0 || orm.OffsetVal > 0 {
+	if req.limitVal > 0 || (orm.limitSet && req.limitVal == 0) || orm.OffsetVal > 0 {
 		switch req.activeDriver {
 		case database.SQLSERVER:
 			orm.buildLimitOffsetForSQLSRVInFindSQL(req)
@@ -379,7 +379,7 @@ func (orm *ORM) buildLimitOffsetForSQLSRVInFindSQL(req *structBuildLimitOffsetFi
 
 	req.argCounter++
 
-	if req.limitVal <= 0 {
+	if req.limitVal <= 0 && !orm.limitSet {
 		return
 	}
 
@@ -397,7 +397,7 @@ func (orm *ORM) buildLimitOffsetForORACLEInFindSQL(req *structBuildLimitOffsetFi
 
 	req.argCounter++
 
-	if req.limitVal <= 0 {
+	if req.limitVal <= 0 && !orm.limitSet {
 		return
 	}
 
@@ -422,7 +422,7 @@ func (orm *ORM) buildLimitOffsetForDefaultInFindSQL(req *structBuildLimitOffsetF
 	}
 
 	switch {
-	case req.limitVal > 0:
+	case req.limitVal > 0 || (orm.limitSet && req.limitVal == 0):
 		orm.safeWriteString(" LIMIT ")
 		orm.safeWriteString(placeholder())
 

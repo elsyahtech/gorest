@@ -45,6 +45,7 @@ type ORM struct {
 	IsDistinct         bool
 	IsReturn           bool
 	orderByInvalid     bool
+	limitSet           bool
 }
 
 type sqlPreloadPlan struct {

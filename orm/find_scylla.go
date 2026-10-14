@@ -80,7 +80,7 @@ func (orm *ORM) findScylla(data any) error {
 	}
 
 	// 11. Build LIMIT
-	if limitVal > 0 {
+	if limitVal > 0 || (orm.limitSet && limitVal == 0) {
 		orm.safeWriteString(" LIMIT ?")
 
 		valueArgs = append(valueArgs, limitVal)
