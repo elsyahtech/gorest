@@ -48,7 +48,7 @@ func (orm *ORM) Select(cols ...string) *ORM {
 					http.StatusBadRequest,
 				)
 
-				return orm
+				break
 			}
 
 			continue
