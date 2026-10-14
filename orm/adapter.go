@@ -39,15 +39,19 @@ func (orm *ORM) Find(data any) *ORM {
 }
 
 func (orm *ORM) Select(cols ...string) *ORM {
-	for _, column := range cols {
-		if strings.TrimSpace(column) == "" {
-			orm.setError(
-				`Use Select("*") to select all columns, or provide one or more valid column names.`,
-				errors.New("Invalid SELECT clause: column expression cannot be empty."),
-				http.StatusBadRequest,
-			)
+	if len(cols) > 0 {
+		for _, column := range cols {
+			if strings.TrimSpace(column) == "" {
+				orm.setError(
+					`Use Select("*") to select all columns, or provide one or more valid column names.`,
+					errors.New("Invalid SELECT clause: column expression cannot be empty."),
+					http.StatusBadRequest,
+				)
 
-			return orm
+				return orm
+			}
+
+			continue
 		}
 	}
 
