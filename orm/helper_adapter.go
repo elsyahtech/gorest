@@ -5,6 +5,7 @@ import (
 	"fmt"
 	golog "log"
 	"net/http"
+	"strings"
 
 	"github.com/elsyahtech/gorest/database"
 )
@@ -51,6 +52,22 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	}
 
 	return orm
+}
+
+func (orm *ORM) validateSelectColumns() error {
+	for _, column := range orm.SelectedCols {
+		for _, expression := range strings.Split(column, ",") {
+			if strings.TrimSpace(expression) == "" {
+				return orm.setError(
+					"Use Select('*') to select all columns, or provide one or more valid column names.",
+					errors.New("invalid SELECT clause: column expression cannot be empty"),
+					http.StatusBadRequest,
+				)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (orm *ORM) validateLimit() error {

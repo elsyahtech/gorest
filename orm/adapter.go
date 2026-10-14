@@ -1,10 +1,8 @@
 package orm
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 func (orm *ORM) Create(data any) *ORM {
@@ -56,22 +54,6 @@ func (orm *ORM) Select(cols ...string) *ORM {
 	_ = orm.validateSelectColumns()
 
 	return orm
-}
-
-func (orm *ORM) validateSelectColumns() error {
-	for _, column := range orm.SelectedCols {
-		for _, expression := range strings.Split(column, ",") {
-			if strings.TrimSpace(expression) == "" {
-				return orm.setError(
-					"Use Select('*') to select all columns, or provide one or more valid column names.",
-					errors.New("invalid SELECT clause: column expression cannot be empty"),
-					http.StatusBadRequest,
-				)
-			}
-		}
-	}
-
-	return nil
 }
 
 func (orm *ORM) Where(query string, args ...any) *ORM {
