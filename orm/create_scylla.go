@@ -17,6 +17,7 @@ func (orm *ORM) createScylla(data any) error {
 	fieldReq := fieldRequirement{
 		requirePrimaryKey: true,
 		requireNonEmpty:   true,
+		validateRequired:  true,
 	}
 
 	rowsVal, err := orm.validateData(data, fieldReq, "Create")

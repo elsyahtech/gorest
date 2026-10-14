@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 type fieldRequirement struct {
 	requirePrimaryKey bool
 	requireNonEmpty   bool
+	validateRequired  bool
 }
 
 func (orm *ORM) validateData(data any, fieldReq fieldRequirement, opName string) ([]reflect.Value, error) {
@@ -80,8 +82,87 @@ func (orm *ORM) validateStructTags(data any, structRequirement fieldRequirement,
 	if err != nil {
 		return orm.Error
 	}
+	if structRequirement.validateRequired {
+		if err := orm.validateRequiredFields(val, structType, opName); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func (orm *ORM) validateRequiredFields(value reflect.Value, structType reflect.Type, opName string) error {
+	validateStruct := func(row reflect.Value, rowIndex int) error {
+		for row.Kind() == reflect.Pointer || row.Kind() == reflect.Interface {
+			if row.IsNil() {
+				return nil // Nil slice elements are reported by the existing payload validation.
+			}
+			row = row.Elem()
+		}
+
+		for fieldIndex := 0; fieldIndex < structType.NumField(); fieldIndex++ {
+			field := structType.Field(fieldIndex)
+			if strings.TrimSpace(strings.Split(field.Tag.Get("gorest"), ",")[0]) == "-" ||
+				!hasGorestTagOption(field.Tag.Get("gorest"), "required") {
+				continue
+			}
+
+			fieldValue := row.Field(fieldIndex)
+			for fieldValue.Kind() == reflect.Pointer || fieldValue.Kind() == reflect.Interface {
+				if fieldValue.IsNil() {
+					return orm.requiredFieldError(field.Tag.Get("gorest"), rowIndex, opName)
+				}
+				fieldValue = fieldValue.Elem()
+			}
+
+			isEmpty := false
+			switch fieldValue.Kind() {
+			case reflect.String:
+				isEmpty = strings.TrimSpace(fieldValue.String()) == ""
+			case reflect.Slice, reflect.Map, reflect.Array:
+				isEmpty = fieldValue.Len() == 0
+			}
+			if isEmpty {
+				return orm.requiredFieldError(field.Tag.Get("gorest"), rowIndex, opName)
+			}
+		}
+
+		return nil
+	}
+
+	if value.Kind() == reflect.Slice {
+		for index := 0; index < value.Len(); index++ {
+			if err := validateStruct(value.Index(index), index+1); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return validateStruct(value, 0)
+}
+
+func (orm *ORM) requiredFieldError(tag string, rowIndex int, opName string) error {
+	column := strings.TrimSpace(strings.Split(tag, ",")[0])
+	message := fmt.Sprintf("Field %q is required and must not be empty.", column)
+	if rowIndex > 0 {
+		message = fmt.Sprintf("Field %q is required and must not be empty (record %d).", column, rowIndex)
+	}
+
+	return orm.setError(
+		message,
+		fmt.Errorf("%s: required field %q is empty", strings.ToLower(opName), column),
+		http.StatusBadRequest,
+	)
+}
+
+func hasGorestTagOption(tag, option string) bool {
+	for _, part := range strings.Split(tag, ",")[1:] {
+		if strings.EqualFold(strings.TrimSpace(part), option) {
+			return true
+		}
+	}
+	return false
 }
 
 func (orm *ORM) buildValueValidateStructTags(data any, opName string) (reflect.Value, error) {

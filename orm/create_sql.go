@@ -19,6 +19,7 @@ func (orm *ORM) createSQL(data any) error {
 	fieldReq := fieldRequirement{
 		requirePrimaryKey: true,
 		requireNonEmpty:   true,
+		validateRequired:  true,
 	}
 
 	// Nama method nya nyambung ngga? membuat developer bingung ngga?

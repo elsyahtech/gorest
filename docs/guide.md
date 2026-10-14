@@ -97,7 +97,7 @@ To map your Go structs seamlessly to database tables across any supported engine
 ```go
 type User struct {
     ID           string      `gorest:"id, primary_key, object_id" json:"id"` 
-    Email        string      `gorest:"email" json:"email"`
+    Email        string      `gorest:"email, required" json:"email"`
     Password     string      `gorest:"password" json:"password"`
     DepartmentID string      `gorest:"department_id" json:"departmentId"`
     IsActive     bool        `gorest:"is_active" json:"isActive"`
@@ -110,6 +110,8 @@ type User struct {
     Department   *Department `gorest:"-" references:"ID" json:"department,omitempty"`
 }
 ```
+
+The optional `required` tag validates the field before `Create()` runs. Required strings must contain a non-whitespace character; nil pointers and empty slices or maps are rejected. Boolean `false` and numeric zero remain valid values. Use pointer fields when a request must distinguish an omitted zero-valued field from an explicitly provided value. Fields without `required` keep the existing behavior.
 
 --- 
 
