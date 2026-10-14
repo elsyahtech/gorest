@@ -20,6 +20,10 @@ func (orm *ORM) Delete(data any) *ORM {
 }
 
 func (orm *ORM) Find(data any) *ORM {
+	if orm.orderByInvalid {
+		return orm
+	}
+
 	if err := orm.validateSelectColumns(); err != nil {
 		return orm
 	}

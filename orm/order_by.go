@@ -3,6 +3,7 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -17,16 +18,24 @@ func (orm *ORM) OrderBy(args ...string) *ORM {
 		dir := strings.ToUpper(strings.TrimSpace(args[1]))
 
 		if dir != asc && dir != desc {
-			orm.Error = fmt.Errorf("OrderBy: invalid direction %q, use ASC or DESC", args[1])
-			orm.Message = "Ensure the second argument of OrderBy() is ASC or DESC."
+			orm.orderByInvalid = true
+			orm.setError(
+				"Ensure the OrderBy() direction is ASC or DESC.",
+				fmt.Errorf("OrderBy: invalid direction %q, use ASC or DESC", args[1]),
+				http.StatusBadRequest,
+			)
 
 			return orm
 		}
 
 		orm.OrderByClauses = append(orm.OrderByClauses, fmt.Sprintf("%s %s", strings.TrimSpace(args[0]), dir))
 	default:
-		orm.Error = errors.New("OrderBy: too many arguments, use OrderBy(\"column DESC\") or OrderBy(\"column\", \"DESC\")")
-		orm.Message = "Pass at most two arguments to OrderBy()."
+		orm.orderByInvalid = true
+		orm.setError(
+			"Pass at most two arguments to OrderBy(). Use OrderBy(\"column DESC\") or OrderBy(\"column\", \"DESC\").",
+			errors.New("OrderBy: too many arguments"),
+			http.StatusBadRequest,
+		)
 
 		return orm
 	}

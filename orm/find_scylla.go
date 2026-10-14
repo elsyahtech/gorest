@@ -62,11 +62,21 @@ func (orm *ORM) findScylla(data any) error {
 	}
 
 	// 10. Build ORDER BY clauses (valid only for clustering keys when the partition key is restricted)
-	if len(orm.OrderByClauses) > 0 {
-		orderBy := strings.ReplaceAll(strings.Join(orm.OrderByClauses, ", "), prefix, "")
-
+	orderTerms, err := orm.parseOrderByTerms(structInfo.structType, tableName, orm.OrderByClauses)
+	if err != nil {
+		return orm.Error
+	}
+	if len(orderTerms) > 0 {
+		orderBy := make([]string, 0, len(orderTerms))
+		for _, term := range orderTerms {
+			part := term.Column
+			if term.Direction != "" {
+				part += " " + term.Direction
+			}
+			orderBy = append(orderBy, part)
+		}
 		orm.safeWriteString(" ORDER BY ")
-		orm.safeWriteString(orderBy)
+		orm.safeWriteString(strings.Join(orderBy, ", "))
 	}
 
 	// 11. Build LIMIT

@@ -60,7 +60,7 @@ func (orm *ORM) findMongo(data any) error {
 	}
 
 	// 8. Build Sort clauses
-	sort, err := orm.buildMongoSort(orm.OrderByClauses, tableName)
+	sort, err := orm.buildMongoSort(orm.OrderByClauses, tableName, structInfo.structType)
 	if err != nil {
 		return orm.Error
 	}

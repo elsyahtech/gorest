@@ -133,7 +133,7 @@ func flattenMongoArgs(field string, args []any, objectIDCols map[string]bool) []
 	return out
 }
 
-func (orm *ORM) buildMongoSort(clauses []string, collectionName string) (bson.D, error) {
+func (orm *ORM) buildMongoSort(clauses []string, collectionName string, structType reflect.Type) (bson.D, error) {
 	if collectionName == "" {
 		return nil, orm.setError(
 			`Ensure that your call to Table("collectionName") is correct and match with your exists mongoDB.`,
@@ -141,36 +141,18 @@ func (orm *ORM) buildMongoSort(clauses []string, collectionName string) (bson.D,
 		)
 	}
 
-	var sort bson.D
+	terms, err := orm.parseOrderByTerms(structType, collectionName, clauses)
+	if err != nil {
+		return nil, err
+	}
 
-	const message = "Ensure .OrderBy() uses the format \"field [ASC|DESC]\"."
-
-	for _, clause := range clauses {
-		for _, part := range strings.Split(clause, ",") {
-			fields := strings.Fields(part)
-
-			if len(fields) == 0 {
-				continue
-			}
-
-			if len(fields) > 2 {
-				return nil, orm.setError(message, fmt.Errorf("unsupported order by expression: %q", strings.TrimSpace(part)))
-			}
-
-			dir := 1
-
-			if len(fields) == 2 {
-				switch strings.ToUpper(fields[1]) {
-				case asc:
-				case desc:
-					dir = -1
-				default:
-					return nil, orm.setError(message, fmt.Errorf("unsupported order direction: %q", fields[1]))
-				}
-			}
-
-			sort = append(sort, bson.E{Key: mongoFieldName(fields[0], collectionName), Value: dir})
+	sort := make(bson.D, 0, len(terms))
+	for _, term := range terms {
+		direction := 1
+		if term.Direction == desc {
+			direction = -1
 		}
+		sort = append(sort, bson.E{Key: term.Column, Value: direction})
 	}
 
 	return sort, nil

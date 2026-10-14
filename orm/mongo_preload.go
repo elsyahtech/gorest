@@ -603,7 +603,7 @@ func (orm *ORM) loadMongoHasMany(ctx context.Context, parents []reflect.Value, h
 	var sortSpec bson.D
 
 	if rel.orderBy != "" {
-		str, err := orm.buildMongoSort([]string{rel.orderBy}, rel.table)
+		str, err := orm.buildMongoSort([]string{rel.orderBy}, rel.table, rel.elemType)
 		if err != nil {
 			return orm.Error
 		}

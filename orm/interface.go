@@ -44,6 +44,7 @@ type ORM struct {
 	AllowFilteringFlag bool
 	IsDistinct         bool
 	IsReturn           bool
+	orderByInvalid     bool
 }
 
 type sqlPreloadPlan struct {

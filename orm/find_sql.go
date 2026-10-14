@@ -2,7 +2,6 @@ package orm
 
 import (
 	"fmt"
-	"strings"
 )
 
 func (orm *ORM) findSQL(data any) error {
@@ -53,9 +52,13 @@ func (orm *ORM) findSQL(data any) error {
 		return orm.Error
 	}
 
-	// 8. Build ORDER BY clauses
-	if len(orm.OrderByClauses) > 0 {
-		orm.safeWriteString(fmt.Sprintf(" ORDER BY %s", strings.Join(orm.OrderByClauses, ", ")))
+	// 8. Validate and build ORDER BY clauses against the destination struct.
+	orderBy, err := orm.buildOrderByClause(structInfo.structType, tableName)
+	if err != nil {
+		return orm.Error
+	}
+	if orderBy != "" {
+		orm.safeWriteString(orderBy)
 	}
 
 	// 9. Build LIMIT and OFFSET clauses
