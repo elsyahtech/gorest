@@ -55,7 +55,7 @@ func (orm *ORM) validateSelectColumns() error {
 		for _, expression := range strings.Split(column, ",") {
 			if strings.TrimSpace(expression) == "" {
 				return orm.setError(
-					`Use Select("*") to select all columns, or provide one or more valid column names.`,
+					"Use Select('*') to select all columns, or provide one or more valid column names.",
 					errors.New("invalid SELECT clause: column expression cannot be empty"),
 					http.StatusBadRequest,
 				)
