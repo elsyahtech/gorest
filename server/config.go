@@ -13,8 +13,10 @@ import (
 )
 
 type Config struct {
-	// Core defines the core Fiber framework configuration options.
-	// Default: nil (uses framework default settings)
+	// Core defines the core Fiber framework configuration options. When nil,
+	// Gorest applies its default finite read, write, and idle timeouts. When
+	// provided, this configuration is used as-is; in particular, zero timeout
+	// values remain zero (unlimited in Fiber).
 	Core *fiber.Config
 
 	// Cors defines the configuration options for Cross-Origin Resource Sharing (CORS) middleware.
@@ -90,7 +92,7 @@ var ConfigDefault = Config{
 
 // configDefault is a helper function that processes the optional config argument.
 // If no configuration is provided, it returns the standard ConfigDefault.
-// Otherwise, it merges any missing/zero values with defaults and validates bounds.
+// Otherwise, it fills missing configuration sections with defaults and validates bounds.
 func configDefault(config ...Config) Config {
 	if len(config) < 1 {
 		return ConfigDefault

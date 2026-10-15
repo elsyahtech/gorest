@@ -58,6 +58,35 @@ Native does not automatically mean faster or safer. ORM-generated and native ope
 
 Use `QuerySQL()` for result sets and `ExecSQL()` for statements that do not return rows. These methods return the driver result or rows plus a troubleshooting message, HTTP status code, and error.
 
+### SQL safety boundary
+
+Native SQL is an intentional flexibility feature, not evidence of a SQL injection in Gorest. `QuerySQL()` and `ExecSQL()` pass query text and arguments to the configured database driver; they do not make arbitrary SQL text assembled by the application safe. The application remains responsible for how it constructs that text.
+
+Bind every user-controlled **value** as an argument using the placeholder syntax supported by the configured driver. Do not interpolate or concatenate request values into SQL. Placeholders generally cannot represent SQL identifiers or syntax, such as table names, column names, or `ASC`/`DESC`; choose those from fixed application-defined options or validate them against a strict allowlist before including them in the query. Validation or escaping is not a substitute for binding values.
+
+Avoid building SQL by concatenating user input:
+
+```go
+// Assume ctx and userInput are already available.
+// Do not use: userInput becomes part of the SQL syntax.
+query := "SELECT * FROM customers WHERE name = '" + userInput + "'"
+rows, message, httpCode, err := app.Database().QuerySQL(ctx, query)
+```
+
+Pass the value separately through `QuerySQL()` instead:
+
+```go
+// Assume ctx and userInput are already available.
+query := "SELECT id, name FROM customers WHERE name = ?"
+rows, message, httpCode, err := app.Database().QuerySQL(ctx, query, userInput)
+if err != nil {
+	return message, httpCode, fmt.Errorf("find customer: %w", err)
+}
+defer rows.Close()
+```
+
+Here `?` is illustrative; use the placeholder syntax required by the configured SQL driver (for example, PostgreSQL commonly uses `$1`). The driver binds `userInput` as a value rather than interpreting it as SQL syntax. Continue to check scan and iteration errors and close rows, as in the complete example below.
+
 ```go
 ctx, cancel := app.NewContext(5 * time.Second)
 defer cancel()
@@ -86,7 +115,7 @@ if err := rows.Err(); err != nil {
 }
 ```
 
-The example uses `?` for illustration. Placeholder syntax is driver-specific; use the syntax supported by the configured SQL driver and pass values through `args`. `ExecSQL()` accepts the same context and variadic arguments and returns `sql.Result`, message, status, and error. Use `RowsAffected()` only where its meaning is useful and supported by the chosen driver. The snippets omit imports; add the standard library and driver packages used in your application, such as `fmt`, `net/http`, `time`, and MongoDB's `bson` package.
+The example uses `?` for illustration. Placeholder syntax is driver-specific; use the syntax supported by the configured SQL driver and pass values through `args`. `ExecSQL()` accepts the same context and variadic arguments and returns `sql.Result`, message, status, and error. Use `RowsAffected()` only where its meaning is useful and supported by the chosen driver. The snippets omit imports; add the standard library and driver packages used in your application, such as `context`, `database/sql`, `fmt`, `net/http`, `time`, and MongoDB's `bson` package.
 
 For a native write, use `ExecSQL()` with bound values as well:
 
@@ -110,7 +139,24 @@ if err != nil {
 
 `QuerySQL()` and `ExecSQL()` run through the `DBSession`; when that session is transaction-bound, they execute inside its SQL transaction. Use the same transaction session for all statements in the unit of work, then handle both rollback and commit errors. See the complete [ORM transaction lifecycle example](orm.md#transactions); the same session lifecycle applies to native SQL calls.
 
-Use `RawQuerySQL()` only when the wrapped helper is insufficient, for example when a third-party query library needs the underlying `*sql.DB`. It bypasses the session's active transaction, so statements inside its callback are not rolled back by `DBSession.Rollback()`.
+Use `RawQuerySQL()` only when the wrapped helpers are insufficient, for example when a third-party query library needs the underlying `*sql.DB`. It is an escape hatch: Gorest does not sanitize SQL assembled inside the callback, so use the library's parameter-binding API or `QueryContext`/`ExecContext` with bound values. Continue to allowlist any dynamic table/column names or sort directions. The callback receives the underlying pool and bypasses the session's active transaction, so statements inside it are not rolled back by `DBSession.Rollback()`.
+
+```go
+err := app.Database().RawQuerySQL(ctx, func(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx,
+		"UPDATE users SET email = ? WHERE id = ?",
+		newEmail,
+		userID,
+	)
+	return err
+})
+if err != nil {
+	return "Could not update user", http.StatusInternalServerError,
+		fmt.Errorf("raw update user: %w", err)
+}
+```
+
+This example also uses `?` illustratively; use the placeholder syntax supported by the configured SQL driver. If a raw callback runs a query that returns rows, it must close them and check `rows.Err()` just as it would with `QuerySQL()`.
 
 ## Native MongoDB
 

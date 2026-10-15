@@ -89,7 +89,7 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 // ensureDir creates the migration/seeder directory if it doesn't exist.
 // MkdirAll is idempotent: no error if the directory already exists.
 func ensureDir(dir string, execType executionType) (string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		message := fmt.Sprintf("Ensure the application has write permission to create the %s directory: %s", execType, dir)
 
 		return message, fmt.Errorf("create %s directory %s: %w", execType, dir, err)

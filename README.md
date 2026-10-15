@@ -12,7 +12,7 @@ Its goal is simple: reduce repetitive infrastructure work, establish consistent 
 
 ## ⚙️ Requirements
 
-GOREST requires **Go 1.23** or higher.
+GOREST requires **Go 1.26** or higher.
 
 Additional requirements depend on the components used by your application.
 
@@ -351,6 +351,7 @@ Read the full troubleshoot guide: [Troubleshoot Documentation](./docs/guide.md)
 If you need help, have questions, or want to report an issue, you can reach out through the following channels:
 
 * **Issues & Bug Reports:** Use the [GitHub Issues](https://github.com/elsyahtech/gorest/issues) page to report bugs or request new features.
+* **Security Vulnerabilities:** Report suspected vulnerabilities privately using the process in [SECURITY.md](./SECURITY.md); do not post them in public issues.
 * **Discussions:** Join our [GitHub Discussions](https://github.com/elsyahtech/gorest/discussions) to ask questions, share ideas, or discuss best practices with other community members.
 * **Documentation:** Explore the full [Guides & Documentation](./docs/guide.md) for detailed architecture, configuration, and API references.
 

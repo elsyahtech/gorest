@@ -48,18 +48,26 @@ type Config struct {
 	// Default: empty (assumes Instant Client is in system PATH/LD_LIBRARY_PATH)
 	LibDir string
 
-	// Transport Layer Security (encryption) for database connection.
-	// PostgreSQL: "disable", "require", "verify-ca", "verify-full"
-	// MSSQL/SQLSERVER: disable, optional, mandatory, strict
-	// SQLite: leave empty (not applicable)
-	// MongoDB: true, false (default: false)
-	// Oracle: "enable", "disable" — controls whether connection uses TCPS (TLS)
-	// protocol instead of plain TCP. When "enable", a wallet (see SSLCAPath)
-	// is required to establish the encrypted connection. Unlike Postgres/MSSQL,
-	// Oracle does not support granular modes like "verify-ca"; it's effectively on/off.
-	// Development: use "disable" (faster for localhost)
-	// Production: use "verify-full" or "strict" (maximum security); Oracle: use "enable"
-	// Default: "disable" (change this explicitly in production!); if driver configured using mongo, default to "false"
+	// Transport Layer Security (TLS) mode for database connections. The accepted
+	// value is driver-specific:
+	//   - PostgreSQL: "disable", "require", "verify-ca", or "verify-full".
+	//   - MySQL: driver TLS mode; SSLCAPath must be set for Gorest to add the TLS option.
+	//   - SQL Server: "disable", "optional", "mandatory", or "strict"; keep
+	//     TrustServerCertificate false to validate the server certificate.
+	//   - Oracle: "enable" uses TCPS and requires an Oracle wallet via SSLCAPath;
+	//     "disable" uses plain TCP.
+	//   - MongoDB: "true" or "false".
+	//   - SQLite: not applicable. ScyllaDB TLS is not currently configured by this field.
+	//
+	// An empty value intentionally defaults to "disable" for non-Mongo network
+	// drivers (and "false" for MongoDB). This compatibility-oriented default keeps
+	// local development and existing deployments working without requiring
+	// certificates, wallets, or a driver-specific TLS mode. It is NOT a secure
+	// production default: when connecting to a remote database over an untrusted
+	// network, plaintext traffic can expose credentials and data or allow
+	// interception/modification. Explicitly configure and verify TLS for the
+	// selected driver in production; do not assume that a remote connection is
+	// encrypted merely because it uses a private address or network firewall.
 	TLS string
 
 	// Path to SSL certificate file (client certificate for mutual TLS).
@@ -198,18 +206,9 @@ var ConfigDefault = Config{
 	// Default: empty (assumes Instant Client is in system PATH/LD_LIBRARY_PATH)
 	LibDir: DefaultDatabaseLibDir,
 
-	// Transport Layer Security (encryption) for database connection.
-	// PostgreSQL: "disable", "require", "verify-ca", "verify-full"
-	// MSSQL/SQLSERVER: disable, optional, mandatory, strict
-	// SQLite: leave empty (not applicable)
-	// MongoDB: true, false (default: false)
-	// Oracle: "enable", "disable" — controls whether connection uses TCPS (TLS)
-	// protocol instead of plain TCP. When "enable", a wallet (see SSLCAPath)
-	// is required to establish the encrypted connection. Unlike Postgres/MSSQL,
-	// Oracle does not support granular modes like "verify-ca"; it's effectively on/off.
-	// Development: use "disable" (faster for localhost)
-	// Production: use "verify-full" or "strict" (maximum security); Oracle: use "enable"
-	// Default: "disable" (change this explicitly in production!); if driver configured using mongo, default to "false"
+	// TLS default is intentionally compatibility-oriented; see Config.TLS for
+	// driver-specific options and the security implications. Remote production
+	// connections must explicitly configure TLS where supported.
 	TLS: TLSDisabled,
 
 	// Path to SSL certificate file (client certificate for mutual TLS).
@@ -347,7 +346,9 @@ func configDefault(config ...Config) Config {
 		cfg.LibDir = ConfigDefault.LibDir
 	}
 
-	// Default: disable
+	// Keep the documented compatibility default when callers omit TLS. Do not
+	// silently infer a TLS mode from Host: each driver has different TLS modes
+	// and certificate/wallet requirements, so callers must opt in explicitly.
 	if cfg.TLS == "" {
 		if driver == MONGO {
 			cfg.TLS = TLSFalse

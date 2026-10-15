@@ -32,7 +32,7 @@ func New(config *Config, appName string) (*Log, string, error) {
 
 	logDir := config.LogDir
 
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
 		message := fmt.Sprintf("Log Initialize: ensure %s directory can be created and is writable", logDir)
 
 		return nil, message, fmt.Errorf("create log directory: %w", err)

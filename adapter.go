@@ -77,7 +77,10 @@ func (app *App) NewContext(timeout time.Duration) (context.Context, context.Canc
 }
 
 // ExecSQL executes a native SQL statement (INSERT, UPDATE, DELETE, or DDL) within this session.
-// Use "?" or the driver's placeholder style for args, never build the query from user input.
+// Bind user-controlled values through args using the configured driver's placeholder syntax;
+// do not concatenate those values into query. Placeholders generally cannot bind identifiers
+// such as table/column names or sort directions, which must come from fixed application choices
+// or an explicit allowlist. This method does not sanitize SQL text assembled by the caller.
 // Returns 501 Not Implemented if the database service is not running, otherwise the result,
 // message, and status code from the underlying database.
 func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
@@ -98,7 +101,10 @@ func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...a
 }
 
 // QuerySQL executes a native SQL query (typically SELECT) within this session and returns the resulting rows.
-// Use placeholders for args; never build the query from user input.
+// Bind user-controlled values through args using the configured driver's placeholder syntax;
+// do not concatenate those values into query. Placeholders generally cannot bind identifiers
+// such as table/column names or sort directions, which must come from fixed application choices
+// or an explicit allowlist. This method does not sanitize SQL text assembled by the caller.
 // The caller must close the returned *sql.Rows (usually with defer rows.Close()) and check rows.Err()
 // after iterating, otherwise the connection is not released back to the pool.
 func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
@@ -259,8 +265,11 @@ func (dbSession *DBSession) ScanCQL(ctx context.Context, query string, args ...a
 type QueryBuilderSQL func(ctx context.Context, db *sql.DB) error
 
 // RawQuerySQL runs fn with the underlying *sql.DB, for cases where the built-in helpers are not enough.
-// Prefer ExecSQL and QuerySQL when possible. Queries run through fn bypass the transaction of this session,
-// so they are not rolled back with Rollback.
+// Prefer ExecSQL and QuerySQL when possible. This escape hatch leaves query construction and safe
+// parameter binding to fn: use QueryContext/ExecContext with driver placeholders and bound values,
+// and select dynamic identifiers only from fixed application choices or an explicit allowlist.
+// Gorest does not sanitize SQL text assembled by the callback. Queries run through fn bypass the
+// transaction of this session, so they are not rolled back with Rollback.
 func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
 	if dbSession == nil || dbSession.database == nil {
 		return errors.New("database service is not running")

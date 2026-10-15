@@ -22,14 +22,14 @@ const bcryptCost = 12
 // GenerateBcrypt hashes a raw password using bcrypt.
 // Returns a 400 Bad Request if the password is empty or longer than 72 bytes (bcrypt limit),
 // and a 500 Internal Server Error if hashing fails.
-func GenerateBcrypt(rawPassword string) (res string, msg string, code int, err error) {
-	if rawPassword == "" {
+func GenerateBcrypt(value string) (res string, msg string, code int, err error) {
+	if value == "" {
 		return "", "Password must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to generate bcrypt hash: password cannot be empty")
 	}
 
-	hashBytes, err := bcrypt.GenerateFromPassword([]byte(rawPassword), bcryptCost)
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(value), bcryptCost)
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
 			return "", "Password must not be longer than 72 bytes",
@@ -49,30 +49,36 @@ func GenerateBcrypt(rawPassword string) (res string, msg string, code int, err e
 // WARNING: MD5 is fast and cryptographically broken. Do NOT use it to store passwords;
 // use GenerateBcrypt or GenerateArgon instead. Only use it for checksums or legacy compatibility.
 // Returns a 400 Bad Request if the input is empty.
-func GenerateMD5(rawPassword string) (res string, msg string, code int, err error) {
-	if rawPassword == "" {
+//
+// Deprecated: MD5 is cryptographically broken. Keep this only for legacy
+// compatibility; use a modern, purpose-appropriate hash or MAC for new code.
+func GenerateMD5(value string) (res string, msg string, code int, err error) {
+	if value == "" {
 		return "", "Data must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to generate md5 hash: data cannot be empty")
 	}
 
-	sum := md5.Sum([]byte(rawPassword))
+	sum := md5.Sum([]byte(value))
 
 	return hex.EncodeToString(sum[:]), "", http.StatusOK, nil
 }
 
 // GenerateSHA512 returns the hex-encoded SHA-512 digest of the given string.
-// WARNING: plain SHA-512 is unsalted and too fast for password storage. Do NOT use it to store passwords;
-// use GenerateBcrypt or GenerateArgon instead. Only use it for checksums or integrity checks.
+// SHA-512 is an unkeyed, unsalted, fast digest. Use it only for non-secret
+// checksums or integrity checks where an unkeyed digest is appropriate. It does
+// not authenticate data and must never be used to store passwords, password
+// reset tokens, API keys, or other secrets. Use GenerateBcrypt or GenerateArgon
+// for passwords, and a keyed MAC such as HMAC when authenticity is required.
 // Returns a 400 Bad Request if the input is empty.
-func GenerateSHA512(rawPassword string) (res string, msg string, code int, err error) {
-	if rawPassword == "" {
+func GenerateSHA512(value string) (res string, msg string, code int, err error) {
+	if value == "" {
 		return "", "Data must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to generate sha512 hash: data cannot be empty")
 	}
 
-	sum := sha512.Sum512([]byte(rawPassword))
+	sum := sha512.Sum512([]byte(value))
 
 	return hex.EncodeToString(sum[:]), "", http.StatusOK, nil
 }
@@ -89,8 +95,8 @@ const (
 // $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
 // A cryptographically secure random salt is generated for every call and embedded in the result.
 // Returns a 400 Bad Request if the password is empty, and a 500 Internal Server Error if salt generation fails.
-func GenerateArgon(rawPassword string) (res string, msg string, code int, err error) {
-	if rawPassword == "" {
+func GenerateArgon(value string) (res string, msg string, code int, err error) {
+	if value == "" {
 		return "", "Password must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to generate argon2id hash: password cannot be empty")
@@ -103,7 +109,7 @@ func GenerateArgon(rawPassword string) (res string, msg string, code int, err er
 			fmt.Errorf("failed to generate argon2id salt: %w", err)
 	}
 
-	hash := argon2.IDKey([]byte(rawPassword), saltBytes, argonTime, argonMemory, argonThreads, argonKeyLen)
+	hash := argon2.IDKey([]byte(value), saltBytes, argonTime, argonMemory, argonThreads, argonKeyLen)
 
 	encoded := fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version, argonMemory, argonTime, argonThreads,
@@ -119,14 +125,14 @@ const msgInvalidCredentials = "Invalid credentials"
 // VerifyBcrypt checks a raw password against a bcrypt hash.
 // Returns false with a 401 Unauthorized if the password does not match (err is nil in this case).
 // Returns a 400 Bad Request if an input is empty, and a 500 Internal Server Error if the stored hash is malformed.
-func VerifyBcrypt(rawPassword, hash string) (res bool, msg string, code int, err error) {
-	if rawPassword == "" || hash == "" {
+func VerifyBcrypt(value, hash string) (res bool, msg string, code int, err error) {
+	if value == "" || hash == "" {
 		return false, "Password must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to verify bcrypt hash: password and hash cannot be empty")
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(rawPassword))
+	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(value))
 	if err != nil {
 		// Wrong password, or password longer than 72 bytes: treat both as invalid credentials.
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) || errors.Is(err, bcrypt.ErrPasswordTooLong) {
@@ -145,14 +151,17 @@ func VerifyBcrypt(rawPassword, hash string) (res bool, msg string, code int, err
 // VerifyMD5 checks a raw string against a hex-encoded MD5 digest using a constant-time comparison.
 // WARNING: MD5 is broken and must not be used for passwords. Use it only for checksums or legacy compatibility.
 // Returns false with a 401 Unauthorized if the digest does not match (err is nil in this case).
-func VerifyMD5(rawPassword, hash string) (res bool, msg string, code int, err error) {
+//
+// Deprecated: MD5 is cryptographically broken. Keep this only for legacy
+// compatibility; use a modern, purpose-appropriate hash or MAC for new code.
+func VerifyMD5(value, hash string) (res bool, msg string, code int, err error) {
 	if hash == "" {
 		return false, "Hash must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to verify md5 hash: hash cannot be empty")
 	}
 
-	computed, msg, code, err := GenerateMD5(rawPassword)
+	computed, msg, code, err := GenerateMD5(value)
 	if err != nil {
 		return false, msg, code, err
 	}
@@ -164,17 +173,19 @@ func VerifyMD5(rawPassword, hash string) (res bool, msg string, code int, err er
 	return true, "", http.StatusOK, nil
 }
 
-// VerifySHA512 checks a raw string against a hex-encoded SHA-512 digest using a constant-time comparison.
-// WARNING: plain SHA-512 is unsalted and too fast for passwords. Use it only for checksums or integrity checks.
+// VerifySHA512 checks a value against a hex-encoded SHA-512 digest using a
+// constant-time comparison. SHA-512 is an unkeyed, unsalted, fast digest; use
+// this only for non-secret checksums or integrity checks. It does not
+// authenticate data and must not be used to verify passwords or other secrets.
 // Returns false with a 401 Unauthorized if the digest does not match (err is nil in this case).
-func VerifySHA512(rawPassword, hash string) (res bool, msg string, code int, err error) {
+func VerifySHA512(value, hash string) (res bool, msg string, code int, err error) {
 	if hash == "" {
 		return false, "Hash must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to verify sha512 hash: hash cannot be empty")
 	}
 
-	computed, msg, code, err := GenerateSHA512(rawPassword)
+	computed, msg, code, err := GenerateSHA512(value)
 	if err != nil {
 		return false, msg, code, err
 	}
@@ -216,8 +227,8 @@ func parseArgonUint(field, key string, bitSize int) (uint64, error) {
 // BEFORE any computation, so a corrupted or tampered hash cannot trigger heavy resource usage.
 // Returns false with a 401 Unauthorized if the password does not match (err is nil in this case).
 // Returns a 400 Bad Request if an input is empty, and a 500 Internal Server Error if the stored hash is invalid.
-func VerifyArgon(rawPassword, encodedHash string) (res bool, msg string, code int, err error) {
-	if rawPassword == "" || encodedHash == "" {
+func VerifyArgon(value, encodedHash string) (res bool, msg string, code int, err error) {
+	if value == "" || encodedHash == "" {
 		return false, "Password must not be empty",
 			http.StatusBadRequest,
 			errors.New("failed to verify argon2id hash: password and hash cannot be empty")
@@ -285,7 +296,7 @@ func VerifyArgon(rawPassword, encodedHash string) (res bool, msg string, code in
 		return fail(errors.New("invalid digest"))
 	}
 
-	computed := argon2.IDKey([]byte(rawPassword), salt, iterations, memory, threads, argonDigestLen)
+	computed := argon2.IDKey([]byte(value), salt, iterations, memory, threads, argonDigestLen)
 
 	if subtle.ConstantTimeCompare(computed, expected) != 1 {
 		return false, msgInvalidCredentials, http.StatusUnauthorized, nil

@@ -43,3 +43,4 @@ database/gorest.db
 
 orm/*.txt
 server/*.png
+*db

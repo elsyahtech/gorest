@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/elsyahtech/gorest/log"
@@ -82,7 +83,7 @@ func StartServer(
 ) (string, error) {
 	port := config.Port
 	portStr := strconv.Itoa(port)
-	address := ":" + portStr
+	address := serverAddress(config.Host, port)
 
 	if err := printStartupBanner(server, config, log, appName, version, timezone, environment, modules, routes...); err != nil {
 		return "please contact us on github", fmt.Errorf("gorest error: %w", err)
@@ -96,4 +97,12 @@ func StartServer(
 	}
 
 	return "", nil
+}
+
+func serverAddress(host string, port int) string {
+	if host == "" {
+		host = DefaultServerHost
+	}
+
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }

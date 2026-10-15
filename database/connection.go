@@ -238,7 +238,7 @@ func generateSQLiteDatabase(cfg *Config) (string, error) {
 	}
 
 	// MkdirAll is idempotent: no error if the directory already exists.
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return "", fmt.Errorf("generate sqlite database: create directory: %w", err)
 	}
 

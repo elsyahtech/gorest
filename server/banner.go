@@ -24,11 +24,7 @@ func printStartupBanner(
 	modules []string,
 	routes ...any,
 ) error {
-	address := fmt.Sprintf(
-		"%s:%d",
-		config.Host,
-		config.Port,
-	)
+	address := serverAddress(config.Host, config.Port)
 
 	memoryUsage := getMemoryUsage()
 	processorUsage := getProcessorUsage()

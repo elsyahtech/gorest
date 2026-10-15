@@ -31,6 +31,8 @@ For the HTTP layer, Gorest integrates **Fiber** as its core HTTP engine under th
 
 By default, the server runs smoothly out-of-the-box with sensible defaults. However, you can deeply customize the server engine, address, port, and security/performance middleware using `server.Config`:
 
+When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the default Fiber core configuration entirely; Gorest preserves all its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout.
+
 ```go
 server.Run(server.Config{
     // Server binding address
@@ -41,10 +43,12 @@ server.Run(server.Config{
     // Default: 3000
     Port: 3000,
 
-    // Core Fiber framework configuration options
-    // Default: nil (uses framework default settings)
+    // Optional: setting Core replaces the defaults above. Explicit zero
+    // timeouts are preserved (unlimited for ReadTimeout/WriteTimeout).
     Core: &fiber.Config{
-        // Custom Fiber settings can go here...
+        ReadTimeout:  10 * time.Second,
+        WriteTimeout: 30 * time.Second,
+        IdleTimeout:  120 * time.Second,
     },
 
     // Cross-Origin Resource Sharing (CORS) middleware configuration
@@ -131,6 +135,10 @@ Gorest provides modular database adapters supporting both SQL and NoSQL environm
 
 As discussed earlier, SQLite runs out-of-the-box as the default lightweight database engine, but you can effortlessly scale up to heavy enterprise databases by swapping out the driver configuration inside `main.go`:
 
+For compatibility and ease of local development, an omitted `TLS` value defaults to disabled for network database drivers (MongoDB defaults to `false`; SQLite does not use TLS). Gorest does not automatically enable TLS based on the database host: TLS modes and certificate or wallet requirements differ by driver, and automatically enabling one could break existing local or legacy deployments. This is not a secure production default. A remote database connection without TLS can expose credentials and data to interception or modification on an untrusted network. Configure a driver-supported TLS mode explicitly for production and validate the server certificate; do not treat a private IP, VPN, or firewall as a replacement for transport encryption.
+
+Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`; MySQL requires `SSLCAPath` for Gorest to add its TLS connection option. SQLite has no network TLS. ScyllaDB's TLS is not currently configured by this database `TLS` field, so setting it does not enable ScyllaDB transport encryption.
+
 ```go
 database.Run(database.Config{
     // Driver Selection & Target
@@ -150,11 +158,11 @@ database.Run(database.Config{
     Timeout:                5 * time.Second,   // Connection and operation timeout limit (must be >= 0)
 
     // Security, TLS & Encryption (Driver-aware behavior)
-    TLS:                    "disable",         // Modes vary by driver (Postgres: require/verify-full, Oracle: enable/disable, Mongo: true/false)
+    TLS:                    "disable",         // Local/development compatibility default only; explicitly configure production TLS
     SSLCertPath:           "",                // Path to client SSL certificate file (mutual TLS)
     SSLKeyPath:            "",                // Path to client SSL private key file
     SSLCapath:             "",                // Path to CA certificate (or Oracle Wallet directory / TNS_ADMIN for Oracle)
-    TrustServerCertificate: true,             // MSSQL only: trust self-signed certs (Development: true, Production: FALSE!)
+    TrustServerCertificate: false,            // MSSQL only: validate the server certificate; configure its CA as needed
 
     // Driver-Specific Addons
     LibDir:  "",                              // Oracle Instant Client library directory path (godror/OCI only)
