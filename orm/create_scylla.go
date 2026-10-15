@@ -47,13 +47,12 @@ func (orm *ORM) createScylla(data any) error {
 	defer cancel()
 
 	// 8. Execute Query DB
-	message, httpCode, err := orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)
+	_, _, err = orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)
 	if err != nil {
-		return orm.setScyllaWriteError("create", err, httpCode)
+		return orm.setScyllaWriteError("Create", err)
 	}
 
-	orm.Message = message
-	orm.HTTPCode = httpCode
+	orm.Message = "Data created successfully"
 
 	// 9. Assign final result to ORM instance for handler consumption
 	orm.extractResultCreateScylla(rowsVal, meta.primaryKeyIndex)

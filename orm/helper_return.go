@@ -329,7 +329,7 @@ func (orm *ORM) execReturn(
 	inputRows []reflect.Value,
 	meta columnMetaData,
 ) error {
-	scanned, err := orm.queryReturnRows(execCtx, queryStr, args, plan)
+	scanned, err := orm.queryReturnRows(execCtx, queryStr, args, plan, "Create")
 	if err != nil {
 		return err
 	}
@@ -345,8 +345,14 @@ func (orm *ORM) execReturn(
 	return nil
 }
 
-func (orm *ORM) queryReturnRows(execCtx context.Context, queryStr string, args []any, plan *returnPlan) ([]reflect.Value, error) {
-	return orm.queryReturnRowsWithDatabase(orm.Database, execCtx, queryStr, args, plan)
+func (orm *ORM) queryReturnRows(
+	execCtx context.Context,
+	queryStr string,
+	args []any,
+	plan *returnPlan,
+	operation string,
+) ([]reflect.Value, error) {
+	return orm.queryReturnRowsWithDatabase(orm.Database, execCtx, queryStr, args, plan, operation)
 }
 
 func (orm *ORM) queryReturnRowsWithDatabase(
@@ -355,20 +361,17 @@ func (orm *ORM) queryReturnRowsWithDatabase(
 	queryStr string,
 	args []any,
 	plan *returnPlan,
+	operation string,
 ) ([]reflect.Value, error) {
 	args = orm.sanitizeArgs(args)
-	rows, message, httpCode, err := db.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
+	rows, _, _, err := db.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
 	if err != nil {
-		return nil, orm.setError(message, err, httpCode)
+		return nil, orm.setDatabaseOperationError(operation, err)
 	}
 
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil && orm.Error == nil {
-			orm.setError(
-				"Ensure the database connection remains available while closing query results.",
-				fmt.Errorf("return: close SQL rows: %w", closeErr),
-				http.StatusInternalServerError,
-			)
+			orm.setDatabaseOperationError(operation, closeErr)
 		}
 	}()
 

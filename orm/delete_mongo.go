@@ -55,9 +55,9 @@ func (orm *ORM) deleteMongo(data any) error {
 	defer cancel()
 
 	// 14. Execute delete against the target collection
-	collection, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
+	collection, _, _, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Delete", err)
 	}
 
 	var deletedCount int64
@@ -81,7 +81,7 @@ func (orm *ORM) deleteMongo(data any) error {
 	}
 
 	if err != nil {
-		return orm.setMongoWriteError(err)
+		return orm.setMongoWriteError("Delete", err)
 	}
 
 	orm.RowsAffected = deletedCount

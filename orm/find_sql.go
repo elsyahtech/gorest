@@ -1,10 +1,5 @@
 package orm
 
-import (
-	"fmt"
-	"net/http"
-)
-
 func (orm *ORM) findSQL(data any) error {
 	activeDriver := orm.DatabaseConfig.Driver
 
@@ -81,9 +76,9 @@ func (orm *ORM) findSQL(data any) error {
 
 	// 12. Execute database query
 	queryArgs := orm.sanitizeArgs(whereClause.valueArgs)
-	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, queryArgs...)
+	rows, _, _, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, queryArgs...)
 	if err != nil {
-		return orm.setFindSQLQueryError(activeDriver, message, err, httpCode)
+		return orm.setFindSQLQueryError(activeDriver, err)
 	}
 
 	defer func() {
@@ -91,11 +86,7 @@ func (orm *ORM) findSQL(data any) error {
 			return
 		}
 
-		orm.setError(
-			"Ensure the database connection remains available while closing query results.",
-			fmt.Errorf("find: close SQL rows: %w", err),
-			http.StatusInternalServerError,
-		)
+		orm.setDatabaseOperationError("Find", err)
 	}()
 
 	// 13. Map SQL result columns

@@ -52,7 +52,7 @@ func (orm *ORM) updateSingleSQL(
 	queryStr := buildUpdateStatement(tableName, strings.Join(setClauses, ", "), strings.Join(whereClause.parts, " AND "), retPlan, activeDriver)
 
 	if retPlan != nil {
-		scanned, err := orm.queryReturnRows(execCtx, queryStr, whereClause.args, retPlan)
+		scanned, err := orm.queryReturnRows(execCtx, queryStr, whereClause.args, retPlan, "Update")
 		if err != nil {
 			return orm.Error
 		}
@@ -69,9 +69,9 @@ func (orm *ORM) updateSingleSQL(
 
 		return nil
 	}
-	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.args...)
+	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.args...)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Update", err)
 	}
 
 	var affected int64
@@ -250,7 +250,7 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 		query.args = orm.sanitizeArgs(query.args)
 
 		if req.retPlan != nil {
-			chunkScanned, err := orm.queryReturnRows(req.execCtx, queryStr, query.args, req.retPlan)
+			chunkScanned, err := orm.queryReturnRows(req.execCtx, queryStr, query.args, req.retPlan, "Update")
 			if err != nil {
 				return 0, nil, err
 			}
@@ -261,9 +261,9 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 			continue
 		}
 
-		result, message, httpCode, err := orm.Database.ExecSQL(req.execCtx, orm.DatabaseConfig, queryStr, query.args...)
+		result, _, _, err := orm.Database.ExecSQL(req.execCtx, orm.DatabaseConfig, queryStr, query.args...)
 		if err != nil {
-			return 0, nil, orm.setError(message, err, httpCode)
+			return 0, nil, orm.setDatabaseOperationError("Update", err)
 		}
 
 		if result == nil {

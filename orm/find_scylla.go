@@ -3,6 +3,8 @@ package orm
 import (
 	"net/http"
 	"strings"
+
+	"github.com/elsyahtech/gorest/database"
 )
 
 func (orm *ORM) findScylla(data any) error {
@@ -132,29 +134,13 @@ func (orm *ORM) setScyllaFindError(message string, err error, code ...int) error
 		return orm.setError(message, err, code...)
 	}
 
-	errText := strings.ToLower(err.Error())
-	if strings.Contains(errText, "select distinct queries must only request partition key columns") {
-		message = "ScyllaDB SELECT DISTINCT only supports partition key and static columns. ALLOW FILTERING does not remove this restriction. Check the table schema and selected columns. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html"
-
-		return orm.setError(message, err, http.StatusBadRequest)
+	if isInvalidDatabaseQueryError(database.SCYLLA, err) {
+		return orm.setDatabaseOperationErrorKind("Find", err, databaseInvalidQuery, http.StatusBadRequest)
 	}
 
-	if strings.Contains(errText, "group by non-primary-key column") {
-		message = "ScyllaDB only supports GROUP BY on a primary key prefix: the partition key first, followed by clustering columns in key order. Check the table's primary key and GROUP BY columns. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html"
-
-		return orm.setError(message, err, http.StatusBadRequest)
-	}
-	if strings.Contains(errText, "undefined column") || strings.Contains(errText, "unknown column") || strings.Contains(errText, "unconfigured columnfamily") {
-		message = "ScyllaDB could not find a column or table referenced by the query. Check GroupBy(), Select(), and the table schema for spelling and case."
-
-		return orm.setError(message, err, http.StatusBadRequest)
+	if len(code) > 0 && code[0] == http.StatusBadRequest {
+		return orm.setDatabaseOperationErrorKind("Find", err, databaseInvalidQuery, http.StatusBadRequest)
 	}
 
-	if strings.Contains(errText, "order by is only supported when the partition key is restricted by an eq or an in") {
-		message = "ScyllaDB allows ORDER BY only within a partition. Restrict the partition key in WHERE with = or IN, and order by clustering columns in the table's defined order or its reverse. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html#ordering-results"
-
-		return orm.setError(message, err, http.StatusBadRequest)
-	}
-
-	return orm.setError(message, err, code...)
+	return orm.setDatabaseOperationError("Find", err)
 }

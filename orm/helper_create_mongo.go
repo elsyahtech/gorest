@@ -13,7 +13,7 @@ import (
 func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableName string) error {
 	collection, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Create", err)
 	}
 
 	orm.Message = message
@@ -39,7 +39,7 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 	case len(rowsVal) == 1:
 		res, err := coll.InsertOne(ctx, rowsVal[0])
 		if err != nil {
-			return orm.setMongoWriteError(err)
+			return orm.setMongoWriteError("Create", err)
 		}
 
 		orm.RowsAffected = 1
@@ -53,7 +53,7 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 	default:
 		res, err := coll.InsertMany(orm.Context, rowsVal)
 		if err != nil {
-			return orm.setMongoWriteError(err)
+			return orm.setMongoWriteError("Create", err)
 		}
 
 		orm.RowsAffected = int64(len(res.InsertedIDs))
@@ -100,7 +100,7 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 	if len(ops) == 1 {
 		res, err := coll.UpdateOne(ctx, ops[0].filter, ops[0].update, options.UpdateOne().SetUpsert(true))
 		if err != nil {
-			return orm.setMongoWriteError(err)
+			return orm.setMongoWriteError("Create", err)
 		}
 
 		orm.RowsAffected = res.MatchedCount + res.UpsertedCount
@@ -125,7 +125,7 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 
 	res, err := coll.BulkWrite(ctx, models)
 	if err != nil {
-		return orm.setMongoWriteError(err)
+		return orm.setMongoWriteError("Create", err)
 	}
 
 	orm.RowsAffected = res.MatchedCount + res.UpsertedCount

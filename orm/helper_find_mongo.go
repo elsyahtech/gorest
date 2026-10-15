@@ -309,10 +309,7 @@ func (orm *ORM) buildRowsScanFindMongo(
 		var doc bson.M
 
 		if err := cursor.Decode(&doc); err != nil {
-			return nil, orm.setError(
-				"ensure that the MongoDB document can be decoded",
-				err,
-			)
+			return nil, orm.setDatabaseOperationError("Find", err)
 		}
 
 		newStructPtr := reflect.New(structType)
@@ -363,10 +360,7 @@ func (orm *ORM) buildRowsScanFindMongo(
 	}
 
 	if err := cursor.Err(); err != nil {
-		return nil, orm.setError(
-			"ensure that database result stream is valid and complete",
-			err,
-		)
+		return nil, orm.setDatabaseOperationError("Find", err)
 	}
 
 	return cursor, nil

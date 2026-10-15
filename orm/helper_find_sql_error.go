@@ -2,34 +2,85 @@ package orm
 
 import (
 	"errors"
-	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/elsyahtech/gorest/database"
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/godror/godror"
 	"github.com/lib/pq"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-func (orm *ORM) setFindSQLQueryError(driver, adapterMessage string, err error, httpCode int) error {
-	if isGroupBySelectionError(driver, err) {
-		return orm.setError(
-			fmt.Sprintf("%s requires every selected non-aggregate column in a grouped query to appear in GroupBy(). Select grouped columns and aggregate expressions such as COUNT or SUM.", databaseDriverLabel(driver)),
-			fmt.Errorf("find: invalid grouped selection: %w", err),
-			http.StatusBadRequest,
-		)
+func (orm *ORM) setFindSQLQueryError(_ string, err error) error {
+	return orm.setDatabaseOperationError("Find", err)
+}
+
+func isInvalidDatabaseQueryError(driver string, err error) bool {
+	if err == nil {
+		return false
 	}
 
-	if isUnknownColumnError(driver, err) {
-		return orm.setError(
-			fmt.Sprintf("The %s query references an unknown column. Check column names in Select(), GroupBy(), Having(), and OrderBy() against the table schema.", databaseDriverLabel(driver)),
-			fmt.Errorf("find: query references an unknown column: %w", err),
-			http.StatusBadRequest,
-		)
+	if isGroupBySelectionError(driver, err) || isUnknownColumnError(driver, err) {
+		return true
 	}
 
-	return orm.setError(adapterMessage, err, httpCode)
+	switch driver {
+	case database.ORACLE:
+		if oracleErr, ok := godror.AsOraErr(err); ok {
+			switch oracleErr.Code() {
+			case 933, 936, 942:
+				return true
+			}
+		}
+	case database.MYSQL:
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) {
+			switch mysqlErr.Number {
+			case 1064, 1146:
+				return true
+			}
+		}
+	case database.POSTGRES:
+		var postgresErr *pq.Error
+		if errors.As(err, &postgresErr) {
+			switch postgresErr.Code {
+			case "42601", "42P01":
+				return true
+			}
+		}
+	case database.SQLSERVER:
+		var sqlServerErr interface{ SQLErrorNumber() int32 }
+		if errors.As(err, &sqlServerErr) {
+			switch sqlServerErr.SQLErrorNumber() {
+			case 102, 156, 208:
+				return true
+			}
+		}
+	case database.SQLITE:
+		errText := strings.ToLower(err.Error())
+		return strings.Contains(errText, "syntax error") ||
+			strings.Contains(errText, "incomplete input") ||
+			strings.Contains(errText, "no such table")
+	case database.MONGO:
+		var serverErr mongo.ServerError
+		if errors.As(err, &serverErr) {
+			for _, code := range []int{2, 9, 14, 168, 40324} {
+				if serverErr.HasErrorCode(code) {
+					return true
+				}
+			}
+		}
+	case database.SCYLLA:
+		errText := strings.ToLower(err.Error())
+		return strings.Contains(errText, "select distinct queries must only request partition key columns") ||
+			strings.Contains(errText, "group by non-primary-key column") ||
+			strings.Contains(errText, "undefined column") ||
+			strings.Contains(errText, "unknown column") ||
+			strings.Contains(errText, "unconfigured columnfamily") ||
+			strings.Contains(errText, "order by is only supported when the partition key is restricted by an eq or an in")
+	}
+
+	return false
 }
 
 func isGroupBySelectionError(driver string, err error) bool {
@@ -74,21 +125,4 @@ func isUnknownColumnError(driver string, err error) bool {
 	}
 
 	return false
-}
-
-func databaseDriverLabel(driver string) string {
-	switch driver {
-	case database.SQLSERVER:
-		return "SQL Server"
-	case database.MYSQL:
-		return "MySQL"
-	case database.POSTGRES:
-		return "PostgreSQL"
-	case database.SQLITE:
-		return "SQLite"
-	case database.ORACLE:
-		return "Oracle"
-	default:
-		return driver
-	}
 }

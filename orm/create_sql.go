@@ -66,14 +66,13 @@ func (orm *ORM) createSQL(data any) error {
 		return orm.execReturn(execCtx, queryStr, resultArg.valueArgs, retPlan, rowsVal, meta)
 	}
 
-	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, resultArg.valueArgs...)
+	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, resultArg.valueArgs...)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Create", err)
 	}
 
 	orm.Result = result
-	orm.HTTPCode = httpCode
-	orm.Message = message
+	orm.Message = "Data saved successfully"
 
 	// 10. Assign final result to ORM instance for handler consumption
 	if result != nil {

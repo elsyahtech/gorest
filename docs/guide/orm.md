@@ -126,7 +126,7 @@ var users []User
 query = app.Database().Table("users").Where("is_active = ?", true).Find(&users)
 ```
 
-If a single-struct find matches no row, ORM returns `404 Not Found`. An empty slice result is a successful query with an empty slice. Update and delete also return not-found when no records match. Check `query.HTTPCode`; ORM validation errors commonly use 400, not-found uses 404, and unclassified database errors default to 500. A database adapter or ORM-specific error handler may provide a more specific code.
+If a single-struct find matches no row, ORM returns `404 Not Found`. An empty slice result is a successful query with an empty slice. Update and delete also return not-found when no records match. Check `query.HTTPCode`; ORM validation errors commonly use 400, not-found uses 404, and database-operation errors use the shared status mapping described in [Error contract](#shared-database-error-contract).
 
 After a successful query, the destination variable contains the loaded records and can be passed into application business logic. Only process it after checking `query.Error`:
 
@@ -670,6 +670,32 @@ Follow the links in limited or unsupported cells for the specific restriction an
 ## 8. Troubleshooting
 
 Use the sequence below to diagnose common failures. Reproduce the symptom with the shown query shape, make the suggested change, then verify the returned data or status before changing other parts of the query.
+
+### Shared database error contract
+
+For database-operation failures in `Create()`, `Update()`, `Delete()`, and `Find()`, Gorest keeps the existing ORM response fields (`Error`, `Message`, and `HTTPCode`) and standardizes the error category and status across drivers:
+
+| Error category in `query.Error` | HTTP status | Meaning |
+|---|---:|---|
+| `database: conflict` | 409 | A primary-key or unique constraint rejected the write. |
+| `database: invalid_query` | 400 | A driver-specific error code or recognized query message indicates invalid syntax, a missing table/column, invalid grouping, or an unsupported Scylla query rule. |
+| `database: timeout` | 504 | The database operation exceeded its deadline or timed out. |
+| `database: unavailable` | 503 | The driver reported a network or connection failure. |
+| `database: execution_failed` | 500 | The database operation failed for another reason. |
+
+`query.Error` wraps the original driver error, so it remains available to `errors.Is`, `errors.As`, and server-side logs. `query.Message` gives the operation and troubleshooting guidance and links to the configured vendor's documentation. Do not use raw driver error text as a public API response.
+
+Use the relevant official reference when investigating a category or driver-specific error:
+
+| Driver | Official error or query reference |
+|---|---|
+| Oracle | [Oracle Database Error Messages](https://docs.oracle.com/en/database/oracle/oracle-database/23/errmg/) |
+| SQL Server | [Database Engine events and errors](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver17) |
+| MySQL | [MySQL Server Error Reference](https://dev.mysql.com/doc/mysql-errors/8.4/en/) |
+| PostgreSQL | [PostgreSQL Error Codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) |
+| SQLite | [SQLite Result and Error Codes](https://www.sqlite.org/rescode.html) |
+| MongoDB | [MongoDB Error Codes](https://www.mongodb.com/docs/manual/reference/error-codes/) |
+| ScyllaDB | [ScyllaDB CQL Reference](https://docs.scylladb.com/manual/stable/cql/) |
 
 | Symptom / reproduction | Diagnosis | Action | Verify |
 |---|---|---|---|

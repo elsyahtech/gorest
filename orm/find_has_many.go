@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"strings"
 )
@@ -305,24 +304,20 @@ func (orm *ORM) execLoadHasMany(
 	grouped map[string][]reflect.Value,
 ) error {
 	args = orm.sanitizeArgs(args)
-	rows, message, httpCode, err := orm.Database.QuerySQL(ctx, orm.DatabaseConfig, query, args...)
+	rows, _, _, err := orm.Database.QuerySQL(ctx, orm.DatabaseConfig, query, args...)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setFindSQLQueryError(orm.DatabaseConfig.Driver, err)
 	}
 
 	defer func() {
 		if err := rows.Close(); err != nil && orm.Error == nil {
-			orm.setError(
-				"Ensure the database connection remains available while closing query results.",
-				fmt.Errorf("preload: close SQL rows: %w", err),
-				http.StatusInternalServerError,
-			)
+			orm.setDatabaseOperationError("Find", err)
 		}
 	}()
 
 	rCols, err := rows.Columns()
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	err = orm.rowsNextInExecLoadHasMany(rows, rel, rCols, childLookup, grouped)
@@ -331,9 +326,7 @@ func (orm *ORM) execLoadHasMany(
 	}
 
 	if err := rows.Err(); err != nil {
-		orm.Message = "ensure that database result stream is valid and complete"
-
-		return orm.setError(message, err)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	return nil

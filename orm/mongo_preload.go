@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"strings"
 
@@ -530,9 +529,9 @@ func mapMongoDoc(doc bson.M, structType reflect.Type, lookup map[string]*structF
 
 // eachMongoDoc executes a Find operation on another collection and calls each() for each document.
 func (orm *ORM) eachMongoDoc(ctx context.Context, collection string, filter any, sort bson.D, each func(doc bson.M) error) error {
-	coll, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, collection)
+	coll, _, _, err := orm.Database.Collection(orm.DatabaseConfig, collection)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	opts := options.Find()
@@ -542,12 +541,14 @@ func (orm *ORM) eachMongoDoc(ctx context.Context, collection string, filter any,
 
 	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
-		return orm.setError(message, err)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	defer func() {
 		if err := cursor.Close(ctx); err != nil {
-			log.Print("failed to close cursor")
+			if orm.Error == nil {
+				orm.setDatabaseOperationError("Find", err)
+			}
 		}
 	}()
 
@@ -555,9 +556,7 @@ func (orm *ORM) eachMongoDoc(ctx context.Context, collection string, filter any,
 		var doc bson.M
 
 		if err := cursor.Decode(&doc); err != nil {
-			orm.Message = "ensure that the MongoDB document can be decoded"
-
-			return orm.setError(message, err)
+			return orm.setDatabaseOperationError("Find", err)
 		}
 
 		if err := each(doc); err != nil {
@@ -566,9 +565,7 @@ func (orm *ORM) eachMongoDoc(ctx context.Context, collection string, filter any,
 	}
 
 	if err := cursor.Err(); err != nil {
-		orm.Message = "ensure that database result stream is valid and complete"
-
-		return orm.setError(message, err)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	return nil

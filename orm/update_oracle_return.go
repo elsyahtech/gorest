@@ -115,9 +115,9 @@ func (orm *ORM) execOracleUpdateReturning(
 	)
 
 	args = orm.sanitizeArgs(args)
-	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, query, args...)
+	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, query, args...)
 	if err != nil {
-		return reflect.Value{}, false, orm.setError(message, err, httpCode)
+		return reflect.Value{}, false, orm.setDatabaseOperationError("Update return", err)
 	}
 
 	if result == nil {

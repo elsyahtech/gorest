@@ -91,9 +91,9 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 		"SELECT %s FROM %s WHERE %s FOR UPDATE",
 		strings.Join(meta.primaryKeyColumns, ", "), tableName, whereSQL,
 	)
-	keyRows, message, httpCode, err := execDB.QuerySQL(execCtx, orm.DatabaseConfig, keyQuery, whereArgs...)
+	keyRows, _, _, err := execDB.QuerySQL(execCtx, orm.DatabaseConfig, keyQuery, whereArgs...)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Update", err)
 	}
 	keys, err := scanMySQLReturnKeys(keyRows, len(meta.primaryKeyColumns), meta, inputRows[0].Type())
 	closeErr := keyRows.Close()
@@ -120,8 +120,8 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 	for idx, arg := range updateArgs {
 		updateArgs[idx] = orm.sanitizeArg(arg)
 	}
-	if _, message, httpCode, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...); err != nil {
-		return orm.setError(message, err, httpCode)
+	if _, _, _, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...); err != nil {
+		return orm.setDatabaseOperationError("Update", err)
 	}
 
 	// Keep each SELECT below MySQL's parameter limit, including composite keys.
@@ -141,7 +141,7 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 		}
 
 		selectQuery, selectArgs := buildMySQLReturnSelect(tableName, plan.queryCols, meta.primaryKeyColumns, keys[start:end])
-		chunk, err := orm.queryReturnRowsWithDatabase(execDB, execCtx, selectQuery, selectArgs, plan)
+		chunk, err := orm.queryReturnRowsWithDatabase(execDB, execCtx, selectQuery, selectArgs, plan, "Update")
 		if err != nil {
 			return err
 		}
@@ -263,9 +263,9 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 			"SELECT %s FROM %s WHERE %s FOR UPDATE",
 			strings.Join(meta.primaryKeyColumns, ", "), tableName, whereSQL,
 		)
-		keyRows, message, httpCode, err := execDB.QuerySQL(execCtx, orm.DatabaseConfig, keyQuery, whereArgs...)
+		keyRows, _, _, err := execDB.QuerySQL(execCtx, orm.DatabaseConfig, keyQuery, whereArgs...)
 		if err != nil {
-			return orm.setError(message, err, httpCode)
+			return orm.setDatabaseOperationError("Update", err)
 		}
 		chunkKeys, scanErr := scanMySQLReturnKeys(keyRows, len(meta.primaryKeyColumns), meta, rowsVal[0].Type())
 		closeErr := keyRows.Close()
@@ -290,9 +290,9 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 		for idx, arg := range updateArgs {
 			updateArgs[idx] = orm.sanitizeArg(arg)
 		}
-		result, message, httpCode, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...)
+		result, _, _, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...)
 		if err != nil {
-			return orm.setError(message, err, httpCode)
+			return orm.setDatabaseOperationError("Update", err)
 		}
 		_ = result
 	}
@@ -316,7 +316,7 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 			end = len(keys)
 		}
 		selectQuery, selectArgs := buildMySQLReturnSelect(tableName, plan.queryCols, meta.primaryKeyColumns, keys[start:end])
-		chunk, err := orm.queryReturnRowsWithDatabase(execDB, execCtx, selectQuery, selectArgs, plan)
+		chunk, err := orm.queryReturnRowsWithDatabase(execDB, execCtx, selectQuery, selectArgs, plan, "Update")
 		if err != nil {
 			return err
 		}

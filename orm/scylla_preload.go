@@ -459,9 +459,9 @@ func (orm *ORM) buildScyllaInQuery(table, col, currentSelectCols string, keys []
 }
 
 func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each func(row map[string]any) error) error {
-	iter, message, httpCode, err := orm.Database.QueryCQL(ctx, orm.DatabaseConfig, cql, args...)
+	iter, _, _, err := orm.Database.QueryCQL(ctx, orm.DatabaseConfig, cql, args...)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	defer func() {
@@ -477,7 +477,7 @@ func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each 
 		}
 
 		if err := each(row); err != nil {
-			message = "Ensure the row data processing logic and type casting inside the callback " +
+			const message = "Ensure the row data processing logic and type casting inside the callback " +
 				"handles the ScyllaDB column values correctly"
 
 			return orm.setError(message, err)
@@ -485,10 +485,7 @@ func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each 
 	}
 
 	if err := iter.Close(); err != nil {
-		const message = "ensure the related key column is the partition key (or is filterable with .AllowFiltering()) " +
-			"and the condition uses CQL-supported operators"
-
-		return orm.setError(message, err)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	return nil

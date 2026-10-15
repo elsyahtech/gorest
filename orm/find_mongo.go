@@ -2,7 +2,6 @@ package orm
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -97,9 +96,9 @@ func (orm *ORM) findMongo(data any) error {
 	defer cancel()
 
 	// 11. Execute mongo collection
-	coll, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
+	coll, _, _, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
-		return orm.setError(message, err, httpCode)
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	// 12. Execute Mongo find or aggregation query.
@@ -111,15 +110,10 @@ func (orm *ORM) findMongo(data any) error {
 	}
 	if err != nil {
 		if grouped || orm.IsDistinct || joining {
-			return orm.setError(
-				"MongoDB could not execute the aggregation pipeline. Check Distinct(), GroupBy(), Having(), the selected fields, and that the collection is available.",
-				err,
-			)
+			return orm.setDatabaseOperationError("Find", err)
 		}
 
-		const findMessage = "Check that MongoDB is reachable and the collection, filter, sort, and read options are valid."
-
-		return orm.setError(findMessage, fmt.Errorf("find: MongoDB query: %w", err))
+		return orm.setDatabaseOperationError("Find", err)
 	}
 
 	// Keep the original cursor for cleanup. The scanner returns a nil cursor
@@ -137,11 +131,7 @@ func (orm *ORM) findMongo(data any) error {
 		}
 
 		if orm.Error == nil {
-			orm.setError(
-				"Ensure the MongoDB connection and operation context remain available while closing the cursor.",
-				fmt.Errorf("find: close MongoDB cursor: %w", err),
-				http.StatusInternalServerError,
-			)
+			orm.setDatabaseOperationError("Find", err)
 		}
 	}()
 
