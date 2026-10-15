@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	golog "log"
 )
 
 func New(config ...Config) *App {
@@ -34,15 +36,17 @@ func New(config ...Config) *App {
 func (app *App) Start() *App {
 	app.Log(nil, true).Info("starting gorest")
 
-	app.runMigration()
+	startServer, err := prepareStartup(app.runMigration, nil, app.startServer)
+	if err != nil {
+		app.Log(map[string]any{LogFieldKeyError: err}, true).Error("database startup tasks failed")
+
+		golog.Fatalf("application startup aborted: %v", err)
+	}
 
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		app.startServer()
-	}()
+	startServer()
 
 	sig := <-quit
 	app.Log(map[string]any{"signal": sig.String()}, true).Info("Application received shutdown signal...")

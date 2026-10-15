@@ -1,6 +1,8 @@
 package gorest
 
 import (
+	"errors"
+	"fmt"
 	golog "log"
 	"time"
 
@@ -16,48 +18,73 @@ func (app *App) loadTimezone() {
 	time.Local = location
 }
 
-func (app *App) runMigration() {
+func (app *App) runMigration() error {
+	if app.config.database == nil || (!app.config.database.Migration && !app.config.database.Seeder) {
+		return nil
+	}
+
 	if app.log == nil {
-		golog.Fatalf("run migration is failed: logger is not running. message: " +
-			"Ensure the logger is running before start the migration. Run log.Run(log.Config{...}) in your app")
+		return errors.New("run database startup tasks: logger is not running")
+	}
+
+	if app.database == nil {
+		return errors.New("run database startup tasks: database is not initialized")
 	}
 
 	logger := app.Log(nil)
 
-	if app.database == nil && app.config.database == nil {
-		return
-	}
-
-	// Check if migration configured in status enabled
-	if !app.config.database.Migration {
-		return
-	}
-
-	// Run migration
 	ctx, cancel := app.NewContext(app.config.database.Timeout)
 	defer cancel()
 
-	message, err := app.database.Migration(ctx, app.config.database, logger)
-	if err != nil {
-		app.Log(map[string]any{
-			LogFieldKeyError:   err,
-			LogFieldKeyMessage: message,
-		}, true).Error("failed to run migration")
+	var migration func() error
+	if app.config.database.Migration {
+		migration = func() error {
+			message, err := app.database.Migration(ctx, app.config.database, logger)
+			if err != nil {
+				return fmt.Errorf("failed to run migration: %s: %w", message, err)
+			}
+
+			return nil
+		}
 	}
 
-	// Check if seeder configured in status enabled
-	if !app.config.database.Seeder {
-		return
+	var seeder func() error
+	if app.config.database.Seeder {
+		seeder = func() error {
+			message, err := app.database.Seeder(ctx, app.config.database, logger)
+			if err != nil {
+				return fmt.Errorf("failed to run seeder: %s: %w", message, err)
+			}
+
+			return nil
+		}
 	}
 
-	// Run seeder
-	message, err = app.database.Seeder(ctx, app.config.database, logger)
-	if err != nil {
-		app.Log(map[string]any{
-			LogFieldKeyError:   err,
-			LogFieldKeyMessage: message,
-		}, true).Error("failed to run seeder")
+	return runMigrationStartup(migration, seeder)
+}
+
+func runMigrationStartup(migration, seeder func() error) error {
+	if migration != nil {
+		if err := migration(); err != nil {
+			return err
+		}
 	}
+
+	if seeder != nil {
+		return seeder()
+	}
+
+	return nil
+}
+
+func prepareStartup(migration, seeder func() error, startServer func()) (func(), error) {
+	if err := runMigrationStartup(migration, seeder); err != nil {
+		return nil, err
+	}
+
+	return func() {
+		go startServer()
+	}, nil
 }
 
 func (app *App) startServer() {
