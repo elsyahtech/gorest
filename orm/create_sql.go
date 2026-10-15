@@ -60,9 +60,7 @@ func (orm *ORM) createSQL(data any) error {
 	// 9. Execute Query DB
 	queryStr := orm.StringBuilder.String()
 
-	for idx, arg := range resultArg.valueArgs {
-		resultArg.valueArgs[idx] = orm.sanitizeArg(arg)
-	}
+	resultArg.valueArgs = orm.sanitizeArgs(resultArg.valueArgs)
 
 	if retPlan != nil {
 		return orm.execReturn(execCtx, queryStr, resultArg.valueArgs, retPlan, rowsVal, meta)

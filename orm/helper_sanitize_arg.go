@@ -26,3 +26,16 @@ func (orm *ORM) sanitizeArg(val any) any {
 
 	return val
 }
+
+func (orm *ORM) sanitizeArgs(args []any) []any {
+	if orm.DatabaseConfig.Driver != database.ORACLE {
+		return args
+	}
+
+	sanitized := make([]any, len(args))
+	for idx, arg := range args {
+		sanitized[idx] = orm.sanitizeArg(arg)
+	}
+
+	return sanitized
+}

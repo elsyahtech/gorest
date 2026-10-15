@@ -58,7 +58,8 @@ func (orm *ORM) deleteSQL(data any) error {
 	// 9. Execute Query DB
 	queryStr := orm.StringBuilder.String()
 
-	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, resDelPayload.whereArgs...)
+	whereArgs := orm.sanitizeArgs(resDelPayload.whereArgs)
+	result, message, httpCode, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, whereArgs...)
 	if err != nil {
 		return orm.setError(message, err, httpCode)
 	}

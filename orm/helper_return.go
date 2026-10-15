@@ -356,6 +356,7 @@ func (orm *ORM) queryReturnRowsWithDatabase(
 	args []any,
 	plan *returnPlan,
 ) ([]reflect.Value, error) {
+	args = orm.sanitizeArgs(args)
 	rows, message, httpCode, err := db.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
 	if err != nil {
 		return nil, orm.setError(message, err, httpCode)

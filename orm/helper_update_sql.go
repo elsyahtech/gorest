@@ -35,6 +35,7 @@ func (orm *ORM) updateSingleSQL(
 	if err != nil {
 		return orm.Error
 	}
+	whereClause.args = orm.sanitizeArgs(whereClause.args)
 	if retPlan != nil && activeDriver == database.MYSQL {
 		return orm.updateMySQLSingleWithReturn(
 			execCtx,
@@ -246,9 +247,7 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 
 		queryStr := orm.StringBuilder.String()
 
-		for idx, arg := range query.args {
-			query.args[idx] = orm.sanitizeArg(arg)
-		}
+		query.args = orm.sanitizeArgs(query.args)
 
 		if req.retPlan != nil {
 			chunkScanned, err := orm.queryReturnRows(req.execCtx, queryStr, query.args, req.retPlan)

@@ -80,7 +80,8 @@ func (orm *ORM) findSQL(data any) error {
 	defer cancel()
 
 	// 12. Execute database query
-	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.valueArgs...)
+	queryArgs := orm.sanitizeArgs(whereClause.valueArgs)
+	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, queryArgs...)
 	if err != nil {
 		return orm.setFindSQLQueryError(activeDriver, message, err, httpCode)
 	}

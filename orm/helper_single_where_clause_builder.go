@@ -44,6 +44,13 @@ func (orm *ORM) buildSingleWhereClause(
 
 			whereArgIndex += placeholderCount
 		}
+
+		if whereArgIndex != len(orm.WhereArgs) {
+			return nil, orm.setError(
+				"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
+				errors.New("update: mismatched where clause placeholders and arguments"),
+			)
+		}
 	} else {
 		for pkIdxPos, pkFieldIdx := range meta.primaryKeyIndex {
 			placeholder := getPlaceholder(activeDriver, argCounter)
