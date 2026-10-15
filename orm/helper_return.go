@@ -346,7 +346,17 @@ func (orm *ORM) execReturn(
 }
 
 func (orm *ORM) queryReturnRows(execCtx context.Context, queryStr string, args []any, plan *returnPlan) ([]reflect.Value, error) {
-	rows, message, httpCode, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
+	return orm.queryReturnRowsWithDatabase(orm.Database, execCtx, queryStr, args, plan)
+}
+
+func (orm *ORM) queryReturnRowsWithDatabase(
+	db *database.Database,
+	execCtx context.Context,
+	queryStr string,
+	args []any,
+	plan *returnPlan,
+) ([]reflect.Value, error) {
+	rows, message, httpCode, err := db.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
 	if err != nil {
 		return nil, orm.setError(message, err, httpCode)
 	}

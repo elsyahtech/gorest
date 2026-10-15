@@ -6,16 +6,8 @@
 query := db.Table("users").Find(&user)
 ```
 
-Read detail ORM Query
+Read the full [ORM Guide](orm.md) for query methods, driver support, limitations, and troubleshooting.
 
-### Native
+### Native APIs and choosing an approach
 
-```go
-query := `
-        SELECT id, email, password, is_active, is_deleted, created_at, updated_at, deleted_at
-        FROM users where deleted_at IS NULL
-    `
-db.QuerySQL(ctx, query)
-```
-
-Read detail native query
+For a neutral comparison of the ORM and native APIs, including tradeoffs and examples for SQL, MongoDB, and ScyllaDB, see the [Querying Guide](querying.md).

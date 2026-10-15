@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+
+	"github.com/elsyahtech/gorest/database"
 )
 
 func (orm *ORM) updateSingleSQL(
@@ -32,6 +34,18 @@ func (orm *ORM) updateSingleSQL(
 	whereClause, err := orm.buildSingleWhereClause(&row, field, &meta, activeDriver)
 	if err != nil {
 		return orm.Error
+	}
+	if retPlan != nil && activeDriver == database.MYSQL {
+		return orm.updateMySQLSingleWithReturn(
+			execCtx,
+			tableName,
+			strings.Join(setClauses, ", "),
+			field,
+			whereClause,
+			retPlan,
+			rowsVal,
+			meta,
+		)
 	}
 
 	queryStr := buildUpdateStatement(tableName, strings.Join(setClauses, ", "), strings.Join(whereClause.parts, " AND "), retPlan, activeDriver)
@@ -93,6 +107,10 @@ func (orm *ORM) updateBulkSQL(
 	if err != nil {
 		return orm.Error
 	}
+	if retPlan != nil && activeDriver == database.MYSQL {
+		return orm.updateMySQLBulkWithReturn(execCtx, tableName, rowsVal, meta, updatableCols, retPlan)
+	}
+
 	chunkSize := buildChunkSize(activeDriver, len(updatableCols), len(meta.primaryKeyIndex))
 
 	totalRowsAffected, scanned, err := orm.execBulkUpdateSQL(

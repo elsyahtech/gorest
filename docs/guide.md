@@ -1,5 +1,5 @@
 ## 1. Logger Guide
-Gorest integrated with Zap Logger as a core logger.
+Gorest integrated with Zap as a core logger.
 
 * **Overview:** A high-performance, built-in logging system designed to give you absolute operational visibility without sacrificing speed. 
 * **Key Benefits:** Zero-allocation philosophy, strict structured logging, and automated log file rotation out-of-the-box. Every operational action (server startup, database migrations, security warnings) is safely tracked.
@@ -29,10 +29,10 @@ Read the full Server & Router technical breakdown: [Router Technical Guide](./gu
 
 ## 3. Database, ORM & Querying Guide
 * **Overview:** The crown jewel of Gorest. A multi-driver data persistence layer featuring auto-migrations, smart seed protection, and a custom reflection-powered ORM.
-* **Key Benefits:** Supports 7+ database drivers (SQL & NoSQL: MySQL, Postgres, MSSQL, Oracle, SQLite, MongoDB, ScyllaDB). Features custom gorest struct tags, automated Preload (1:1, 1:N, M:N), and full fallback support for Native Queries when maximum optimization is required.
+* **Key Benefits:** Supports 7 database drivers (MySQL, PostgreSQL, SQL Server, Oracle, SQLite, MongoDB, ScyllaDB) with ORM features such as custom `gorest` tags and `Preload()`, plus native query APIs. The best fit depends on the operation; the Querying Guide compares their tradeoffs and explains when each may be appropriate.
 * **Sample Output Preview:**
 
-Read the full Database technical breakdown: [Router Technical Guide](./guide/router.md)
+Start with the [Querying Guide](./guide/querying.md) to compare ORM and native queries, then use the [ORM Tutorial](./guide/orm-tutorial.md) for a guided ORM path. The [Database Guide](./guide/database.md) covers connection and schema setup; the [ORM Guide](./guide/orm.md) is the ORM feature reference.
 
 ---
 
@@ -89,29 +89,49 @@ Read Schema Sample for migration and seeder needs [SQL Schema](./guide/database/
 
 ## 5. Defining Entities & Struct
 
-Gorest supports common and irregular pluralization rules when mapping models to database tables.
+Gorest uses the `gorest` struct tag to map Go fields to database columns or document fields. The first item is the database field name; comma-separated items after it are options. The `json` tag is separate and controls JSON input/output names.
 
-To map your Go structs seamlessly to database tables across any supported engine (SQL or NoSQL), Gorest introduces its very own custom **`gorest`** struct tag.
-
-#### Example: The `User` Entity Struct (`./entities/user.go`)
 ```go
 type User struct {
-    ID           string      `gorest:"id, primary_key, object_id" json:"id"` 
-    Email        string      `gorest:"email, required" json:"email"`
-    Password     string      `gorest:"password" json:"password"`
-    DepartmentID string      `gorest:"department_id" json:"departmentId"`
-    IsActive     bool        `gorest:"is_active" json:"isActive"`
-    IsDeleted    bool        `gorest:"is_deleted" json:"isDeleted"`
-    CreatedAt    time.Time   `gorest:"created_at" json:"createdAt"`
-    UpdatedAt    *time.Time  `gorest:"updated_at" json:"updatedAt"`
-    DeletedAt    *time.Time  `gorest:"deleted_at" json:"deletedAt"`
-    
-    // Relation mapping example, if any
-    Department   *Department `gorest:"-" references:"ID" json:"department,omitempty"`
+	ID           string      `gorest:"id, primary_key, required" json:"id"`
+	Email        string      `gorest:"email, required" json:"email"`
+	Password     string      `gorest:"password, required" json:"password"`
+	DepartmentID string      `gorest:"department_id, required" json:"departmentId"`
+	IsActive     bool        `gorest:"is_active" json:"isActive"`
+	CreatedAt    time.Time   `gorest:"created_at, immutable" json:"createAt"`
+	UpdatedAt    *time.Time  `gorest:"updated_at" json:"updatedAt"`
+	DeletedAt    *time.Time  `gorest:"deleted_at" json:"deletedAt"`
+	Department   *Department `gorest:"-" references:"ID" json:"department,omitempty"`
 }
 ```
 
-The optional `required` tag validates the field before `Create()` runs. Required strings must contain a non-whitespace character; nil pointers and empty slices or maps are rejected. Boolean `false` and numeric zero remain valid values. Use pointer fields when a request must distinguish an omitted zero-valued field from an explicitly provided value. Fields without `required` keep the existing behavior.
+### Tag items
+
+1. **Database field name** — The first item maps the Go field to a column/document field. For example, `DepartmentID` maps to `department_id` with `gorest:"department_id"`. Use `gorest:"-"` to exclude a field from ORM mapping.
+2. **`primary_key`** — Marks the mapped field as a primary key for ORM operations that need to identify a record, such as update and delete. It does not change the field name.
+3. **`required`** — Opt-in validation performed before `Create()`. Add it to fields that are required by your database schema. Required strings cannot be empty or whitespace-only; nil pointers and empty slices/maps are rejected. This catches an omitted JSON string field, which decodes to `""` in Go. A SQL `NOT NULL` constraint rejects SQL `NULL`, but most SQL databases still accept `''`, so `required` prevents that empty value from being silently inserted. Fields without this option keep their existing behavior. `false` and numeric zero remain valid values; use pointer fields when you need to distinguish an omitted zero-valued field from an explicitly supplied one.
+4. **`immutable`** — Prevents the field from being changed by ORM `Update()` operations. Use it for values such as `created_at` that should not change after insertion.
+5. **`object_id`** — MongoDB option for query filters. If the mapped field is tagged with `object_id`, a valid 24-character hexadecimal string passed as a filter value is converted to BSON `ObjectID`. This option does not convert values during `Create()`.
+6. **`references`** — Relationship metadata used with relation fields. For example, `gorest:"-" references:"ID"` excludes the relation object as a database column and identifies the referenced field for preload mapping.
+
+### MongoDB `object_id` and `_id`
+
+The first tag item is the actual MongoDB field name. Therefore, `gorest:"id, primary_key, object_id"` refers to the document's `id` field; it does not refer to MongoDB's built-in `_id` field. A handler variable named `id` does not change the queried field. The field in `Where()` must match the field mapped by the tag.
+
+If `id` stores an application UUID such as `e0d62583-2d5a-4817-aa9e-fa9cc257cc01`, keep it as a string and omit `object_id`:
+
+```go
+ID string `gorest:"id, primary_key, required" json:"id"`
+```
+
+MongoDB still has its separate `_id` field. To filter by that built-in field, map a struct field to `_id` and use `_id` in the query:
+
+```go
+ID string `gorest:"_id, primary_key, object_id" json:"id"`
+// ORM query: Where("_id = ?", id)
+```
+
+The filter value must be a valid 24-character hex ObjectID. If a collection uses a string `_id`, do not use `object_id` for that field.
 
 --- 
 
