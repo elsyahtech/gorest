@@ -52,7 +52,7 @@ Native does not automatically mean faster or safer. ORM-generated and native ope
 - Create a context with an appropriate deadline and always call its cancel function.
 - Check the returned `error`; use `message` as troubleshooting context and `httpCode` as a suggested status. Decide separately what message is appropriate for the public API.
 - Close result resources. SQL rows must be closed and checked with `rows.Err()`. Mongo cursors must be closed. Scylla iterators must be closed and the close error checked.
-- Use `DBSession.BeginTx()` for SQL transactions. `QuerySQL()` and `ExecSQL()` use the active transaction session. `RawQuerySQL()` receives the underlying pool directly and bypasses the session transaction. MongoDB and ScyllaDB `BeginTx`/`Commit`/`Rollback` are currently no-ops in Gorest and do not make a sequence of operations atomic.
+- Use `DBSession.BeginTx()` for SQL transactions; it applies `database.Config.Timeout`. Use `BeginTxContext(ctx)` when the transaction should also follow the request's cancellation or deadline. `QuerySQL()` and `ExecSQL()` use the active transaction session. `RawQuerySQL()` receives the underlying pool directly and bypasses the session transaction. MongoDB and ScyllaDB `BeginTx`/`Commit`/`Rollback` are currently no-ops in Gorest and do not make a sequence of operations atomic.
 
 ## Native SQL
 

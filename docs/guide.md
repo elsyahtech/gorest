@@ -50,6 +50,12 @@ database.Run(database.Config{
 })
 ```
 
+### Startup behavior when migration or seeding fails
+
+When enabled, Gorest runs database startup tasks synchronously before starting the HTTP server. Migration runs before seeding when both are enabled. The `Migration` and `Seeder` flags are independent, so seeding can be enabled without running migrations.
+
+If a migration or seeder returns an error, Gorest logs the failure and aborts application startup; the application is not started. If migration fails, seeding is skipped. Check the logged error and message, resolve the database or script issue, then restart the application. A failed task may already have made database changes; rollback behavior depends on the database driver and migration script.
+
 > 🛡️ **Smart Engine Protection (No Overwrite Worries):**
 > You don't need to worry about accidentally wiping your production or development data if you leave migration or seeder flags enabled (`true`) by accident:
 > * **For Migrations:** Gorest is smart enough to check table existence. If a table does not exist, it will automatically generate it. If the table already exists, Gorest safely ignores it.

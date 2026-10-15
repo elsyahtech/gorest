@@ -161,12 +161,36 @@ func (db *Database) QuerySQL(ctx context.Context, config *Config, query string, 
 }
 
 func (db *Database) BeginTx(config *Config, opts ...*sql.TxOptions) (*Database, string, int, error) {
+	return db.BeginTxContext(context.Background(), config, opts...)
+}
+
+func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...*sql.TxOptions) (*Database, string, int, error) {
 	if db == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
 				"and the application must use one of the following databases: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES or SQLITE.",
 			errors.New("database service is not running"),
+		)
+
+		return nil, message, code, err
+	}
+
+	if ctx == nil {
+		message, code, err := setError(
+			"Ensure the context is not empty.",
+			errors.New("context is empty"),
+			http.StatusBadRequest,
+		)
+
+		return nil, message, code, err
+	}
+
+	if config == nil {
+		message, code, err := setError(
+			"Ensure the database configuration is available.",
+			errors.New("database configuration is not running"),
+			http.StatusBadRequest,
 		)
 
 		return nil, message, code, err
@@ -198,7 +222,7 @@ func (db *Database) BeginTx(config *Config, opts ...*sql.TxOptions) (*Database, 
 		opt = opts[0]
 	}
 
-	transaction, err := db.SQL.BeginTx(context.Background(), opt)
+	transaction, err := db.SQL.BeginTx(ctx, opt)
 	if err != nil {
 		message, code, err := setError(
 			"Check your database connection health, verify that the database server is running and reachable",
@@ -211,7 +235,6 @@ func (db *Database) BeginTx(config *Config, opts ...*sql.TxOptions) (*Database, 
 	txDB := *db
 	txDB.Tx = transaction
 
-	// Pesan suksesnya bener ngga bro?
 	return &txDB, "Transaction started successfully", http.StatusOK, nil
 }
 

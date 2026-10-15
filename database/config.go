@@ -116,8 +116,9 @@ type Config struct {
 	// Default: "seeders"
 	SeederDirectory string
 
-	// Timeout duration limit for database connection and operations.
-	// Applied to DialTimeout, ReadTimeout, and WriteTimeout.
+	// Timeout duration limit for database connections and operations.
+	// Applied to driver connection/read/write timeouts where supported, and
+	// to transactions started through DBSession.BeginTx or BeginTxContext.
 	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
 	// Recommended: 5 seconds (for production)
 	// Default: 5 seconds

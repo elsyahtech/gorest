@@ -324,9 +324,18 @@ func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderS
 
 // BeginTx starts a SQL transaction and returns a new DBSession bound to it.
 // Use the returned session for all statements that belong to the transaction,
-// then finish with Commit or Rollback.
+// then finish with Commit or Rollback. The configured database timeout is applied
+// to the transaction context.
 // Returns 409 Conflict if a transaction is already active, and 500 Internal Server Error if it cannot be started.
 func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
+	return dbSession.BeginTxContext(context.Background(), opts...)
+}
+
+// BeginTxContext starts a SQL transaction using ctx and returns a new DBSession
+// bound to it. The configured database timeout caps the transaction lifetime,
+// while cancellation or an earlier deadline from ctx is also respected.
+// Commit or Rollback cancels the derived context and releases its resources.
+func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
@@ -335,18 +344,42 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 			errors.New("database service is not running")
 	}
 
+	if dbSession.config == nil {
+		return nil, "Ensure that the database configuration is available.",
+			http.StatusBadRequest,
+			errors.New("database configuration is not running")
+	}
+
+	if ctx == nil {
+		return nil, "Ensure the context is not empty.",
+			http.StatusBadRequest,
+			errors.New("context is empty")
+	}
+
 	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
 		return dbSession, "", http.StatusOK, nil
 	}
 
-	txDB, message, httpCode, err := dbSession.database.BeginTx(dbSession.config, opts...)
+	txCtx := ctx
+
+	var cancel context.CancelFunc
+
+	if dbSession.config.Timeout > 0 {
+		txCtx, cancel = context.WithTimeout(ctx, dbSession.config.Timeout)
+	} else {
+		txCtx, cancel = context.WithCancel(ctx)
+	}
+
+	txDB, message, httpCode, err := dbSession.database.BeginTxContext(txCtx, dbSession.config, opts...)
 	if err != nil {
+		cancel()
 		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
 	return &DBSession{
 		database: txDB,
 		config:   dbSession.config,
+		txCancel: cancel,
 	}, message, httpCode, nil
 }
 
@@ -373,6 +406,10 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 
 	err := dbSession.database.Tx.Rollback()
 	dbSession.database.Tx = nil
+	if dbSession.txCancel != nil {
+		dbSession.txCancel()
+		dbSession.txCancel = nil
+	}
 
 	if err != nil {
 		return "Ensure the database connection is healthy and the transaction is not already closed or committed",
@@ -407,6 +444,10 @@ func (dbSession *DBSession) Commit() (string, int, error) {
 
 	err := dbSession.database.Tx.Commit()
 	dbSession.database.Tx = nil
+	if dbSession.txCancel != nil {
+		dbSession.txCancel()
+		dbSession.txCancel = nil
+	}
 
 	if err != nil {
 		return "Ensure the database connection is active and the transaction has not timed out",

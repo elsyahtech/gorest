@@ -39,6 +39,8 @@ Terminal operations return the ORM object. Read `Error`, `Message`, and `HTTPCod
 
 SQL transactions are started from a `DBSession`. `BeginTx()` returns a new session bound to the transaction. Use only that session for the transaction's ORM calls. This example creates a user, updates that user, rolls back if either write fails, and returns a commit error instead of reporting success:
 
+`BeginTx()` uses the timeout configured in `database.Config.Timeout` without requiring each handler to create another timeout context. To also bind the transaction to the current request's cancellation and deadline, call `BeginTxContext(ctx)`; the earlier of the request deadline and configured database timeout applies. The transaction context remains active until `Commit()` or `Rollback()`, and cancellation before then causes the SQL transaction to be rolled back by `database/sql`.
+
 ```go
 // The surrounding handler imports "fmt" and gorest; the verification test below also uses "net/http" and "testing".
 

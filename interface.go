@@ -32,6 +32,7 @@ type DBSession struct {
 	database *database.Database
 	config   *database.Config
 	Tx       *sql.Tx
+	txCancel context.CancelFunc
 }
 
 type Map map[string]any
