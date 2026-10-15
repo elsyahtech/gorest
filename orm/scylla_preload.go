@@ -16,8 +16,7 @@ import (
 // bagi coordinator, jadi chunk-nya lebih kecil daripada SQL/Mongo.
 const scyllaInChunkSize = 100
 
-const scyllaPreloadCondHint = "Preload condition must be a plain AND-only CQL " +
-	"condition like \"orders.status = ?\" (no OR, LIKE, IS NULL, or parentheses). Non-key columns need .AllowFiltering()."
+const scyllaPreloadCondHint = "Gorest ScyllaDB Preload conditions accept simple AND-connected predicates; OR, IS NULL, and parenthesized boolean expressions are not supported by this parser. LIKE is supported for string columns in CQL and is case-sensitive; non-key filtering may require ALLOW FILTERING and can be expensive. References: https://docs.scylladb.com/manual/stable/cql/dml/select.html#the-where-clause and https://docs.scylladb.com/manual/stable/cql/dml/select.html#like-operator"
 
 var cqlUnsupportedIsNull = regexp.MustCompile(`(?i)\sIS\s+(NOT\s+)?NULL\b`)
 
@@ -208,8 +207,6 @@ func parseScyllaPreloadCondition(relation string, args []any, table string) (scy
 	switch {
 	case cqlUnsupportedOr.MatchString(padded):
 		return scyllaCond{}, errors.New("preload error: OR is not supported by CQL")
-	case cqlUnsupportedLike.MatchString(padded):
-		return scyllaCond{}, errors.New("preload error: LIKE is not supported by CQL without a SASI/SAI index")
 	case cqlUnsupportedIsNull.MatchString(padded):
 		return scyllaCond{}, errors.New("preload error: IS NULL / IS NOT NULL is not supported by CQL in WHERE; " +
 			"use a boolean column (e.g. is_deleted = ?) or filter in Go")

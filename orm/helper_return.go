@@ -114,7 +114,7 @@ func (orm *ORM) planReturn(data any, rowsVal []reflect.Value, meta columnMetaDat
 	case database.MYSQL, database.POSTGRES, database.SQLITE, database.SQLSERVER, database.ORACLE:
 	default:
 		return nil, orm.setError(
-			"Return() is not supported on this database driver yet",
+			fmt.Sprintf("Gorest ORM Return() is not implemented for %s. See the driver feature matrix for current support: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#7-driver-feature-matrix", ormDriverLabel(driver)),
 			fmt.Errorf("create: Return is not supported on driver %s", driver),
 		)
 	}
@@ -363,9 +363,11 @@ func (orm *ORM) queryReturnRowsWithDatabase(
 
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil && orm.Error == nil {
-			orm.Message = "Ensure the context has sufficient timeout for " +
-				"cleanup operations and check network stability to the database server."
-			orm.Error = fmt.Errorf("failed to rows.Close: %w", closeErr)
+			orm.setError(
+				"Ensure the database connection remains available while closing query results.",
+				fmt.Errorf("return: close SQL rows: %w", closeErr),
+				http.StatusInternalServerError,
+			)
 		}
 	}()
 

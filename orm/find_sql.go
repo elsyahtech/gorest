@@ -2,6 +2,7 @@ package orm
 
 import (
 	"fmt"
+	"net/http"
 )
 
 func (orm *ORM) findSQL(data any) error {
@@ -85,13 +86,15 @@ func (orm *ORM) findSQL(data any) error {
 	}
 
 	defer func() {
-		if err := rows.Close(); err == nil {
+		if err := rows.Close(); err == nil || orm.Error != nil {
 			return
 		}
 
-		orm.Message = "Ensure the context has sufficient timeout for " +
-			"cleanup operations and check network stability to the database server."
-		orm.Error = fmt.Errorf("failed to rows.Close: %w", err)
+		orm.setError(
+			"Ensure the database connection remains available while closing query results.",
+			fmt.Errorf("find: close SQL rows: %w", err),
+			http.StatusInternalServerError,
+		)
 	}()
 
 	// 13. Map SQL result columns

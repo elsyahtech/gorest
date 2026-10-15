@@ -36,10 +36,7 @@ func (orm *ORM) updateSingleMongo(execCtx context.Context, collection *mongo.Col
 
 	res, err := collection.UpdateOne(execCtx, filter, updateDoc)
 	if err != nil {
-		return orm.setError(
-			"Ensure that your MongoDB connection is active and your filter/update document syntax is correct.",
-			err,
-		)
+		return orm.setMongoWriteError(err)
 	}
 
 	var matched, modified int64
@@ -91,10 +88,7 @@ func (orm *ORM) updateBulkMongo(execCtx context.Context, collection *mongo.Colle
 
 	result, err := collection.BulkWrite(execCtx, writeModels, options.BulkWrite().SetOrdered(false))
 	if err != nil {
-		return orm.setError(
-			"Ensure that your MongoDB connection is active and your filter/update document syntax is correct.",
-			err,
-		)
+		return orm.setMongoWriteError(err)
 	}
 
 	if result != nil {

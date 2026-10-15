@@ -23,7 +23,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	if data == nil {
 		orm.Message = fmt.Sprintf("%s: ensure the payload data passed is a struct, slice of structs (array), or pointers", opName)
 		orm.HTTPCode = http.StatusBadRequest
-		orm.Error = withHTTPCode(fmt.Errorf("%s: struct not found/nil", opName), orm.HTTPCode)
+		orm.Error = withHTTPCode(fmt.Errorf("%s: struct not found/nil", opName), orm.HTTPCode, orm.DatabaseConfig.Driver)
 
 		return orm
 	}
@@ -45,7 +45,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 		if orm.HTTPCode == 0 {
 			orm.HTTPCode = http.StatusInternalServerError
 		}
-		orm.Error = withHTTPCode(orm.Error, orm.HTTPCode)
+		orm.Error = withHTTPCode(orm.Error, orm.HTTPCode, driver)
 	} else if orm.HTTPCode == 0 {
 		orm.HTTPCode = http.StatusOK
 	}

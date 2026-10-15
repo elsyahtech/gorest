@@ -16,8 +16,7 @@ import (
 )
 
 var (
-	cqlUnsupportedOr   = regexp.MustCompile(`(?i)\sOR\s`)
-	cqlUnsupportedLike = regexp.MustCompile(`(?i)\s(NOT\s+)?LIKE\s`)
+	cqlUnsupportedOr = regexp.MustCompile(`(?i)\sOR\s`)
 )
 
 func (orm *ORM) buildQueryStringFindScylla(columns, tableName string) {
@@ -95,15 +94,9 @@ func (orm *ORM) execBuildWhereClauseFindScylla(
 	for _, clause := range orm.WhereClauses {
 		if cqlUnsupportedOr.MatchString(clause) {
 			return nil, 0, orm.setError(
-				"CQL does not support OR in WHERE. Use IN (?) or run separate queries.",
+				"ScyllaDB CQL does not support OR in WHERE. Use IN for values on the same eligible key column or run separate queries. Reference: https://docs.scylladb.com/manual/stable/cql/dml/select.html#the-where-clause",
 				errors.New("find: OR is not supported by ScyllaDB"),
-			)
-		}
-
-		if cqlUnsupportedLike.MatchString(clause) {
-			return nil, 0, orm.setError(
-				"CQL does not support LIKE without a SASI/SAI index. Use =, IN, or range operators.",
-				errors.New("find: LIKE is not supported by ScyllaDB"),
+				http.StatusBadRequest,
 			)
 		}
 
@@ -144,8 +137,9 @@ func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 
 	if orm.OffsetVal > 0 {
 		return orm.setError(
-			"CQL does not support OFFSET. Use a clustering-key condition (e.g. .Where(\"created_at < ?\", last)) for pagination. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
+			"ScyllaDB CQL does not support OFFSET. Paginate with a clustering-key restriction (for example, .Where(\"created_at < ?\", last)) or another key-based query strategy. Reference: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
 			errors.New("find: OFFSET is not supported by ScyllaDB"),
+			http.StatusBadRequest,
 		)
 	}
 

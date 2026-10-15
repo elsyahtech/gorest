@@ -69,9 +69,9 @@ func (orm *ORM) deleteScylla(data any) error {
 		}
 
 		queryStr := fmt.Sprintf("DELETE FROM %s WHERE %s IF EXISTS", tableName, whereClause)
-		applied, message, httpCode, err := orm.Database.ScanCQL(execCtx, orm.DatabaseConfig, queryStr, whereArgs...)
+		applied, _, httpCode, err := orm.Database.ScanCQL(execCtx, orm.DatabaseConfig, queryStr, whereArgs...)
 		if err != nil {
-			return orm.setError(message, err, httpCode)
+			return orm.setScyllaWriteError("delete", err, httpCode)
 		}
 		if applied {
 			deleted++

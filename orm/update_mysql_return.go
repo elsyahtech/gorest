@@ -290,10 +290,11 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 		for idx, arg := range updateArgs {
 			updateArgs[idx] = orm.sanitizeArg(arg)
 		}
-		_, message, httpCode, err = execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...)
+		result, message, httpCode, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...)
 		if err != nil {
 			return orm.setError(message, err, httpCode)
 		}
+		_ = result
 	}
 
 	if len(keys) == 0 {

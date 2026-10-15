@@ -197,7 +197,7 @@ db.Table("users").Where("department_id = ? AND is_active = ?", deptID, true).Fin
 
 For SQL drivers, placeholder values are passed as query arguments. This protects **values** from SQL injection. It does not make raw SQL fragments or identifiers safe. Never build a clause from untrusted input with `fmt.Sprintf`, string concatenation, or interpolation. Keep table and column names in application code or validate them against an allowlist. `Select`, `Join`, `GroupBy`, and SQL `Having` contain query syntax and should use trusted, developer-controlled expressions.
 
-The ORM joins multiple `Where()` calls with `AND`; pass exactly one argument per placeholder. Placeholder-count validation is not uniform: SQL `Find()` and `Delete()` check for unused arguments, while SQL and ScyllaDB `Update()` builders check for missing arguments but have no equivalent explicit surplus-argument check. Some paths may therefore report a driver argument error instead. Count placeholders and arguments yourself until validation behavior is standardized across terminal operations. MongoDB translates a supported subset of simple SQL-like predicates into BSON; it is not a general SQL parser. ScyllaDB CQL does not support `OR` in this implementation and does not support `LIKE` without an appropriate Scylla index; prefer key-based `=`, `IN`, or range filters. See the driver matrix below.
+The ORM joins multiple `Where()` calls with `AND`; pass exactly one argument per placeholder. Placeholder-count validation is not uniform: SQL `Find()` and `Delete()` check for unused arguments, while SQL and ScyllaDB `Update()` builders check for missing arguments but have no equivalent explicit surplus-argument check. Some paths may therefore report a driver argument error instead. Count placeholders and arguments yourself until validation behavior is standardized across terminal operations. MongoDB translates a supported subset of simple SQL-like predicates into BSON; it is not a general SQL parser. ScyllaDB `Find()` and `Preload()` accept `LIKE` on string columns; matching is case-sensitive and covers the full column value. Non-key filtering may require `.AllowFiltering()` and can be expensive. The ORM still rejects `OR`, `IS NULL`, and parenthesized conditions in the Scylla `Preload()` condition parser. See [ScyllaDB's `LIKE` documentation](https://docs.scylladb.com/manual/stable/cql/dml/select.html#like-operator) and the driver matrix below.
 
 `AllowFiltering()` is for ScyllaDB queries that filter non-key columns and are rejected by CQL without filtering enabled. It can make a query scan a large part of a table, so use it only when the data size and access pattern make that acceptable. It does not override other CQL rules such as the `SELECT DISTINCT` projection restriction or the `GROUP BY` primary-key-prefix rule.
 
@@ -212,9 +212,13 @@ type DepartmentOnly struct {
 
 var departments []DepartmentOnly
 query := app.Database().Table("users").Distinct("department_id").Find(&departments)
+if query.Error != nil {
+	return query.Message, query.HTTPCode, query.Error
+}
+// departments contains one item per distinct department_id.
 ```
 
-`Distinct(columns)` owns the selected columns. Do not combine it with `Select()`; the ORM returns a 400 conflict instead of silently choosing one. SQL emits `SELECT DISTINCT`. MongoDB `Find` currently rejects `Distinct()`; use an aggregation/grouping query when appropriate.
+`Distinct(columns)` owns the selected columns. Do not combine it with `Select()`; the ORM returns a 400 conflict instead of silently choosing one. SQL emits `SELECT DISTINCT`. MongoDB uses an aggregation `$group` stage and maps the distinct field combination back to the destination struct. With multiple columns it returns unique tuples. ScyllaDB follows CQL's stricter projection rules. Mongo aggregation groups array values as whole values; this differs from MongoDB's native `distinct` command, which also returns individual array elements. See [MongoDB `$group`](https://www.mongodb.com/docs/manual/reference/operator/aggregation/group/) and [native `distinct`](https://www.mongodb.com/docs/manual/reference/method/db.collection.distinct/).
 
 ScyllaDB applies CQL's `SELECT DISTINCT` restriction: the selection must contain only partition-key and/or static columns. `.AllowFiltering()` does not relax this restriction. Check the table primary key and static columns if Scylla rejects the query.
 
@@ -276,7 +280,24 @@ SQL Server and Oracle use their own `OFFSET`/`FETCH` syntax. MongoDB maps these 
 
 ### Join and Preload
 
-`Join()` adds a SQL join clause. Use only trusted, static SQL fragments and ensure selected columns are unambiguous. MongoDB does not support `Join()` through this API. ScyllaDB CQL has no `JOIN`; use `Preload()` or issue separate queries. See [ScyllaDB SELECT documentation](https://docs.scylladb.com/manual/stable/cql/dml/select.html).
+`Join()` accepts trusted, static SQL-style clauses for SQL drivers. MongoDB translates a limited form to `$lookup`: one `JOIN` or `LEFT JOIN`, equality between a base collection field and a joined collection field, and explicit qualified selected columns. Aliases on collection names, multiple joins, non-equality joins, wildcard selection, and combining joins with `GroupBy()`, `Having()`, or `Distinct()` are not supported by this path. The destination is a flat result struct whose `gorest` tags match selected names or aliases. MongoDB `$lookup` behavior and restrictions are documented at [MongoDB `$lookup`](https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/). ScyllaDB CQL has no `JOIN`; use `Preload()` or issue separate queries. See [ScyllaDB SELECT documentation](https://docs.scylladb.com/manual/stable/cql/dml/select.html).
+
+For MongoDB, the supported form looks like this:
+
+```go
+type UserDepartmentRow struct {
+	UserID         string `gorest:"user_id" json:"userId"`
+	DepartmentName string `gorest:"department_name" json:"departmentName"`
+}
+
+var rows []UserDepartmentRow
+query := app.Database().Table("users").
+	Select("users.id AS user_id, departments.name AS department_name").
+	Join("LEFT JOIN departments ON departments.id = users.department_id").
+	Find(&rows)
+```
+
+For SQL, the same `Join()` clause may be used with a SQL `SELECT`. MongoDB `Join()` only supports this simple equality form; use `Preload()` for nested relation objects or native aggregation for more complex joins.
 
 `Preload()` eagerly loads relations described by the model's relation fields and tags. This complete example uses `users.department_id -> departments.id` and `orders.user_id -> users.id`:
 
@@ -328,7 +349,7 @@ Relation fields use `gorest:"-"` so they are not written as scalar database colu
 
 For a has-many field such as `Orders []Order`, the parent needs a `primary_key` field. Here `references:"UserID"` points to the child `Order` struct's foreign-key field; Gorest uses its `gorest` tag (`user_id`) to query orders matching the parent's key. In short, `references` on belongs-to identifies the target key; on has-many it identifies the child foreign key.
 
-Use `Preload()` when you want ORM to populate declared relation fields as nested objects without writing relation joins yourself. It supports the ORM's relation pattern across SQL, MongoDB, and ScyllaDB (MongoDB grouped aggregation cannot be combined with preload). Use `Join()` for SQL-specific custom joins, especially when the query needs columns or filtering across tables in one result set. A raw `Join()` does not declare/populate a relation field automatically; select unambiguous columns and map aliases to fields on a result struct.
+Use `Preload()` when you want ORM to populate declared relation fields as nested objects without writing relation joins yourself. It supports the ORM's relation pattern across SQL, MongoDB, and ScyllaDB (MongoDB grouped aggregation cannot be combined with preload). Use `Join()` when you need a flat result assembled from columns in two collections/tables. SQL supports custom join clauses; MongoDB supports the limited `$lookup` form described above. A `Join()` does not populate a nested relation field automatically; select unambiguous columns and map aliases to fields on a result struct.
 
 For example, use a SQL join when the output is a flat row containing fields from both tables:
 
@@ -634,10 +655,10 @@ The labels describe the Gorest ORM API, not every capability of the underlying d
 | OrderBy | Supported | Supported | Supported | Supported | Supported | Supported | [Limited: CQL key/order rules](#orderby) |
 | Limit | Supported | Supported | Supported | Supported | Supported | [Limited: zero limit in grouped aggregation](#limit-and-offset) | [Limited: CQL server rules](#limit-and-offset) |
 | Offset | Supported | Supported | Supported | Supported | Supported | Supported | [Not supported](#limit-and-offset) |
-| Join | Supported | Supported | Supported | Supported | Supported | [Not supported through this API](#join-and-preload) | [Not supported through this API](#join-and-preload) |
+| Join | Supported | Supported | Supported | Supported | Supported | [Limited: one equality `$lookup` with explicit projection](#join-and-preload) | [Not supported through this API](#join-and-preload) |
 | Preload | Supported | Supported | Supported | Supported | Supported | [Limited: unavailable for grouped aggregation](#join-and-preload) | Supported |
 | AllowFiltering | — | — | — | — | — | — | [Supported; use carefully](#where-filters-and-injection-safety) |
-| Distinct | Supported | Supported | Supported | Supported | Supported | [Not supported through Find](#distinct) | [Limited: CQL projection rules](#distinct) |
+| Distinct | Supported | Supported | Supported | Supported | Supported | [Limited: aggregation tuple semantics](#distinct) | [Limited: CQL projection rules](#distinct) |
 | GroupBy | [Supported: SQL grouping rules](#groupby-and-having) | [Supported: SQL grouping rules](#groupby-and-having) | [Supported: SQL grouping rules](#groupby-and-having) | [Supported: SQL grouping rules](#groupby-and-having) | [Supported: SQL grouping rules](#groupby-and-having) | [Limited: aggregation pipeline](#groupby-and-having) | [Limited: primary-key prefix](#groupby-and-having) |
 | Having | Supported | Supported | Supported | Supported | Supported | [Limited: aggregate comparisons](#groupby-and-having) | [Not supported](#groupby-and-having) |
 | Create/Update Return | Supported | Supported | Supported | [Limited: Update single only](#return-values-from-writes) | Supported | [Not supported](#return-values-from-writes) | [Not supported](#return-values-from-writes) |

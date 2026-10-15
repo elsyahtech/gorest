@@ -32,7 +32,7 @@ func (orm *ORM) buildMongoGroupPipeline(
 ) (mongo.Pipeline, error) {
 	if len(orm.Preloads) > 0 {
 		return nil, orm.setError(
-			"Preload is not supported with MongoDB grouped results.",
+			"Gorest ORM does not support combining Preload() with MongoDB GroupBy() aggregation. Run the aggregation and load related records in a separate query, or build a native pipeline. Reference: https://www.mongodb.com/docs/manual/core/aggregation-pipeline/",
 			errors.New("find: preload is unsupported with MongoDB aggregation"),
 			http.StatusBadRequest,
 		)

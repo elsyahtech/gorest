@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 )
@@ -309,10 +310,12 @@ func (orm *ORM) execLoadHasMany(
 	}
 
 	defer func() {
-		if err := rows.Close(); err != nil {
-			orm.Message = "Ensure the context has sufficient timeout for " +
-				"cleanup operations and check network stability to the database server."
-			orm.Error = fmt.Errorf("failed to rows.Close: %w", err)
+		if err := rows.Close(); err != nil && orm.Error == nil {
+			orm.setError(
+				"Ensure the database connection remains available while closing query results.",
+				fmt.Errorf("preload: close SQL rows: %w", err),
+				http.StatusInternalServerError,
+			)
 		}
 	}()
 

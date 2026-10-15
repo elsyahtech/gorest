@@ -19,14 +19,6 @@ func (orm *ORM) findMongo(data any) error {
 		return orm.Error
 	}
 
-	// 2. Block fitur join and disctinc for mongoDB to avoid overhead.
-	// Performance consideration
-	if len(orm.JoinClauses) > 0 || orm.IsDistinct {
-		const message = "Join and Distinct are not supported by Mongo Find."
-
-		return orm.setError(message, errors.New("find: unsupported clause for MongoDB"), http.StatusBadRequest)
-	}
-
 	// 3. Validate Struct (Ensure the struct has valid tags & primary_key)
 	fieldReq := fieldRequirement{
 		requirePrimaryKey: false,
@@ -75,12 +67,24 @@ func (orm *ORM) findMongo(data any) error {
 	}
 
 	grouped := len(orm.GroupByClauses) > 0 || len(orm.HavingClauses) > 0
+	joining := len(orm.JoinClauses) > 0
+	if (orm.IsDistinct || joining) && grouped {
+		return orm.setError(
+			"MongoDB Find() cannot combine Join() or Distinct() with GroupBy() or Having(); choose one aggregation shape for this query.",
+			errors.New("find: Join()/Distinct() conflict with GroupBy()/Having() for MongoDB"),
+			http.StatusBadRequest,
+		)
+	}
 	var (
 		findOpts *options.FindOptionsBuilder
 		pipeline mongo.Pipeline
 	)
-	if grouped {
+	if orm.IsDistinct {
+		pipeline, err = orm.buildMongoDistinctPipeline(filter, sort, tableName)
+	} else if grouped {
 		pipeline, err = orm.buildMongoGroupPipeline(tableName, filter, sort, isSlice, structInfo.structType)
+	} else if joining {
+		pipeline, err = orm.buildMongoJoinPipeline(tableName, filter, sort, structInfo.structType)
 	} else {
 		findOpts, err = orm.buildMongoOptionFindMongo(tableName, preload, sort, isSlice)
 	}
@@ -100,22 +104,22 @@ func (orm *ORM) findMongo(data any) error {
 
 	// 12. Execute Mongo find or aggregation query.
 	var cursor *mongo.Cursor
-	if grouped {
+	if grouped || orm.IsDistinct || joining {
 		cursor, err = coll.Aggregate(execCtx, pipeline)
 	} else {
 		cursor, err = coll.Find(execCtx, filter, findOpts)
 	}
 	if err != nil {
-		if grouped {
+		if grouped || orm.IsDistinct || joining {
 			return orm.setError(
-				"MongoDB could not execute the aggregation pipeline. Check GroupBy(), Having(), and aggregate field names, and verify that the collection is available.",
+				"MongoDB could not execute the aggregation pipeline. Check Distinct(), GroupBy(), Having(), the selected fields, and that the collection is available.",
 				err,
 			)
 		}
 
-		const findMessage = "Check your filter, sort, or index configuration."
+		const findMessage = "Check that MongoDB is reachable and the collection, filter, sort, and read options are valid."
 
-		return orm.setError(findMessage, err)
+		return orm.setError(findMessage, fmt.Errorf("find: MongoDB query: %w", err))
 	}
 
 	// Keep the original cursor for cleanup. The scanner returns a nil cursor
@@ -132,9 +136,13 @@ func (orm *ORM) findMongo(data any) error {
 			return
 		}
 
-		orm.Message = "Ensure the context has sufficient timeout for " +
-			"cleanup operations and check network stability to the database server."
-		orm.Error = fmt.Errorf("failed to cursor.Close: %w", err)
+		if orm.Error == nil {
+			orm.setError(
+				"Ensure the MongoDB connection and operation context remain available while closing the cursor.",
+				fmt.Errorf("find: close MongoDB cursor: %w", err),
+				http.StatusInternalServerError,
+			)
+		}
 	}()
 
 	// 13. Document Mapping (Mapping Documents to Struct/Slice)
@@ -158,8 +166,10 @@ func (orm *ORM) findMongo(data any) error {
 	}
 
 	// 15. Load Find Mongo Preload/has-many relationships preload data
-	if err := orm.loadFindMogoPreloadData(execCtx, preload, valElem, isSlice); err != nil {
-		return orm.Error
+	if !orm.IsDistinct && !joining {
+		if err := orm.loadFindMogoPreloadData(execCtx, preload, valElem, isSlice); err != nil {
+			return orm.Error
+		}
 	}
 
 	// 16. Assign final result to ORM instance for handler consumption

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -14,9 +15,10 @@ import (
 )
 
 var (
-	mongoOrSplit  = regexp.MustCompile(`(?i)\s+OR\s+`)
-	mongoAndSplit = regexp.MustCompile(`(?i)\s+AND\s+`)
-	mongoCondExpr = regexp.MustCompile(`(?is)^\s*([\w\.]+)\s*(=|!=|<>|>=|<=|>|<|NOT\s+LIKE|LIKE|NOT\s+IN|IN|IS\s+NOT\s+NULL|IS\s+NULL)\s*(.*?)\s*$`)
+	mongoOrSplit    = regexp.MustCompile(`(?i)\s+OR\s+`)
+	mongoAndSplit   = regexp.MustCompile(`(?i)\s+AND\s+`)
+	mongoCondExpr   = regexp.MustCompile(`(?is)^\s*([\w\.]+)\s*(=|!=|<>|>=|<=|>|<|NOT\s+LIKE|LIKE|NOT\s+IN|IN|IS\s+NOT\s+NULL|IS\s+NULL)\s*(.*?)\s*$`)
+	mongoIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$`)
 )
 
 //nolint:revive
@@ -182,6 +184,78 @@ func buildMongoProjection(cols []string, table string) bson.M {
 	}
 
 	return projection
+}
+
+// buildMongoDistinctPipeline returns distinct field combinations in the same
+// document shape expected by Find's struct mapper. Mongo's aggregation $group
+// preserves tuple semantics for Distinct("a", "b").
+func (orm *ORM) buildMongoDistinctPipeline(filter bson.M, sort bson.D, table string) (mongo.Pipeline, error) {
+	if len(orm.Preloads) > 0 {
+		return nil, orm.setError(
+			"MongoDB Distinct() cannot be combined with Preload(); distinct results do not contain the parent keys needed to load relations.",
+			errors.New("find: Distinct() conflicts with Preload() for MongoDB"),
+			http.StatusBadRequest,
+		)
+	}
+
+	if len(orm.DistinctCols) == 0 {
+		return nil, orm.setError(
+			"Provide one or more field names to Distinct(), for example Distinct(\"department_id\").",
+			errors.New("find: Distinct() requires at least one field for MongoDB"),
+			http.StatusBadRequest,
+		)
+	}
+
+	groupID := bson.D{}
+	project := bson.D{{Key: "_id", Value: 0}}
+	seen := make(map[string]struct{}, len(orm.DistinctCols))
+	for idx, raw := range orm.DistinctCols {
+		column := strings.TrimSpace(raw)
+		if !mongoIdentifier.MatchString(column) {
+			return nil, orm.setError(
+				"Distinct() accepts field names only; remove empty values, expressions, and aliases.",
+				fmt.Errorf("find: invalid MongoDB distinct field %q", raw),
+				http.StatusBadRequest,
+			)
+		}
+
+		field := mongoFieldName(column, table)
+		output := field
+		if dot := strings.LastIndexByte(output, '.'); dot >= 0 {
+			output = output[dot+1:]
+		}
+		if _, exists := seen[output]; exists {
+			return nil, orm.setError(
+				"Distinct() fields must have unique output names after removing the collection prefix.",
+				fmt.Errorf("find: duplicate MongoDB distinct output field %q", output),
+				http.StatusBadRequest,
+			)
+		}
+		seen[output] = struct{}{}
+		key := fmt.Sprintf("field%d", idx)
+		groupID = append(groupID, bson.E{Key: key, Value: "$" + field})
+		project = append(project, bson.E{Key: output, Value: "$_id." + key})
+	}
+
+	pipeline := mongo.Pipeline{}
+	if len(filter) > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: filter}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$group", Value: bson.D{{Key: "_id", Value: groupID}}}},
+		bson.D{{Key: "$project", Value: project}},
+	)
+	if len(sort) > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$sort", Value: sort}})
+	}
+	if orm.OffsetVal > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$skip", Value: orm.OffsetVal}})
+	}
+	if orm.LimitVal > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: orm.LimitVal}})
+	}
+
+	return pipeline, nil
 }
 
 func normalizeBSONValue(val any) any {

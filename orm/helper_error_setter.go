@@ -13,14 +13,18 @@ func (orm *ORM) setError(message string, err error, code ...int) error {
 		orm.HTTPCode = code[0]
 	}
 
-	orm.Error = withHTTPCode(err, orm.HTTPCode)
+	var driver string
+	if orm.DatabaseConfig != nil {
+		driver = orm.DatabaseConfig.Driver
+	}
+	orm.Error = withHTTPCode(err, orm.HTTPCode, driver)
 
 	return orm.Error
 }
 
 func (orm *ORM) setNotFound(opName string) error {
 	return orm.setError(
-		"Ensure that the record is exists and that the filter condition for "+opName+" data matches the intended record.",
-		errors.New("record not found"),
+		"Ensure the requested record exists and that the filter for this operation matches its key.",
+		errors.New(opName+": record not found"),
 		http.StatusNotFound)
 }

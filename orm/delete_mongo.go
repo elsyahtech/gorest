@@ -81,9 +81,7 @@ func (orm *ORM) deleteMongo(data any) error {
 	}
 
 	if err != nil {
-		const message = "Ensure that the MongoDB connection is active and the collection query filter is valid."
-
-		return orm.setError(message, err)
+		return orm.setMongoWriteError(err)
 	}
 
 	orm.RowsAffected = deletedCount

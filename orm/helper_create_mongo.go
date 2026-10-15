@@ -19,17 +19,12 @@ func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableNam
 	orm.Message = message
 	orm.HTTPCode = httpCode
 
-	buildMessage := func() string {
-		return "MongoDB error detected. " +
-			"Check your collection schema, document structure, duplicate keys (unique index violation), or network connection."
-	}
-
 	if orm.IsUpsert {
-		if err := orm.execCreateMongoUpsert(execCtx, rowsVal, collection, buildMessage); err != nil {
+		if err := orm.execCreateMongoUpsert(execCtx, rowsVal, collection); err != nil {
 			return orm.Error
 		}
 	} else {
-		if err := orm.execCreateMongoNormal(execCtx, rowsVal, collection, buildMessage); err != nil {
+		if err := orm.execCreateMongoNormal(execCtx, rowsVal, collection); err != nil {
 			return orm.Error
 		}
 	}
@@ -37,14 +32,14 @@ func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableNam
 	return nil
 }
 
-func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *mongo.Collection, message func() string) error {
+func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *mongo.Collection) error {
 	switch {
 	case len(rowsVal) == 0:
 		return nil
 	case len(rowsVal) == 1:
 		res, err := coll.InsertOne(ctx, rowsVal[0])
 		if err != nil {
-			return orm.setError(message(), err)
+			return orm.setMongoWriteError(err)
 		}
 
 		orm.RowsAffected = 1
@@ -58,7 +53,7 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 	default:
 		res, err := coll.InsertMany(orm.Context, rowsVal)
 		if err != nil {
-			return orm.setError(message(), err)
+			return orm.setMongoWriteError(err)
 		}
 
 		orm.RowsAffected = int64(len(res.InsertedIDs))
@@ -86,7 +81,7 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 	return nil
 }
 
-func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *mongo.Collection, message func() string) error {
+func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *mongo.Collection) error {
 	ops, err := orm.buildMongoUpsertOps(rowsVal)
 	if err != nil {
 		return orm.Error
@@ -105,7 +100,7 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 	if len(ops) == 1 {
 		res, err := coll.UpdateOne(ctx, ops[0].filter, ops[0].update, options.UpdateOne().SetUpsert(true))
 		if err != nil {
-			return orm.setError(message(), err)
+			return orm.setMongoWriteError(err)
 		}
 
 		orm.RowsAffected = res.MatchedCount + res.UpsertedCount
@@ -130,7 +125,7 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 
 	res, err := coll.BulkWrite(ctx, models)
 	if err != nil {
-		return orm.setError(message(), err)
+		return orm.setMongoWriteError(err)
 	}
 
 	orm.RowsAffected = res.MatchedCount + res.UpsertedCount
