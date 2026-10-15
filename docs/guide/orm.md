@@ -95,6 +95,8 @@ if verify.Error == nil || verify.HTTPCode != http.StatusNotFound {
 
 > **Transaction support is SQL-only.** MongoDB and ScyllaDB currently treat `BeginTx()`, `Commit()`, and `Rollback()` as no-ops that return success. They do not provide atomicity or rollback through these ORM methods. Do not assume the SQL transaction example is safe for those drivers.
 
+For raw SQL inside this transaction, call `txSession.RawQuerySQLWithTx()`. On a transaction-bound session, its callback receives an executor backed by the active `*sql.Tx`, so its statements are committed or rolled back together with the ORM and native `QuerySQL()`/`ExecSQL()` operations. On a session without a transaction, it uses the `*sql.DB` pool. The legacy `RawQuerySQL()` callback always targets the pool and is rejected when called from a transaction-bound session; it is deprecated and should only be used for work intentionally outside a transaction. See the [Querying Guide](querying.md#native-sql) for examples and SQL safety requirements.
+
 MySQL `Update().Return()` starts an internal transaction only when the session has no active SQL transaction. When it reuses a handler transaction, the handler still owns commit/rollback.
 
 Use pointers to structs or slices of structs as destinations and write payloads. Fields that map to database fields need `gorest` tags. A minimal model is:

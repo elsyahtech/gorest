@@ -264,18 +264,82 @@ func (dbSession *DBSession) ScanCQL(ctx context.Context, query string, args ...a
 // It is executed by RawQuerySQL.
 type QueryBuilderSQL func(ctx context.Context, db *sql.DB) error
 
+// SQLExecutor is the subset of database/sql operations available from either
+// a connection pool or a SQL transaction.
+type SQLExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+}
+
+// QueryBuilderSQLSession receives the active SQL executor for a DBSession.
+// The executor is the active transaction when one exists, otherwise the connection pool.
+type QueryBuilderSQLSession func(ctx context.Context, executor SQLExecutor) error
+
 // RawQuerySQL runs fn with the underlying *sql.DB, for cases where the built-in helpers are not enough.
 // Prefer ExecSQL and QuerySQL when possible. This escape hatch leaves query construction and safe
 // parameter binding to fn: use QueryContext/ExecContext with driver placeholders and bound values,
 // and select dynamic identifiers only from fixed application choices or an explicit allowlist.
-// Gorest does not sanitize SQL text assembled by the callback. Queries run through fn bypass the
-// transaction of this session, so they are not rolled back with Rollback.
+// Gorest does not sanitize SQL text assembled by the callback. This method is only for operations
+// outside a transaction. It returns an error when this session has an active transaction; use
+// RawQuerySQLWithTx to execute raw queries through the active transaction instead.
+//
+// Deprecated: use RawQuerySQLWithTx to have operations participate in the active transaction.
 func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
 	if dbSession == nil || dbSession.database == nil {
 		return errors.New("database service is not running")
 	}
 
+	if dbSession.database.SQL == nil {
+		return errors.New("SQL database is not running")
+	}
+
+	if dbSession.database.Tx != nil {
+		return errors.New("RawQuerySQL uses the connection pool and cannot be called with an active transaction; use RawQuerySQLWithTx")
+	}
+
+	if fn == nil {
+		return errors.New("SQL query callback is nil")
+	}
+
 	if err := fn(ctx, dbSession.database.SQL); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	return nil
+}
+
+// RawQuerySQLWithTx executes fn using this session's active *sql.Tx when the
+// session is transaction-bound; otherwise it uses the underlying *sql.DB pool.
+// All statements executed through the callback participate in the active transaction
+// and are committed or rolled back with it. Prefer ExecSQL and QuerySQL when possible.
+// The callback remains responsible for safe SQL construction, parameter binding,
+// and closing any rows it opens.
+func (dbSession *DBSession) RawQuerySQLWithTx(ctx context.Context, fn QueryBuilderSQLSession) error {
+	if dbSession == nil || dbSession.database == nil {
+		return errors.New("database service is not running")
+	}
+
+	if dbSession.database.SQL == nil {
+		return errors.New("SQL database is not running")
+	}
+
+	if fn == nil {
+		return errors.New("SQL query callback is nil")
+	}
+
+	if ctx == nil {
+		return errors.New("context is empty")
+	}
+
+	var executor SQLExecutor = dbSession.database.SQL
+
+	if dbSession.database.Tx != nil {
+		executor = dbSession.database.Tx
+	}
+
+	if err := fn(ctx, executor); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 

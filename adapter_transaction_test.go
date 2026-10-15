@@ -88,3 +88,68 @@ func TestBeginTxContextRespectsCallerCancellation(t *testing.T) {
 		t.Fatal("transaction changes remained after caller cancellation")
 	}
 }
+
+func TestRawQuerySQLRejectsActiveTransaction(t *testing.T) {
+	dbSession := newSQLiteDBSession(t, time.Second)
+	txSession, _, _, err := dbSession.BeginTx()
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+
+	called := false
+	err = txSession.RawQuerySQL(context.Background(), func(context.Context, *sql.DB) error {
+		called = true
+		return nil
+	})
+	if err == nil {
+		t.Fatal("RawQuerySQL succeeded with an active transaction")
+	}
+	if called {
+		t.Fatal("RawQuerySQL callback ran with an active transaction")
+	}
+
+	if _, _, rollbackErr := txSession.Rollback(); rollbackErr != nil {
+		t.Fatalf("rollback transaction: %v", rollbackErr)
+	}
+}
+
+func TestRawQuerySQLWithTxUsesTransaction(t *testing.T) {
+	dbSession := newSQLiteDBSession(t, time.Second)
+	if _, err := dbSession.database.SQL.Exec(
+		"CREATE TABLE raw_query_transaction_test (value TEXT)",
+	); err != nil {
+		t.Fatalf("create test table: %v", err)
+	}
+
+	txSession, _, _, err := dbSession.BeginTx()
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+
+	err = txSession.RawQuerySQLWithTx(context.Background(), func(ctx context.Context, executor SQLExecutor) error {
+		_, err := executor.ExecContext(
+			ctx,
+			"INSERT INTO raw_query_transaction_test (value) VALUES (?)",
+			"uncommitted",
+		)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("execute raw SQL in transaction: %v", err)
+	}
+
+	if _, _, err := txSession.Rollback(); err != nil {
+		t.Fatalf("rollback transaction: %v", err)
+	}
+
+	var count int
+	if err := dbSession.database.SQL.QueryRow(
+		"SELECT count(*) FROM raw_query_transaction_test WHERE value = ?",
+		"uncommitted",
+	).Scan(&count); err != nil {
+		t.Fatalf("check rolled-back row: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("found %d rows after rollback, want 0", count)
+	}
+}

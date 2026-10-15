@@ -52,7 +52,7 @@ Native does not automatically mean faster or safer. ORM-generated and native ope
 - Create a context with an appropriate deadline and always call its cancel function.
 - Check the returned `error`; use `message` as troubleshooting context and `httpCode` as a suggested status. Decide separately what message is appropriate for the public API.
 - Close result resources. SQL rows must be closed and checked with `rows.Err()`. Mongo cursors must be closed. Scylla iterators must be closed and the close error checked.
-- Use `DBSession.BeginTx()` for SQL transactions; it applies `database.Config.Timeout`. Use `BeginTxContext(ctx)` when the transaction should also follow the request's cancellation or deadline. `QuerySQL()` and `ExecSQL()` use the active transaction session. `RawQuerySQL()` receives the underlying pool directly and bypasses the session transaction. MongoDB and ScyllaDB `BeginTx`/`Commit`/`Rollback` are currently no-ops in Gorest and do not make a sequence of operations atomic.
+- Use `DBSession.BeginTx()` for SQL transactions; it applies `database.Config.Timeout`. Use `BeginTxContext(ctx)` when the transaction should also follow the request's cancellation or deadline. `QuerySQL()`, `ExecSQL()`, and `RawQuerySQLWithTx()` use the active transaction session. The legacy `RawQuerySQL()` pool callback is rejected when called on a transaction-bound session; use `RawQuerySQLWithTx()` for raw SQL that must participate in the transaction. MongoDB and ScyllaDB `BeginTx`/`Commit`/`Rollback` are currently no-ops in Gorest and do not make a sequence of operations atomic.
 
 ## Native SQL
 
@@ -139,11 +139,11 @@ if err != nil {
 
 `QuerySQL()` and `ExecSQL()` run through the `DBSession`; when that session is transaction-bound, they execute inside its SQL transaction. Use the same transaction session for all statements in the unit of work, then handle both rollback and commit errors. See the complete [ORM transaction lifecycle example](orm.md#transactions); the same session lifecycle applies to native SQL calls.
 
-Use `RawQuerySQL()` only when the wrapped helpers are insufficient, for example when a third-party query library needs the underlying `*sql.DB`. It is an escape hatch: Gorest does not sanitize SQL assembled inside the callback, so use the library's parameter-binding API or `QueryContext`/`ExecContext` with bound values. Continue to allowlist any dynamic table/column names or sort directions. The callback receives the underlying pool and bypasses the session's active transaction, so statements inside it are not rolled back by `DBSession.Rollback()`.
+Prefer `RawQuerySQLWithTx()` when the wrapped helpers are insufficient. If called on a transaction-bound `DBSession`, it passes a small `SQLExecutor` interface backed by that session's active `*sql.Tx`. Therefore statements executed through the callback are part of the same transaction and are committed or rolled back by `txSession.Commit()` or `txSession.Rollback()`. If the session has no active transaction, the executor is backed by the underlying `*sql.DB` pool. A callback error is returned to the caller; Gorest does not automatically roll back the transaction, so handle the error and call `Rollback()` as part of the normal transaction lifecycle:
 
 ```go
-err := app.Database().RawQuerySQL(ctx, func(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx,
+err := txSession.RawQuerySQLWithTx(ctx, func(ctx context.Context, executor gorest.SQLExecutor) error {
+	_, err := executor.ExecContext(ctx,
 		"UPDATE users SET email = ? WHERE id = ?",
 		newEmail,
 		userID,
@@ -156,7 +156,9 @@ if err != nil {
 }
 ```
 
-This example also uses `?` illustratively; use the placeholder syntax supported by the configured SQL driver. If a raw callback runs a query that returns rows, it must close them and check `rows.Err()` just as it would with `QuerySQL()`.
+`RawQuerySQL()` is retained for compatibility with callbacks that specifically require `*sql.DB`, but it is deprecated and returns an error when called on a transaction-bound session. Use it only for operations intentionally outside a transaction. Gorest does not sanitize SQL assembled inside either callback: bind values with the driver's parameter syntax and allowlist dynamic identifiers. If a raw callback runs a query that returns rows, it must close them and check `rows.Err()` just as it would with `QuerySQL()`.
+
+The example uses `?` illustratively; use the placeholder syntax supported by the configured SQL driver.
 
 ## Native MongoDB
 
