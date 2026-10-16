@@ -15,10 +15,20 @@ func (log *Log) Close() (string, int, error) {
 			errors.New("logger is empty")
 	}
 
+	var closeErr error
 	if err := log.logger.Sync(); err != nil {
+		closeErr = errors.Join(closeErr, fmt.Errorf("close log sync failed: %w", err))
+	}
+
+	if log.closeFn != nil {
+		if err := log.closeFn(); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("close log output failed: %w", err))
+		}
+	}
+	if closeErr != nil {
 		return "Ensure the underlying file system or logging output stream is writable and healthy.",
 			http.StatusInternalServerError,
-			fmt.Errorf("close log sync failed: %w", err)
+			closeErr
 	}
 
 	return "Logger closed successfully", http.StatusOK, nil

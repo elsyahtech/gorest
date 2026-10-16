@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func Run(config ...Config) Config {
@@ -38,18 +39,21 @@ func New(config *Config, appName string) (*Log, string, error) {
 		return nil, message, fmt.Errorf("create log directory: %w", err)
 	}
 
-	logFile := config.LogFile
-	filePath := filepath.Join(logDir, logFile)
-
-	file, closeFn, err := zap.Open(filePath)
-	if err != nil {
+	writer := &lumberjack.Logger{
+		Filename:   filepath.Join(logDir, config.LogFile),
+		MaxSize:    config.MaxFileSize,
+		MaxBackups: config.MaxBackups,
+		MaxAge:     config.MaxAge,
+	}
+	if _, err := writer.Write(nil); err != nil {
 		const message = "Log Initialize: ensure log file can be created and writable"
+		_ = writer.Close()
 
 		return nil, message, fmt.Errorf("open log file: %w", err)
 	}
 
 	fileEncoder := zapcore.NewJSONEncoder(newEncoderConfig())
-	core := zapcore.NewCore(fileEncoder, file, zapcore.InfoLevel)
+	core := redactingCore{Core: zapcore.NewCore(fileEncoder, zapcore.AddSync(writer), zapcore.InfoLevel)}
 	fields := map[string]any{"service": appName}
 	zapFields := make([]zap.Field, 0, len(fields))
 
@@ -63,7 +67,6 @@ func New(config *Config, appName string) (*Log, string, error) {
 		log.logger = zap.New(core, zap.Fields(zapFields...))
 	}
 
-	_ = closeFn
-
+	log.closeFn = writer.Close
 	return &log, "", nil
 }

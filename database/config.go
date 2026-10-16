@@ -52,7 +52,11 @@ type Config struct {
 	// Transport Layer Security (TLS) mode for database connections. The accepted
 	// value is driver-specific:
 	//   - PostgreSQL: "disable", "require", "verify-ca", or "verify-full".
-	//   - MySQL: driver TLS mode; SSLCAPath must be set for Gorest to add the TLS option.
+	//   - MySQL: driver TLS mode; a non-empty SSLCAPath enables passing this
+	//     mode to the driver, but the path itself is not loaded by Gorest.
+	//     "true" uses the driver's system certificate roots. For a custom CA
+	//     or client certificate, register a driver TLS profile and set TLS to
+	//     its name; SSLCAPath must still be non-empty to enable that option.
 	//   - SQL Server: "disable", "optional", "mandatory", or "strict"; keep
 	//     TrustServerCertificate false to validate the server certificate.
 	//   - Oracle: "enable" uses TCPS and requires an Oracle wallet via SSLCAPath;
@@ -73,8 +77,9 @@ type Config struct {
 
 	// Path to SSL certificate file (client certificate for mutual TLS).
 	// Example: "./data/cert/client.crt"
-	// Not applicable for Oracle: godror/OCI uses wallet-based auth (see SSLCAPath),
-	// not separate client cert/key files like Postgres/MySQL mTLS. Leave empty for Oracle.
+	// PostgreSQL uses this with SSLKeyPath for client-certificate authentication.
+	// MySQL does not load this path; use a registered driver TLS profile instead.
+	// Oracle uses a wallet via SSLCAPath and does not use this field.
 	// Default: empty
 	SSLCertPath string
 
@@ -87,6 +92,9 @@ type Config struct {
 
 	// Path to CA certificate file for server certificate verification.
 	// Example: "./data/cert/ca.crt"
+	// MySQL note: a non-empty value only enables its TLS option; Gorest does not
+	// load this path as a CA file. The driver uses system roots for TLS "true";
+	// use a registered driver TLS profile for a custom CA or client certificate.
 	// Oracle: repurposed as the path to the Oracle Wallet directory (equivalent to
 	// TNS_ADMIN), containing cwallet.sso, tnsnames.ora, sqlnet.ora, etc. Required
 	// when TLS is "enable". Example: "./data/oracle/wallet"

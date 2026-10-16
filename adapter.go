@@ -535,6 +535,18 @@ func (app *App) Close() (string, int, error) {
 		httpCode = http.StatusOK
 	)
 
+	if app.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), server.DefaultServerShutdownTimeout)
+		err := app.server.Shutdown(ctx)
+		cancel()
+		if err != nil {
+			msg := "failed to gracefully shut down HTTP server"
+			app.Log(Map{LogFieldKeyError: err}).Error(msg)
+			message, httpCode = msg, http.StatusInternalServerError
+			errs = append(errs, fmt.Errorf("failed to shut down HTTP server: %w", err))
+		}
+	}
+
 	if app.redis != nil {
 		msg, err := app.redis.Close()
 		if err != nil {
@@ -659,20 +671,49 @@ func (app *App) GetRedisConfig() gorestredis.Config {
 	return *app.config.redis
 }
 
-// Redis returns the Redis client so the handler can run Redis commands directly.
-// It returns an error with a troubleshooting message if Redis is not running, for example when
-// redis.Run(...) is not registered with app.Use(...) or Enabled is false in the config.
-func (app *App) Redis() (*redis.Client, string, error) {
+func (app *App) Redis() *RedisSession {
 	if app == nil {
-		return nil, "Ensure that you have run app.Start() before calling app.Redis().", errors.New("Gorest is not started.")
+		return &RedisSession{}
 	}
 
-	client, message, err := app.redis.Redis()
+	return &RedisSession{
+		redis:  app.redis,
+		config: app.config.redis,
+	}
+}
+
+// QueryRedis returns the Redis client for Redis commands. Pass a context to every
+// command; RedisSession.NewContext can apply the configured operation timeout.
+// It returns an error if Redis is not enabled, was not registered, or failed to initialize.
+func (redisSession *RedisSession) QueryRedis() (*redis.Client, string, int, error) {
+	if redisSession == nil || redisSession.redis == nil {
+		return nil, "Ensure that you have run redis.Run(redis.Config{...}) in your app. " +
+				"To use QueryRedis, Redis must be enabled and initialized with app.Use(...).",
+			http.StatusNotImplemented,
+			errors.New("redis has not been run in your app")
+	}
+
+	client, message, httpCode, err := redisSession.redis.Redis()
 	if err != nil {
-		return nil, message, fmt.Errorf("%w", err)
+		return nil, message, httpCode, fmt.Errorf("%w", err)
 	}
 
-	return client, "", nil
+	return client, message, httpCode, nil
+}
+
+// NewContext returns a context for a Redis operation, capped by the configured
+// Redis timeout and any earlier parent deadline. Always call the returned cancel
+// function.
+func (redisSession *RedisSession) NewContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if redisSession != nil && redisSession.config != nil && redisSession.config.Timeout > 0 {
+		return context.WithTimeout(ctx, redisSession.config.Timeout)
+	}
+
+	return ctx, func() {}
 }
 
 // Get registers a route for GET methods that requests a representation

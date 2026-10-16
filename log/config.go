@@ -28,14 +28,12 @@ type Config struct {
 	MaxFileSize int
 
 	// MaxBackups defines the maximum number of old log files to retain after rotation.
-	// 0 means retain all old log files (not recommended for disk space management).
 	// Example: 5 (keep up to 5 old backup files)
 	// Default: 5
 	MaxBackups int
 
 	// MaxAge defines the maximum number of days to retain old log files based on
 	// the timestamp encoded in their filename.
-	// 0 means forever (or controlled solely by MaxBackups).
 	// Example: 7 (delete logs older than 7 days)
 	// Default: 7
 	MaxAge int

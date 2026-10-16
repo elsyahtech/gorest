@@ -59,15 +59,19 @@ func (app *App) Start() *App {
 	quit := make(chan os.Signal, 1)
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(quit)
+	if !app.config.Debug && app.server != nil && app.config.server != nil {
+		app.server.ExpectListen()
+	}
 	startServer()
 
 	sig := <-quit
 	app.Log(map[string]any{"signal": sig.String()}, true).Info("Application received shutdown signal...")
 
 	if message, _, err := app.Close(); err != nil {
-		app.Log(map[string]any{LogFieldKeyError: err}, true).Error(message)
+		golog.Printf("application shutdown failed: %s: %v", message, err)
 	} else {
-		app.Log(nil, true).Info(message)
+		golog.Print(message)
 	}
 
 	return app

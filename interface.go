@@ -35,6 +35,11 @@ type DBSession struct {
 	txCancel context.CancelFunc
 }
 
+type RedisSession struct {
+	redis  *redis.Redis
+	config *redis.Config
+}
+
 type Map map[string]any
 
 type Context = server.Context

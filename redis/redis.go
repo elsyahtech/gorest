@@ -19,14 +19,23 @@ func Run(cfg Config) Config {
 
 func New(ctx context.Context, config *Config) (*Redis, string, error) {
 	if config == nil {
-		return nil, "", nil
+		const message = "provide an enabled Redis configuration before initializing the Redis client"
+
+		return nil, message, errors.New("redis config is nil")
+	}
+
+	if ctx == nil {
+		const message = "provide a non-nil context with an appropriate startup timeout"
+
+		return nil, message, errors.New("redis initialization context is nil")
 	}
 
 	opts := &redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", config.Host, config.Port),
-		Username: config.Username,
-		Password: config.Password,
-		DB:       config.Database,
+		Addr:                  fmt.Sprintf("%s:%s", config.Host, config.Port),
+		Username:              config.Username,
+		Password:              config.Password,
+		DB:                    config.Database,
+		ContextTimeoutEnabled: true,
 
 		// Timeouts
 		DialTimeout:  config.Timeout,
@@ -59,8 +68,13 @@ func New(ctx context.Context, config *Config) (*Redis, string, error) {
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		const message = "ensure redis service/daemon is running and ensure network connectivity to the server is stable"
+		pingErr := fmt.Errorf("try ping to redis host: %w", err)
 
-		return nil, message, fmt.Errorf("try ping to redis host: %w", err)
+		if closeErr := client.Close(); closeErr != nil {
+			pingErr = errors.Join(pingErr, fmt.Errorf("close redis client after failed startup ping: %w", closeErr))
+		}
+
+		return nil, message, pingErr
 	}
 
 	return &Redis{client: client}, "", nil
@@ -77,7 +91,7 @@ func setupTLS(config *Config) (*tls.Config, string, error) {
 		}
 	}
 
-	if config.SSLCertPath != "" && config.SSLKeyPath != "" {
+	if config.SSLCertPath != "" || config.SSLKeyPath != "" {
 		if msg, err := configSSLCertPath(config, tlsConfig); err != nil {
 			return nil, msg, err
 		}
@@ -108,6 +122,12 @@ func configSSLCAPath(config *Config, tlsConfig *tls.Config) (string, error) {
 }
 
 func configSSLCertPath(config *Config, tlsConfig *tls.Config) (string, error) {
+	if config.SSLCertPath == "" || config.SSLKeyPath == "" {
+		const message = "configure both the client certificate and private key, or leave both paths empty"
+
+		return message, errors.New("client certificate and key must be configured together")
+	}
+
 	cert, err := tls.LoadX509KeyPair(config.SSLCertPath, config.SSLKeyPath)
 	if err != nil {
 		const message = "ensure the cert/key pair is valid, paths are correct, and formats match."

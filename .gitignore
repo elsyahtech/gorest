@@ -41,6 +41,8 @@ logs/
 
 database/gorest.db
 
+integration_test/logs/
+
 orm/*.txt
 server/*.png
 *db

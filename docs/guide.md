@@ -1,8 +1,8 @@
 ## 1. Logger Guide
 Gorest integrated with Zap as a core logger.
 
-* **Overview:** A high-performance, built-in logging system designed to give you absolute operational visibility without sacrificing speed. 
-* **Key Benefits:** Zero-allocation philosophy, strict structured logging, and automated log file rotation out-of-the-box. Every operational action (server startup, database migrations, security warnings) is safely tracked.
+* **Overview:** A high-performance, built-in structured logger for GOREST lifecycle and framework messages.
+* **Key Benefits:** Zap-based structured logging, automatic size-based file rotation with backup count and age limits, and heuristic redaction of recognized sensitive values. Applications remain responsible for emitting their own request/business events, minimizing logged data, and redacting application-specific sensitive values before logging.
 * **Sample Output Preview:**
 ```text
 {"level":"info","timestamp":"2026-10-06T22:44:31.036+0700","message":"starting gorest","service":"My App"}
@@ -58,6 +58,8 @@ app.Use(database.Run(dbConfig))
 When enabled, Gorest runs database startup tasks synchronously before starting the HTTP server. Migration runs before seeding when both are enabled. The `Migration` and `Seeder` flags are independent, so seeding can be enabled without running migrations.
 
 If a migration or seeder returns an error, Gorest logs the failure and aborts application startup; the application is not started. If migration fails, seeding is skipped. Check the logged error and message, resolve the database or script issue, then restart the application. A failed task may already have made database changes; rollback behavior depends on the database driver and migration script.
+
+When `app.Start()` receives `SIGINT` or `SIGTERM`, GOREST initiates graceful Fiber shutdown and waits for active requests to finish before closing Redis, database, and logger resources. The graceful wait is bounded by 30 seconds; if it expires, shutdown reports an error and proceeds with closing the remaining services. Calling `app.Close()` directly follows the same server-before-dependencies order. Applications do not need to reach into GOREST's server or service instances to perform this shutdown sequence.
 
 > 🛡️ **Smart Engine Protection (No Overwrite Worries):**
 > You don't need to worry about accidentally wiping your production or development data if you leave migration or seeder flags enabled (`true`) by accident:

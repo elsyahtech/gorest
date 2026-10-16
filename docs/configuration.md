@@ -1,7 +1,7 @@
 ## 🔧 Detailed Configuration Guide
 
 ### 1. Logger Configuration (`log.Run(...)`)
-In Gorest, logging is treated as a mandatory first-class citizen. **The logger cannot be disabled**—it is baked into the core engine to ensure that every application event, request, and error is properly tracked from the second the server boots up.
+In Gorest, logging is a mandatory service and cannot be disabled. GOREST emits its lifecycle and framework messages through Zap; application request and business events are logged only where the application or middleware explicitly emits them.
 
 By default, Gorest automatically initializes a default logger and creates a `logs/` directory at your root path, saving logs directly to `./logs/app.log`.
 
@@ -26,12 +26,16 @@ Logger Parameter Breakdown:
 - **MaxBackups:** Controls how many historical backup files are kept on disk, protecting your storage space from overflowing.
 - **MaxAge:** Automatically purges log backups older than a specified number of days (e.g., deleting logs older than 7 days).
 
+The logger rotates the configured file by size and enforces the configured backup count and age during rotation. New log directories are created with mode `0700`; new log files use mode `0600`. Existing directories and existing log-file permissions are not tightened automatically, so verify their ownership and access controls in deployment. One process should own a given log file; do not have multiple application processes write to the same rotating file.
+
+`app.Close()` calls Zap's `Sync()` and closes the rotating file writer. The rotating sink does not expose an `fsync` operation, so this is not a guarantee that data has been durably committed to physical storage. Zap does not return a write error from each `Info`/`Error` call; output write failures are reported through Zap's internal error output (stderr by default), and logging calls do not make business operations transactional or durable. The logger initialized by GOREST and exposed through `app.Log(...)` redacts recognized sensitive field names and common message patterns (credential assignments, Bearer/Basic authorization values, JWTs, email addresses, and phone numbers) to `xxxxx`, including fields attached with Zap's `With(...)`. This does not affect separate logger instances or other logging libraries. This heuristic cannot reliably identify arbitrary names, addresses, identifiers, custom encodings, or secrets without recognizable labels, and it may produce false positives. Do not rely on it as a substitute for data minimization; avoid logging credentials, session data, and unnecessary personal data, and redact application-specific values before passing them to `app.Log(...)`.
+
 ### 2. HTTP Server Configuration (`server.Run(...)`)
 For the HTTP layer, Gorest integrates **Fiber** as its core HTTP engine under the hood, bringing blazing-fast performance, low memory footprint, and an expressive routing API to your application lifecycle.
 
 By default, the server runs smoothly out-of-the-box with sensible defaults. However, you can deeply customize the server engine, address, port, and security/performance middleware using `server.Config`:
 
-When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the GOREST core defaults; GOREST preserves its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout. When `server.New()` receives a `Core` with zero `ReadTimeout` or `WriteTimeout`, it preserves the values and logs a warning; it does not reject startup. Configure finite positive timeouts unless the unlimited behavior is intentional and documented for the application.
+When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the GOREST core defaults; GOREST preserves its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout. When `server.New()` receives a `Core` with zero `ReadTimeout` or `WriteTimeout`, it preserves the values and logs a warning; it does not reject startup. Configure finite positive timeouts unless the unlimited behavior is intentional and documented for the application. On `SIGINT` or `SIGTERM`, `app.Start()` gracefully shuts down Fiber before closing Redis, database, and logger resources, waiting up to 30 seconds for active requests. A timeout is reported and remaining services are then closed; `app.Close()` uses the same shutdown sequence. Unit coverage that constructs a server directly verifies `app.Close()` waits for in-flight requests and stops the listener, while a separate helper-process integration test exercises `app.Start()` plus `SIGTERM`. These tests model local behavior and cannot guarantee identical signal delivery, traffic, dependency behavior, or termination timing in every application's deployment; verify shutdown with the application's actual process supervisor/container and real handlers.
 
 `ReadTimeout` applies to reading the full request, including its body, so it bounds how long a slow client can take to send a request. `BodyLimit` limits request size, but does not limit how slowly those bytes can arrive; it is not a substitute for a finite `ReadTimeout`. GOREST's server tests include a local TCP test that sends an incomplete request body and verifies Fiber returns `408 Request Timeout` when a finite read timeout expires. This verifies the configured server behavior in the test environment, not behavior through every reverse proxy, load balancer, network, or production deployment.
 
@@ -136,6 +140,27 @@ Redis Parameter Breakdown:
 - **Timeouts & Lifetimes** (Timeout, PoolTimeout, ConnMaxLifetime, ConnMaxIdleTime): Prevents hanging threads, socket leaks, and stale connections by managing strict duration limits.
 - **Pool & Buffer Optimization** (PoolSize, MinIdleConns, MaxActiveConns, MaxRetries, ReadBufferSize, WriteBufferSize): Fine-tunes concurrency throughput. Note on PoolSize: When deploying inside Docker or Kubernetes, ensure your CPU container limits are set properly so Go's runtime.GOMAXPROCS doesn't misread the host's total core count!
 
+When `Enabled` is true, `app.Use(redis.Run(config))` initializes Redis and verifies connectivity with `PING`; an initialization error is logged and aborts startup. When Redis is disabled or not registered, `app.Redis().QueryRedis()` returns an explicit unavailable-service error instead of a nil client. `app.Close()` closes an initialized Redis client during application shutdown.
+
+`QueryRedis()` exposes the underlying go-redis client with command context deadlines enabled. Pass a request or operation context to every command; use `RedisSession.NewContext(parent)` to derive a context capped by the configured Redis `Timeout`, then cancel it when the operation finishes:
+
+```go
+session := app.Redis()
+ctx, cancel := session.NewContext(parentCtx) // parentCtx should be request-scoped when available.
+defer cancel()
+
+client, message, code, err := session.QueryRedis()
+if err != nil {
+    return message, code, err
+}
+
+if err := client.Set(ctx, "cache:key", "value", time.Minute).Err(); err != nil {
+    return "Redis command failed", 500, err
+}
+```
+
+TLS verification is enabled by default when TLS is configured; GOREST does not set `InsecureSkipVerify`. `SSLCAPath` adds a CA pool for server verification. Configure both `SSLCertPath` and `SSLKeyPath` together when mutual TLS is required. Connection timeout, retry, and pool options are passed to go-redis, but they do not guarantee recovery from prolonged Redis outages; validate reconnect behavior, resource limits, and application fallback policy against the Redis version and deployment used by your service.
+
 ### 4. Database Configuration (`database.Run(...)`)
 Gorest provides modular database adapters supporting both SQL and NoSQL environments (**PostgreSQL, MySQL, SQL Server, Oracle, SQLite, MongoDB, and ScyllaDB**). 
 
@@ -149,7 +174,7 @@ For compatibility and ease of local development, an omitted `TLS` value defaults
 
 For an enabled database, `app.Start()` logs a driver-aware warning when the environment is production-like (anything except `development` or `testing`) and TLS is disabled, optional, lacks required certificate configuration, or cannot be verified from GOREST's TLS field (ScyllaDB). This is a warning, not a startup block; operators must still configure and verify encryption before deployment. Custom labels such as `staging` and `uat` receive the same warning policy.
 
-Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`; MySQL requires `SSLCAPath` for Gorest to add its TLS connection option. SQLite has no network TLS. ScyllaDB's TLS is not currently configured by this database `TLS` field, so setting it does not enable ScyllaDB transport encryption.
+Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`. MySQL requires a non-empty `SSLCAPath` only as a switch for GOREST to pass the `TLS` value to go-sql-driver/mysql; GOREST does not load that path as a CA file. MySQL TLS `true` uses the driver's system certificate roots. For a custom CA or client certificate, register a TLS profile with the MySQL driver and set `TLS` to that profile name (while keeping `SSLCAPath` non-empty); GOREST does not use `SSLCertPath` or `SSLKeyPath` for MySQL. SQLite has no network TLS. ScyllaDB's TLS is not currently configured by this database `TLS` field, so setting it does not enable ScyllaDB transport encryption.
 
 ```go
 app.Use(database.Run(database.Config{
@@ -174,7 +199,7 @@ app.Use(database.Run(database.Config{
     TLS:                    "disable", // Local/development compatibility default only; explicitly configure production TLS
     SSLCertPath:            "",        // Path to client SSL certificate file (mutual TLS)
     SSLKeyPath:              "",        // Path to client SSL private key file
-    SSLCAPath:               "",        // Path to CA certificate (or Oracle Wallet directory / TNS_ADMIN for Oracle)
+    SSLCAPath:               "",        // CA path (PostgreSQL/etc.), Oracle Wallet; for MySQL, non-empty enables TLS option but path isn't loaded
     TrustServerCertificate: false,     // MSSQL only: validate the server certificate; configure its CA as needed
 
     // Driver-Specific Addons
