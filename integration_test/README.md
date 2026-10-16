@@ -34,6 +34,11 @@ The configured account must be allowed to create and drop uniquely named test
 tables or collections in the selected database/keyspace. Do not point the tests
 at production data. ScyllaDB's configured keyspace must already exist.
 
+## Database test status
+
+Database integration tests for PostgreSQL, Oracle AI Database 26ai Free, SQL Server 2022, MongoDB 8.2, and ScyllaDB 3.0 have been successfully verified locally covering CRUD operations, transaction rollbacks, and pagination/grouping, while a connection initialization fix for MySQL's charset parameter has been applied and verified via unit tests; furthermore, clients are strongly advised to provision dedicated integration environments that closely mirror their production setup—including specific database engine versions, high-availability topology, and strict TLS/SSL encryption with valid certificates—while ensuring GOREST_IT_REQUIRED=1 and the corresponding GOREST_IT_<DATABASE>_* environment variables are enforced to guarantee full test validity before deployment.
+
+
 ## Application and logger integration tests
 
 These tests use GOREST's public app and logger APIs and isolated temporary

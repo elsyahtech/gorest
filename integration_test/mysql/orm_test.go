@@ -3,11 +3,45 @@
 package mysql_test
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/integration_test/internaltest"
 )
+
+func TestMySQLServerVersion(t *testing.T) {
+	app := internaltest.OpenApp(t, database.MYSQL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rows, message, code, err := app.Database().QuerySQL(ctx, "SELECT VERSION(), @@character_set_connection")
+	if err != nil {
+		t.Fatalf("query MySQL server version failed (HTTP %d, %s): %v", code, message, err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatalf("MySQL server version query returned no row: %v", rows.Err())
+	}
+
+	var version, charset string
+	if err := rows.Scan(&version, &charset); err != nil {
+		t.Fatalf("scan MySQL server version and charset: %v", err)
+	}
+	if !strings.EqualFold(charset, database.ConfigDefault.Charset) {
+		t.Errorf("connection charset = %q, want %q", charset, database.ConfigDefault.Charset)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate MySQL server version result: %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatalf("close MySQL server version rows: %v", err)
+	}
+
+	t.Logf("MySQL server version: %s, connection charset: %s", version, charset)
+}
 
 func TestORMCRUDAndBoundValues(t *testing.T) {
 	internaltest.SQLCRUD(t, database.MYSQL)

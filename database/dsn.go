@@ -11,7 +11,7 @@ import (
 	"github.com/godror/godror"
 )
 
-func mysqlDriverConfig(cfg *Config, timezone string) *mysql.Config {
+func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 	dsnConfig := mysql.NewConfig()
 	dsnConfig.User = cfg.Username
 	dsnConfig.Passwd = cfg.Password
@@ -21,7 +21,9 @@ func mysqlDriverConfig(cfg *Config, timezone string) *mysql.Config {
 	dsnConfig.Params = map[string]string{
 		"parseTime": "true",
 		"loc":       timezone,
-		"charset":   cfg.Charset,
+	}
+	if err := dsnConfig.Apply(mysql.Charset(cfg.Charset, "")); err != nil {
+		return nil, fmt.Errorf("configure MySQL charset: %w", err)
 	}
 
 	// SSL/TLS support untuk MySQL (if needed)
@@ -29,7 +31,7 @@ func mysqlDriverConfig(cfg *Config, timezone string) *mysql.Config {
 		dsnConfig.Params["tls"] = cfg.TLS
 	}
 
-	return dsnConfig
+	return dsnConfig, nil
 }
 
 // MSSQL/SQLServer DSN builders dengan SSL support.

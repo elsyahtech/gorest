@@ -172,11 +172,16 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 	)
 
 	if driver == MYSQL {
-		connector, connectorErr := mysql.NewConnector(mysqlDriverConfig(cfg, timezone))
-		if connectorErr != nil {
-			err = connectorErr
+		driverConfig, configErr := mysqlDriverConfig(cfg, timezone)
+		if configErr != nil {
+			err = configErr
 		} else {
-			database = sql.OpenDB(connector)
+			connector, connectorErr := mysql.NewConnector(driverConfig)
+			if connectorErr != nil {
+				err = connectorErr
+			} else {
+				database = sql.OpenDB(connector)
+			}
 		}
 	} else if dsnBuilder == nil {
 		err = fmt.Errorf("missing DSN builder for %s", driver)
