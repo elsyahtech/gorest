@@ -428,6 +428,19 @@ func TestPreloadRelationMapsForeignAndTargetColumns(t *testing.T) {
 	}
 }
 
+func TestUpsertClauseQualificationDoesNotMutateQueryBuilder(t *testing.T) {
+	query := &ORM{StringBuilder: &strings.Builder{}}
+	query.StringBuilder.WriteString("INSERT INTO records")
+
+	got := query.upsertClause("id = ? AND score < ?", "records")
+	if want := "records.id = ? AND records.score < ?"; got != want {
+		t.Fatalf("qualified upsert clause = %q, want %q", got, want)
+	}
+	if got, want := query.StringBuilder.String(), "INSERT INTO records"; got != want {
+		t.Fatalf("query builder mutated during qualification: %q, want %q", got, want)
+	}
+}
+
 func TestPreloadAliasColumnsDoNotConflictWithParentColumns(t *testing.T) {
 	type user struct {
 		ID int `gorest:"id, primary_key"`

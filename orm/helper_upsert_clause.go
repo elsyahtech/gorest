@@ -6,6 +6,7 @@ import "strings"
 // ON CONFLICT / MERGE clauses (Postgres & SQL Server).
 func (orm *ORM) upsertClause(clause, table string) string {
 	last := 0
+	var builder strings.Builder
 
 	for _, loc := range upsertColRe.FindAllStringSubmatchIndex(clause, -1) {
 		start, end := loc[2], loc[3] // grup 1 = nama kolom
@@ -20,15 +21,15 @@ func (orm *ORM) upsertClause(clause, table string) string {
 			continue
 		}
 
-		orm.safeWriteString(clause[last:start])
-		orm.safeWriteString(table)
-		orm.safeWriteByte('.')
-		orm.safeWriteString(word)
+		builder.WriteString(clause[last:start])
+		builder.WriteString(table)
+		builder.WriteByte('.')
+		builder.WriteString(word)
 
 		last = end
 	}
 
-	orm.safeWriteString(clause[last:])
+	builder.WriteString(clause[last:])
 
-	return orm.StringBuilder.String()
+	return builder.String()
 }

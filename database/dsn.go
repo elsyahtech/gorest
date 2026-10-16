@@ -18,17 +18,20 @@ func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 	dsnConfig.Net = "tcp"
 	dsnConfig.Addr = net.JoinHostPort(cfg.Host, cfg.Port)
 	dsnConfig.DBName = cfg.Name
-	dsnConfig.Params = map[string]string{
-		"parseTime": "true",
-		"loc":       timezone,
+	dsnConfig.ParseTime = true
+
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return nil, fmt.Errorf("configure MySQL timezone %q: %w", timezone, err)
 	}
+	dsnConfig.Loc = location
+
 	if err := dsnConfig.Apply(mysql.Charset(cfg.Charset, "")); err != nil {
 		return nil, fmt.Errorf("configure MySQL charset: %w", err)
 	}
 
-	// SSL/TLS support untuk MySQL (if needed)
-	if cfg.SSLCAPath != "" {
-		dsnConfig.Params["tls"] = cfg.TLS
+	if cfg.SSLCAPath != "" && cfg.TLS != TLSDisabled {
+		dsnConfig.TLSConfig = cfg.TLS
 	}
 
 	return dsnConfig, nil

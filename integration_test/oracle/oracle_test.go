@@ -50,3 +50,27 @@ func TestORMTransactionRollback(t *testing.T) {
 func TestORMPaginationAndGrouping(t *testing.T) {
 	internaltest.SQLPaginationAndGrouping(t, database.ORACLE)
 }
+
+func TestORMCoverage(t *testing.T) {
+	t.Run("joins and relation mapping", func(t *testing.T) {
+		internaltest.SQLJoinAndPreload(t, database.ORACLE)
+	})
+	t.Run("nullable mapping", func(t *testing.T) {
+		internaltest.SQLNullableMapping(t, database.ORACLE)
+	})
+	t.Run("pagination boundaries", func(t *testing.T) {
+		internaltest.SQLPaginationBoundaries(t, database.ORACLE)
+	})
+	t.Run("batch failure atomicity", func(t *testing.T) {
+		internaltest.SQLBatchFailureAtomicity(t, database.ORACLE)
+	})
+	t.Run("live query cancellation", func(t *testing.T) {
+		internaltest.SQLContextCancellation(t, database.ORACLE)
+	})
+	t.Run("upsert behavior", func(t *testing.T) {
+		internaltest.SQLUpsertBehavior(t, database.ORACLE)
+	})
+	t.Run("invalid ORM inputs", func(t *testing.T) {
+		internaltest.SQLInvalidInputs(t, database.ORACLE)
+	})
+}

@@ -13,7 +13,7 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	cfg := testDSNConfig()
 	cfg.Port = MYSQL_PORT
 	cfg.Charset = "utf8mb4"
-	cfg.TLS = "skip-verify"
+	cfg.TLS = "false"
 	cfg.SSLCAPath = "/tmp/ca cert.pem"
 	driverConfig, err := mysqlDriverConfig(cfg, "UTC")
 	if err != nil {
@@ -32,12 +32,17 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	if driverConfig.Addr != cfg.Host+":"+cfg.Port {
 		t.Errorf("address = %q, want %q:%s", driverConfig.Addr, cfg.Host, cfg.Port)
 	}
-	if driverConfig.Params["loc"] != "UTC" ||
-		driverConfig.Params["parseTime"] != "true" || driverConfig.Params["tls"] != cfg.TLS {
-		t.Errorf("connection parameters = %#v", driverConfig.Params)
+	if !driverConfig.ParseTime {
+		t.Error("ParseTime = false, want true")
 	}
-	if _, exists := driverConfig.Params["charset"]; exists {
-		t.Errorf("charset must be configured with the driver's Charset option, not as a session parameter: %#v", driverConfig.Params)
+	if driverConfig.Loc == nil || driverConfig.Loc.String() != "UTC" {
+		t.Errorf("location = %v, want UTC", driverConfig.Loc)
+	}
+	if driverConfig.TLSConfig != cfg.TLS {
+		t.Errorf("TLSConfig = %q, want %q", driverConfig.TLSConfig, cfg.TLS)
+	}
+	if len(driverConfig.Params) != 0 {
+		t.Errorf("unexpected generic session parameters = %#v", driverConfig.Params)
 	}
 	if _, err := mysql.NewConnector(driverConfig); err != nil {
 		t.Fatalf("mysql.NewConnector() error = %v", err)
