@@ -34,6 +34,8 @@ func New(config *Config) (*Server, string, error) {
 		cfg = configDefault(*config)
 	}
 
+	warnOnUnboundedTimeouts(cfg.Core)
+
 	server := fiber.New(*cfg.Core)
 
 	server.Use(recover.New(*cfg.Recover))

@@ -663,6 +663,10 @@ func (app *App) GetRedisConfig() gorestredis.Config {
 // It returns an error with a troubleshooting message if Redis is not running, for example when
 // redis.Run(...) is not registered with app.Use(...) or Enabled is false in the config.
 func (app *App) Redis() (*redis.Client, string, error) {
+	if app == nil {
+		return nil, "Ensure that you have run app.Start() before calling app.Redis().", errors.New("Gorest is not started.")
+	}
+
 	client, message, err := app.redis.Redis()
 	if err != nil {
 		return nil, message, fmt.Errorf("%w", err)

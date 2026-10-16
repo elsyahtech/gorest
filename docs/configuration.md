@@ -31,7 +31,9 @@ For the HTTP layer, Gorest integrates **Fiber** as its core HTTP engine under th
 
 By default, the server runs smoothly out-of-the-box with sensible defaults. However, you can deeply customize the server engine, address, port, and security/performance middleware using `server.Config`:
 
-When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the default Fiber core configuration entirely; Gorest preserves all its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout.
+When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the GOREST core defaults; GOREST preserves its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout. When `server.New()` receives a `Core` with zero `ReadTimeout` or `WriteTimeout`, it preserves the values and logs a warning; it does not reject startup. Configure finite positive timeouts unless the unlimited behavior is intentional and documented for the application.
+
+`ReadTimeout` applies to reading the full request, including its body, so it bounds how long a slow client can take to send a request. `BodyLimit` limits request size, but does not limit how slowly those bytes can arrive; it is not a substitute for a finite `ReadTimeout`. GOREST's server tests include a local TCP test that sends an incomplete request body and verifies Fiber returns `408 Request Timeout` when a finite read timeout expires. This verifies the configured server behavior in the test environment, not behavior through every reverse proxy, load balancer, network, or production deployment.
 
 Both `server.Run(...)` and `server.New(...)` apply GOREST defaults to omitted sections. This includes all six middleware configurations: CORS, Recover, Request ID, Compress, Helmet, and Limiter. Therefore, `server.New(&server.Config{})` installs the default middleware just like `server.New(nil)`; a nil middleware field means “use the GOREST default,” not “disable it.” `server.New(...)` currently has no nil-based middleware opt-out.
 
@@ -45,12 +47,14 @@ server.Run(server.Config{
     // Default: 3000
     Port: 3000,
 
-    // Optional: setting Core replaces the defaults above. Explicit zero
-    // timeouts are preserved (unlimited for ReadTimeout/WriteTimeout).
+    // Optional: setting Core replaces the GOREST defaults above.
+    // Explicit zero ReadTimeout/WriteTimeout values are preserved as unlimited
+    // and cause server.New() to log a warning.
     Core: &fiber.Config{
         ReadTimeout:  10 * time.Second,
         WriteTimeout: 30 * time.Second,
         IdleTimeout:  120 * time.Second,
+        BodyLimit:    DefaultServerBodyLimit,
     },
 
     // Cross-Origin Resource Sharing (CORS) middleware configuration

@@ -1,8 +1,13 @@
 package server
 
 import (
+	"bytes"
+	"io"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +99,120 @@ func TestConfigDefaultPreservesExplicitCoreTimeouts(t *testing.T) {
 	}
 	if config.Core.IdleTimeout != core.IdleTimeout {
 		t.Errorf("IdleTimeout = %s, want %s", config.Core.IdleTimeout, core.IdleTimeout)
+	}
+}
+
+func TestNewWarnsWhenExplicitCoreHasUnboundedTimeouts(t *testing.T) {
+	var logs bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previousWriter)
+
+	core := &fiber.Config{
+		ReadTimeout:  0,
+		WriteTimeout: 0,
+		IdleTimeout:  0,
+	}
+	server, _, err := New(&Config{Core: core})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if server.SRV.Config().ReadTimeout != 0 || server.SRV.Config().WriteTimeout != 0 {
+		t.Fatal("New() did not preserve explicit zero timeout values")
+	}
+	for _, timeout := range []string{"ReadTimeout", "WriteTimeout"} {
+		if !strings.Contains(logs.String(), timeout) {
+			t.Errorf("warning %q does not identify %s: %q", logs.String(), timeout, logs.String())
+		}
+	}
+	if !strings.Contains(logs.String(), "slow request bodies") {
+		t.Errorf("warning does not describe slow-client risk: %q", logs.String())
+	}
+}
+
+func TestNewDoesNotWarnForZeroIdleTimeoutWithFiniteReadAndWrite(t *testing.T) {
+	var logs bytes.Buffer
+	previousWriter := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previousWriter)
+
+	_, _, err := New(&Config{Core: &fiber.Config{
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+		IdleTimeout:  0,
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if logs.Len() != 0 {
+		t.Errorf("unexpected warning for finite read/write timeouts: %q", logs.String())
+	}
+}
+
+func TestReadTimeoutClosesSlowRequestBody(t *testing.T) {
+	const readTimeout = 250 * time.Millisecond
+	server, _, err := New(&Config{Core: &fiber.Config{
+		ReadTimeout:  readTimeout,
+		WriteTimeout: time.Second,
+		IdleTimeout:  time.Second,
+		BodyLimit:    1024,
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	handlerCalled := make(chan struct{}, 1)
+	server.SRV.Post("/slow", func(c fiber.Ctx) error {
+		handlerCalled <- struct{}{}
+		return c.SendString("unexpected")
+	})
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	listenerDone := make(chan error, 1)
+	go func() {
+		listenerDone <- server.SRV.Listener(listener, fiber.ListenConfig{DisableStartupMessage: true})
+	}()
+	defer func() {
+		_ = server.SRV.Shutdown()
+		select {
+		case <-listenerDone:
+		case <-time.After(2 * time.Second):
+			t.Error("Fiber listener did not stop after shutdown")
+		}
+	}()
+
+	conn, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+	if err != nil {
+		t.Fatalf("net.DialTimeout() error = %v", err)
+	}
+	defer conn.Close()
+
+	if _, err := io.WriteString(conn,
+		"POST /slow HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nx",
+	); err != nil {
+		t.Fatalf("writing partial request failed: %v", err)
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline() error = %v", err)
+	}
+
+	response, err := io.ReadAll(conn)
+	if err != nil {
+		if netErr, ok := err.(net.Error); !ok || !netErr.Timeout() {
+			t.Fatalf("reading response failed: %v", err)
+		}
+	}
+	if !strings.Contains(string(response), "408 Request Timeout") {
+		t.Fatalf("response = %q, want 408 Request Timeout", response)
+	}
+	select {
+	case <-handlerCalled:
+		t.Fatal("handler ran before the incomplete request body was received")
+	default:
 	}
 }
 
