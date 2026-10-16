@@ -3,6 +3,7 @@ package database
 import (
 	"log"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -129,14 +130,14 @@ type Config struct {
 	// Prevents stale connections and memory leaks.
 	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
 	// Recommended: 10-30 minutes
-	// Default: 20 minutes
-	// Example: 20 * time.Minute
+	// Default: 10 minutes
+	// Example: 10 * time.Minute
 	ConnectionMaxLifetime time.Duration
 
 	// MSSQL/SQLSERVER only: whether to trust self-signed server certificates.
 	// false: verify certificate (production, secure)
 	// true: trust any certificate (development/testing only - NEVER true in production!)
-	// Default: true
+	// Default: false
 	TrustServerCertificate bool
 
 	// Enable query logging/debugging.
@@ -157,15 +158,13 @@ type Config struct {
 	// Default: false
 	Seeder bool
 
-	// Enabled determines whether the Database connection is active and running.
-	// Set to true to enable Database integration, or false to disable it.
-	// Example: true
-	// Default: false
+	// Enabled determines whether app.Use initializes the database.
+	// A partial Config's zero value is false; set it to true to enable the
+	// database. ConfigDefault enables the database.
 	Enabled bool
 
 	// Maximum number of open connections to database.
-	// Default: unlimited (change this explicitly in production!)
-	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
+	// Zero uses the configured default of 50 connections.
 	// High-traffic recommended: 50-100
 	// Default: 50
 	MaxOpenConnections int
@@ -259,13 +258,13 @@ var ConfigDefault = Config{
 	// Prevents stale connections and memory leaks.
 	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
 	// Recommended: 10-30 minutes
-	// Default: 20 minutes.
+	// Default: 10 minutes.
 	ConnectionMaxLifetime: DefaultConnectionMaxLifetime,
 
 	// MSSQL/SQLSERVER only: whether to trust self-signed server certificates.
 	// false: verify certificate (production, secure)
 	// true: trust any certificate (development/testing only - NEVER true in production!)
-	// Default: true
+	// Default: false
 	TrustServerCertificate: DefaultTrustServerCertificate,
 
 	// Enable query logging/debugging.
@@ -291,8 +290,7 @@ var ConfigDefault = Config{
 	Enabled: DatabaseEnabled,
 
 	// Maximum number of open connections to database.
-	// Default: unlimited (change this explicitly in production!)
-	// Must be greater than or equal to 0, Please do not set < 0 or lower then 0 (minus)
+	// Zero uses the configured default of 50 connections.
 	// High-traffic recommended: 50-100
 	// Default: 50
 	MaxOpenConnections: DefaultMaxOpenConnections,
@@ -418,6 +416,14 @@ func configDefault(config ...Config) Config {
 func resolveDir(baseDir, dir, defaultDir, driver string) string {
 	if dir == "" {
 		dir = defaultDir
+	}
+
+	resolvedDir := filepath.Clean(dir)
+	relativeDir, err := filepath.Rel(filepath.Clean(baseDir), resolvedDir)
+	if err == nil && relativeDir != "." && relativeDir != ".." &&
+		!strings.HasPrefix(relativeDir, ".."+string(filepath.Separator)) &&
+		filepath.Base(relativeDir) == driver {
+		return resolvedDir
 	}
 
 	return filepath.Join(baseDir, dir, driver)

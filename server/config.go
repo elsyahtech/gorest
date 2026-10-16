@@ -20,33 +20,32 @@ type Config struct {
 	Core *fiber.Config
 
 	// Cors defines the configuration options for Cross-Origin Resource Sharing (CORS) middleware.
-	// Controls how resources can be requested from another domain.
-	// Default: nil (uses framework default settings)
+	// A nil config uses the GOREST default; nil does not disable the middleware.
 	Cors *cors.Config
 
 	// Recover defines the configuration options for panic recovery middleware.
 	// Catches panics during the request lifecycle and prevents server crashes.
-	// Default: nil (uses framework default settings)
+	// A nil config uses the GOREST default; nil does not disable the middleware.
 	Recover *recover.Config
 
 	// Requestid defines the configuration options for Request ID generation middleware.
 	// Injects a unique tracing ID into the request and response headers for tracking.
-	// Default: nil (uses framework default settings)
+	// A nil config uses the GOREST default; nil does not disable the middleware.
 	Requestid *requestid.Config
 
 	// Compress defines the configuration options for response compression middleware.
 	// Compresses HTTP responses (e.g., Gzip, Brotli) to reduce payload size.
-	// Default: nil (uses framework default settings)
+	// A nil config uses the GOREST default; nil does not disable the middleware.
 	Compress *compress.Config
 
 	// Helmet defines the configuration options for security headers middleware (Helmet).
 	// Adds various HTTP headers to secure the application against common web vulnerabilities.
-	// Default: nil (uses framework default settings)
+	// A nil config uses the GOREST default; nil does not disable the middleware.
 	Helmet *helmet.Config
 
 	// Limiter defines the configuration options for rate limiting middleware.
 	// Restricts the number of requests a client can make within a specific time window.
-	// Default: nil (uses framework default settings)
+	// A nil config uses the GOREST default; nil does not disable the middleware.
 	Limiter *limiter.Config
 
 	// Host is server address
@@ -90,9 +89,9 @@ var ConfigDefault = Config{
 	Port: DefaultServerPort,
 }
 
-// configDefault is a helper function that processes the optional config argument.
-// If no configuration is provided, it returns the standard ConfigDefault.
-// Otherwise, it fills missing configuration sections with defaults and validates bounds.
+// configDefault returns the standard ConfigDefault when no config is provided.
+// Otherwise, it fills missing sections and validates bounds. Nil middleware
+// configurations mean use the GOREST defaults; they do not disable middleware.
 func configDefault(config ...Config) Config {
 	if len(config) < 1 {
 		return ConfigDefault

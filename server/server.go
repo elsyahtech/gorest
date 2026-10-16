@@ -27,42 +27,21 @@ func Run(config ...Config) Config {
 }
 
 func New(config *Config) (*Server, string, error) {
+	var cfg Config
 	if config == nil {
-		//nolint:revive
-		config = &ConfigDefault
-	}
-
-	server := fiber.New()
-
-	if config.Core == nil {
-		server = fiber.New(fiber.Config{})
+		cfg = configDefault()
 	} else {
-		server = fiber.New(*config.Core)
+		cfg = configDefault(*config)
 	}
 
-	if config.Recover != nil {
-		server.Use(recover.New(*config.Recover))
-	}
+	server := fiber.New(*cfg.Core)
 
-	if config.Requestid != nil {
-		server.Use(requestid.New(*config.Requestid))
-	}
-
-	if config.Compress != nil {
-		server.Use(compress.New(*config.Compress))
-	}
-
-	if config.Helmet != nil {
-		server.Use(helmet.New(*config.Helmet))
-	}
-
-	if config.Cors != nil {
-		server.Use(cors.New(*config.Cors))
-	}
-
-	if config.Limiter != nil {
-		server.Use(limiter.New(*config.Limiter))
-	}
+	server.Use(recover.New(*cfg.Recover))
+	server.Use(requestid.New(*cfg.Requestid))
+	server.Use(compress.New(*cfg.Compress))
+	server.Use(helmet.New(*cfg.Helmet))
+	server.Use(cors.New(*cfg.Cors))
+	server.Use(limiter.New(*cfg.Limiter))
 
 	return &Server{
 		SRV:    server,

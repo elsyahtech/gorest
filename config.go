@@ -31,7 +31,8 @@ type Config struct {
 	Version string `json:"version"`
 
 	// This function allows to setup the application environment mode.
-	// Common values: "development", "staging", "production".
+	// Common values: "development", "testing", "production". Custom values such
+	// as "staging" are allowed; custom values use production TLS warnings.
 	// Default: development
 	Environment string `json:"environment"`
 
@@ -57,7 +58,7 @@ var ConfigDefault = Config{
 	database:    nil,
 	AppName:     DefaultAppName,
 	Version:     DefaultVersion,
-	Environment: DefaultEnvironment,
+	Environment: Development,
 	Timezone:    DefaultTimezone,
 	Debug:       false,
 }
@@ -79,6 +80,10 @@ func configDefault(config ...Config) Config {
 
 	if cfg.Version == "" {
 		cfg.Version = ConfigDefault.Version
+	}
+
+	if cfg.Environment == "" {
+		cfg.Environment = ConfigDefault.Environment
 	}
 
 	if cfg.Timezone == "" {

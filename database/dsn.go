@@ -2,83 +2,93 @@ package database
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/godror/godror"
 )
 
-// MYSQL DSN builders dengan charset dan SSL support.
-func mysqlDSN(cfg *Config, timezone string) string {
-	query := url.Values{}
-
-	query.Set("parseTime", "true")
-	query.Set("loc", timezone)
-	query.Set("charset", cfg.Charset)
+func mysqlDriverConfig(cfg *Config, timezone string) *mysql.Config {
+	dsnConfig := mysql.NewConfig()
+	dsnConfig.User = cfg.Username
+	dsnConfig.Passwd = cfg.Password
+	dsnConfig.Net = "tcp"
+	dsnConfig.Addr = net.JoinHostPort(cfg.Host, cfg.Port)
+	dsnConfig.DBName = cfg.Name
+	dsnConfig.Params = map[string]string{
+		"parseTime": "true",
+		"loc":       timezone,
+		"charset":   cfg.Charset,
+	}
 
 	// SSL/TLS support untuk MySQL (if needed)
 	if cfg.SSLCAPath != "" {
-		query.Set("tls", cfg.TLS)
+		dsnConfig.Params["tls"] = cfg.TLS
 	}
 
-	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?%s",
-		cfg.Username,
-		cfg.Password,
-		cfg.Host,
-		cfg.Port,
-		cfg.Name,
-		query.Encode(),
-	)
+	return dsnConfig
 }
 
 // MSSQL/SQLServer DSN builders dengan SSL support.
 func mssqlDSN(cfg *Config, _ string) string {
-	dsn := fmt.Sprintf(
-		"server=%s;port=%s;database=%s;user id=%s;password=%s;encrypt=%s;trustservercertificate=%t",
-		cfg.Host,
-		cfg.Port,
-		cfg.Name,
-		cfg.Username,
-		cfg.Password,
-		cfg.TLS,
-		cfg.TrustServerCertificate,
-	)
+	query := url.Values{}
+	query.Set("database", cfg.Name)
+	query.Set("encrypt", cfg.TLS)
+	query.Set("TrustServerCertificate", fmt.Sprintf("%t", cfg.TrustServerCertificate))
 
 	// Add SSL cert paths if provided
 	if cfg.SSLCertPath != "" {
-		dsn += fmt.Sprintf(";certificate=%s", cfg.SSLCertPath)
+		query.Set("certificate", cfg.SSLCertPath)
 	}
 
-	return dsn
+	return (&url.URL{
+		Scheme:   "sqlserver",
+		User:     url.UserPassword(cfg.Username, cfg.Password),
+		Host:     databaseURLHost(cfg.Host, cfg.Port),
+		RawQuery: query.Encode(),
+	}).String()
 }
 
 // PostgreSQL DSN builders dengan SSL support.
 func postgresDSN(cfg *Config, _ string) string {
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host,
-		cfg.Port,
-		cfg.Username,
-		cfg.Password,
-		cfg.Name,
-		cfg.TLS,
-	)
+	query := url.Values{}
+	query.Set("sslmode", cfg.TLS)
 
 	// Add SSL certificate paths if provided
 	if cfg.SSLCertPath != "" {
-		dsn += fmt.Sprintf(" sslcert=%s", cfg.SSLCertPath)
+		query.Set("sslcert", cfg.SSLCertPath)
 	}
 
 	if cfg.SSLKeyPath != "" {
-		dsn += fmt.Sprintf(" sslkey=%s", cfg.SSLKeyPath)
+		query.Set("sslkey", cfg.SSLKeyPath)
 	}
 
 	if cfg.SSLCAPath != "" {
-		dsn += fmt.Sprintf(" sslrootcert=%s", cfg.SSLCAPath)
+		query.Set("sslrootcert", cfg.SSLCAPath)
 	}
 
-	return dsn
+	return (&url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.Username, cfg.Password),
+		Host:     databaseURLHost(cfg.Host, cfg.Port),
+		Path:     cfg.Name,
+		RawQuery: query.Encode(),
+	}).String()
+}
+
+func databaseURLHost(host, port string) string {
+	if port != "" {
+		return net.JoinHostPort(host, port)
+	}
+
+	if net.ParseIP(host) != nil && strings.Contains(host, ":") {
+		return "[" + host + "]"
+	}
+
+	return host
 }
 
 // SQLite DSN builder.

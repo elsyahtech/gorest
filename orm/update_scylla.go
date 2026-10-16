@@ -39,6 +39,9 @@ func (orm *ORM) updateScylla(data any) error {
 
 		return orm.setError(message, errors.New("update: missing primary key for update"))
 	}
+	if err := orm.validateUpdateColumns(meta); err != nil {
+		return err
+	}
 
 	// 5. Set context timeout
 	execCtx, cancel := orm.newContext()

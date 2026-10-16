@@ -12,7 +12,7 @@ Its goal is simple: reduce repetitive infrastructure work, establish consistent 
 
 ## ⚙️ Requirements
 
-GOREST requires **Go 1.26** or higher.
+GOREST requires **Go 1.26.5** or higher.
 
 Additional requirements depend on the components used by your application.
 
@@ -313,8 +313,11 @@ app.Use(
 ```
 
 - **Logger & Server:** Enabled by default (log.ConfigDefault, server.ConfigDefault) to instantly spin up routing and structured logging.
+- **Server constructor defaults:** Both `server.Run(...)` and `server.New(...)` apply defaults for omitted settings. In particular, nil middleware config fields use GOREST's default CORS, Recover, Request ID, Compress, Helmet, and Limiter configurations; nil does not disable middleware.
 - **Redis and Database Drivers:** Easily switch your database backend by changing the Driver constant (database.Oracle, SQL Server, MYSQL, PostgreSQL, SQLite, MongoDB, ScyllaDB.). **Default Database:** GOREST uses **SQLite** as its default database driver. No external database server is required to run the default application.
-- **Controlled Migrations & Seeders:** Toggle database.MigrationEnabled and database.SeederEnabled directly inside the config block to let Gorest handle schema bootstrapping automatically on boot.
+- **Database configuration lifecycle:** `database.Run(config)` applies database defaults and returns the normalized config; it does not open a connection. Pass that returned config to `app.Use(...)` to initialize the database. `app.Use(database.Config{...})` does not call `database.Run` for you. When starting from a partial config literal, set `Enabled: true` explicitly or copy `database.ConfigDefault` first; otherwise the zero-value `Enabled` leaves the database disabled.
+- **Controlled Migrations & Seeders:** Set `Migration: true` and/or `Seeder: true` on the database config before passing it through `database.Run(...)` to run those tasks during startup.
+- **Application environments:** `development`, `testing`, and `production` are the conventional values, but custom labels such as `staging` and `uat` are accepted. Production TLS warnings also apply to custom environment names; only `development` and `testing` are treated as non-production-like.
 
 See [configuration detail](./docs/configuration.md)
 

@@ -37,20 +37,17 @@ func (orm *ORM) updateSQL(data any) error {
 	// 4. Extract updatable columns, their struct field index, and the primary key column(s)/index from the struct tags.
 	meta := orm.extractColumnMetaData(rowsVal, "Update")
 
-	// 5. Guard: there must be at least one non-PK column to update, or the
-	// UPDATE statement would have an empty SET clause.
-	if len(meta.columns) == 0 {
-		const message = "Ensure that there are columns to update. Specify columns using .Select() or ensure your struct has non-primary key fields."
-
-		return orm.setError(message, errors.New("update: no columns to update"))
-	}
-
-	// 6. Guard: there must be at least one primary_key-tagged field, since
+	// 5. Guard: there must be at least one primary_key-tagged field, since
 	// every row in the batch is matched (and safely scoped) by its Primary Key.
 	if len(meta.primaryKeyIndex) == 0 {
 		const message = "Ensure your struct has a primary_key tag designated for updates."
 
 		return orm.setError(message, errors.New("update: missing primary key for update"))
+	}
+
+	// 6. Guard: there must be at least one non-PK column to avoid an empty SET clause.
+	if err := orm.validateUpdateColumns(meta); err != nil {
+		return err
 	}
 
 	var retPlan *returnPlan

@@ -33,6 +33,8 @@ By default, the server runs smoothly out-of-the-box with sensible defaults. Howe
 
 When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the default Fiber core configuration entirely; Gorest preserves all its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout.
 
+Both `server.Run(...)` and `server.New(...)` apply GOREST defaults to omitted sections. This includes all six middleware configurations: CORS, Recover, Request ID, Compress, Helmet, and Limiter. Therefore, `server.New(&server.Config{})` installs the default middleware just like `server.New(nil)`; a nil middleware field means “use the GOREST default,” not “disable it.” `server.New(...)` currently has no nil-based middleware opt-out.
+
 ```go
 server.Run(server.Config{
     // Server binding address
@@ -133,18 +135,25 @@ Redis Parameter Breakdown:
 ### 4. Database Configuration (`database.Run(...)`)
 Gorest provides modular database adapters supporting both SQL and NoSQL environments (**PostgreSQL, MySQL, SQL Server, Oracle, SQLite, MongoDB, and ScyllaDB**). 
 
-As discussed earlier, SQLite runs out-of-the-box as the default lightweight database engine, but you can effortlessly scale up to heavy enterprise databases by swapping out the driver configuration inside `main.go`:
+`database.ConfigDefault` selects SQLite as the default lightweight database driver. `app.New()` does not automatically register or open a database; register one with `app.Use(...)` as shown below. To use another engine, change the driver and its connection settings:
+
+`database.Run(config)` applies database defaults and returns a normalized `database.Config`; it does not establish a connection. Pass its result to `app.Use(...)` to register and initialize the database. `app.Use(...)` does not call `database.Run(...)` automatically. When building a partial config literal, set `Enabled: true` explicitly or copy `database.ConfigDefault` and modify it; otherwise `Enabled` remains its Go zero value (`false`) and `app.Use(...)` skips database initialization.
+
+GOREST accepts custom `Environment` labels such as `staging`, `uat`, or `preview`; `development`, `testing`, and `production` are conventions, not an allowlist. The TLS warning policy treats every non-empty environment other than `development` and `testing` as production-like, so custom deployment environments do not silently bypass the production database TLS warning.
 
 For compatibility and ease of local development, an omitted `TLS` value defaults to disabled for network database drivers (MongoDB defaults to `false`; SQLite does not use TLS). Gorest does not automatically enable TLS based on the database host: TLS modes and certificate or wallet requirements differ by driver, and automatically enabling one could break existing local or legacy deployments. This is not a secure production default. A remote database connection without TLS can expose credentials and data to interception or modification on an untrusted network. Configure a driver-supported TLS mode explicitly for production and validate the server certificate; do not treat a private IP, VPN, or firewall as a replacement for transport encryption.
+
+For an enabled database, `app.Start()` logs a driver-aware warning when the environment is production-like (anything except `development` or `testing`) and TLS is disabled, optional, lacks required certificate configuration, or cannot be verified from GOREST's TLS field (ScyllaDB). This is a warning, not a startup block; operators must still configure and verify encryption before deployment. Custom labels such as `staging` and `uat` receive the same warning policy.
 
 Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`; MySQL requires `SSLCAPath` for Gorest to add its TLS connection option. SQLite has no network TLS. ScyllaDB's TLS is not currently configured by this database `TLS` field, so setting it does not enable ScyllaDB transport encryption.
 
 ```go
-database.Run(database.Config{
+app.Use(database.Run(database.Config{
+    Enabled: true,
     // Driver Selection & Target
-    Driver: database.SQLITE, // Supported: MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA
+    Driver: database.MYSQL, // Supported: MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA
     Host:   "127.0.0.1",
-    Port:   "3306",           // Common defaults: MySQL (3306), Postgres (5432), MSSQL (1433), Mongo (27017), Scylla (9402), Oracle (1521)
+    Port:   "3306",
     Name:   "default_gorest", // Database name or Oracle Service Name (e.g., "FREEPDB1")
 
     // Credentials (Load securely from env variables or secrets manager in production)
@@ -152,34 +161,34 @@ database.Run(database.Config{
     Password: "your_secure_password",
 
     // Connection Pools & Lifetimes
-    MaxOpenConnections:    50,                // Maximum open connections to database (recommended: 50-100 for high traffic)
-    MaxIdleConnections:    5,                 // Maximum idle connections in the pool
-    ConnectionMaxLifetime: 20 * time.Minute, // Maximum lifetime before a connection is closed and recreated
-    Timeout:                5 * time.Second,   // Connection and operation timeout limit (must be >= 0)
+    MaxOpenConnections:    50,               // Default: 50; zero uses the default
+    MaxIdleConnections:    5,                // Default: 5; zero uses the default
+    ConnectionMaxLifetime: 10 * time.Minute, // Default: 10 minutes; zero uses the default
+    Timeout:               5 * time.Second,  // Connection and operation timeout limit
 
     // Security, TLS & Encryption (Driver-aware behavior)
-    TLS:                    "disable",         // Local/development compatibility default only; explicitly configure production TLS
-    SSLCertPath:           "",                // Path to client SSL certificate file (mutual TLS)
-    SSLKeyPath:            "",                // Path to client SSL private key file
-    SSLCapath:             "",                // Path to CA certificate (or Oracle Wallet directory / TNS_ADMIN for Oracle)
-    TrustServerCertificate: false,            // MSSQL only: validate the server certificate; configure its CA as needed
+    TLS:                    "disable", // Local/development compatibility default only; explicitly configure production TLS
+    SSLCertPath:            "",        // Path to client SSL certificate file (mutual TLS)
+    SSLKeyPath:              "",        // Path to client SSL private key file
+    SSLCAPath:               "",        // Path to CA certificate (or Oracle Wallet directory / TNS_ADMIN for Oracle)
+    TrustServerCertificate: false,     // MSSQL only: validate the server certificate; configure its CA as needed
 
     // Driver-Specific Addons
-    LibDir:  "",                              // Oracle Instant Client library directory path (godror/OCI only)
-    Charset: "utf8mb4",                       // Character set (MySQL default: "utf8mb4")
+    LibDir:  "",        // Oracle Instant Client library directory path (godror/OCI only)
+    Charset: "utf8mb4", // Character set (MySQL default: "utf8mb4")
 
     // Migrations & Seeders Automation
-    MigrationDirectory: "./database/migrations", // Path to schema migration files directory
-    SeederDirectory:    "./database/seeders",    // Path to data seeder files directory
-    Migration:          true,                    // Auto-run migrations on startup (Dev: true, Prod: false recommended)
-    Seeder:             true,                    // Auto-run seeders on startup (Dev: true, Prod: false recommended)
-    QueryLogging:       false,                   // Enable query execution logging/debugging (Slow, dev-only)
-})
+    MigrationDirectory: "migrations", // Relative to DatabaseDirectory; driver subdirectory is appended
+    SeederDirectory:    "seeders",    // Relative to DatabaseDirectory; driver subdirectory is appended
+    Migration:          true,         // Auto-run migrations on startup (Dev: true, Prod: false recommended)
+    Seeder:             true,         // Auto-run seeders on startup (Dev: true, Prod: false recommended)
+    QueryLogging:        false,        // Enable query execution logging/debugging (Slow, dev-only)
+}))
 ```
 
 Database Parameter Breakdown:
 - **Driver & Target** (Driver, Host, Port, Name): Specifies the database engine and connection routing. Note that for Oracle, Name acts as the service name instead of the SID.
 - **Credentials** (Username, Password): Secure authentication fields. Always load production secrets via environment variables.
-- **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls database socket limits and prevents memory leaks. All pool settings must be greater than or equal to 0.
-- **Security** & TLS (TLS, SSLCertPath, SSLKeyPath, SSLCapath, TrustServerCertificate): Encrypts connections depending on driver specifications. Special note: For Oracle, SSLCapath repurposes as the Oracle Wallet directory path (TNS_ADMIN) when TLS is set to "enable".
+- **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls database socket limits and prevents memory leaks. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid.
+- **Security** & TLS (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Encrypts connections depending on driver specifications. Special note: For Oracle, SSLCAPath repurposes as the Oracle Wallet directory path (TNS_ADMIN) when TLS is set to "enable".
 - **Migrations & Seeders** (Migration, Seeder, directories, QueryLogging): Automates database bootstrapping and gives developers direct visibility into query generation during development.

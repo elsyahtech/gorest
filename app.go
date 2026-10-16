@@ -7,6 +7,8 @@ import (
 	"syscall"
 
 	golog "log"
+
+	"github.com/elsyahtech/gorest/database"
 )
 
 func New(config ...Config) *App {
@@ -35,6 +37,17 @@ func New(config ...Config) *App {
 
 func (app *App) Start() *App {
 	app.Log(nil, true).Info("starting gorest")
+
+	if isProductionEnvironment(app.config.Environment) {
+		if warning, shouldWarn := productionDatabaseTLSWarning(app.config.database); shouldWarn {
+			app.Log(Map{
+				"environment": app.config.Environment,
+				"driver":      database.NormalizeDatabaseDriver(app.config.database.Driver),
+				"tls_mode":    app.config.database.TLS,
+				"message":     warning,
+			}, true).Warn("database transport encryption (TLS/SSL) is disabled or not guaranteed in a production environment")
+		}
+	}
 
 	startServer, err := prepareStartup(app.runMigration, nil, app.startServer)
 	if err != nil {

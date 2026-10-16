@@ -8,17 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/go-sql-driver/mysql"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	//nolint:revive,nolintlint
 	_ "github.com/microsoft/go-mssqldb"
-
-	//nolint:revive,nolintlint
-	_ "github.com/go-sql-driver/mysql"
 
 	//nolint:revive,nolintlint
 	_ "github.com/lib/pq"
@@ -35,7 +32,7 @@ import (
 // database using global configuration settings
 // ==========================================================================.
 func mysqlConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, mysqlDSN)
+	return connectDatabase(ctx, cfg, timezone, driver, nil)
 }
 
 // ==========================================================================
@@ -164,14 +161,29 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 		}
 	}
 
-	dsn := dsnBuilder(cfg, timezone)
-
 	sqlDriver := driver
 	if driver == ORACLE {
 		sqlDriver = "godror"
 	}
 
-	database, err := sql.Open(sqlDriver, dsn)
+	var (
+		database *sql.DB
+		err      error
+	)
+
+	if driver == MYSQL {
+		connector, connectorErr := mysql.NewConnector(mysqlDriverConfig(cfg, timezone))
+		if connectorErr != nil {
+			err = connectorErr
+		} else {
+			database = sql.OpenDB(connector)
+		}
+	} else if dsnBuilder == nil {
+		err = fmt.Errorf("missing DSN builder for %s", driver)
+	} else {
+		database, err = sql.Open(sqlDriver, dsnBuilder(cfg, timezone))
+	}
+
 	if err != nil {
 		message := fmt.Sprintf(
 			"verify if %s service/daemon is running, check host and port settings, and ensure network connectivity is stable",
@@ -181,24 +193,9 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 		return nil, message, fmt.Errorf("open connection %s error: %w", driver, err)
 	}
 
-	// Set connection pool parameters
-	if cfg.MaxOpenConnections > 0 {
-		database.SetMaxOpenConns(cfg.MaxOpenConnections)
-	} else {
-		database.SetMaxOpenConns(25) // default
-	}
-
-	if cfg.MaxIdleConnections > 0 {
-		database.SetMaxIdleConns(cfg.MaxIdleConnections)
-	} else {
-		database.SetMaxIdleConns(5) // default
-	}
-
-	if cfg.ConnectionMaxLifetime > 0 {
-		database.SetConnMaxLifetime(cfg.ConnectionMaxLifetime)
-	} else {
-		database.SetConnMaxLifetime(10 * time.Minute) // default
-	}
+	database.SetMaxOpenConns(cfg.MaxOpenConnections)
+	database.SetMaxIdleConns(cfg.MaxIdleConnections)
+	database.SetConnMaxLifetime(cfg.ConnectionMaxLifetime)
 
 	if err := database.PingContext(ctx); err != nil {
 		if errDB := database.Close(); errDB != nil {

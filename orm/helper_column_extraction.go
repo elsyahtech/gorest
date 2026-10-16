@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 )
@@ -53,6 +54,27 @@ func (orm *ORM) extractColumnMetaData(rowsVal []reflect.Value, opName string) co
 		primaryKeyIndex:        data.primaryKeyIndexValue,
 		allColumnPrimaryKeyIdx: allColFieldIdx,
 	}
+}
+
+func (orm *ORM) validateUpdateColumns(meta columnMetaData) error {
+	for _, columnIndex := range meta.columnIndex {
+		isPrimaryKey := false
+		for _, primaryKeyIndex := range meta.primaryKeyIndex {
+			if columnIndex == primaryKeyIndex {
+				isPrimaryKey = true
+				break
+			}
+		}
+
+		if !isPrimaryKey {
+			return nil
+		}
+	}
+
+	return orm.setError(
+		"Ensure that there are columns to update. Specify columns using .Select() or ensure your struct has non-primary-key fields.",
+		errors.New("update: no columns to update"),
+	)
 }
 
 // isImmutableUpdateField identifies creation-time fields by their Go field

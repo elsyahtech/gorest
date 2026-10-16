@@ -42,13 +42,16 @@ Start with the [Querying Guide](./guide/querying.md) to compare ORM and native q
 
 By default, migrations and seeders can be triggered automatically upon application startup by simply setting `Migration: true` and `Seeder: true` inside your database configuration block in `main.go`:
 ```go
-database.Run(database.Config{
-     Driver:    database.SQLITE,
-     Name:      "default_gorest",
-     Migration: true, // Set to true to auto-run migrations on boot
-     Seeder:    true, // Set to true to auto-run seeders on boot
-})
+dbConfig := database.ConfigDefault
+dbConfig.Driver = database.SQLITE
+dbConfig.Name = "default_gorest"
+dbConfig.Migration = true // Set to true to auto-run migrations on boot
+dbConfig.Seeder = true    // Set to true to auto-run seeders on boot
+
+app.Use(database.Run(dbConfig))
 ```
+
+`database.Run(...)` normalizes and returns the database config; it does not connect to the database by itself. `app.Use(...)` receives that normalized config and initializes the connection. If you pass a partial `database.Config` directly to `app.Use(...)`, defaults are not applied. In particular, set `Enabled: true` for a partial config literal, or start from `database.ConfigDefault` as shown above.
 
 ### Startup behavior when migration or seeding fails
 

@@ -1,11 +1,62 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
+
+func TestNewAppliesDefaultsForNilAndEmptyConfig(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		config *Config
+	}{
+		{name: "nil config"},
+		{name: "empty config", config: &Config{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, _, err := New(test.config)
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+
+			coreConfig := server.SRV.Config()
+			if coreConfig.ReadTimeout != DefaultServerReadTimeout ||
+				coreConfig.WriteTimeout != DefaultServerWriteTimeout ||
+				coreConfig.IdleTimeout != DefaultServerIdleTimeout {
+				t.Errorf(
+					"New() timeouts = (%s, %s, %s), want (%s, %s, %s)",
+					coreConfig.ReadTimeout,
+					coreConfig.WriteTimeout,
+					coreConfig.IdleTimeout,
+					DefaultServerReadTimeout,
+					DefaultServerWriteTimeout,
+					DefaultServerIdleTimeout,
+				)
+			}
+
+			server.SRV.Get("/", func(c fiber.Ctx) error {
+				return c.SendString("ok")
+			})
+
+			response, err := server.SRV.Test(httptest.NewRequest(http.MethodGet, "/", nil))
+			if err != nil {
+				t.Fatalf("Test() error = %v", err)
+			}
+			defer response.Body.Close()
+
+			if got := response.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+			}
+			if got := response.Header.Get("X-Request-ID"); got == "" {
+				t.Error("expected default request ID middleware to set X-Request-ID")
+			}
+		})
+	}
+}
 
 func TestConfigDefaultAppliesFiniteTimeoutsWhenCoreIsNil(t *testing.T) {
 	config := configDefault(Config{})
