@@ -107,3 +107,14 @@ func TestRunDatabaseStartupTasksStopsSeederAfterMigrationFailure(t *testing.T) {
 		t.Fatal("seeder ran after migration failed")
 	}
 }
+
+func TestLoadTimezoneDoesNotChangeProcessLocalTimezone(t *testing.T) {
+	original := time.Local
+	app := &App{config: Config{Timezone: "Asia/Jakarta"}}
+
+	app.loadTimezone()
+
+	if time.Local != original {
+		t.Fatal("loading an app timezone changed process-global time.Local")
+	}
+}

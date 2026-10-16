@@ -22,8 +22,7 @@ func New(config ...Config) *App {
 	// Preserve original configuration before defaults are applied.
 	app.configured = app.config
 
-	// Set timezone
-	// to ensure consistent time parsing, logging, and timestamps.
+	// Validate the configured timezone without mutating process-global time.Local.
 	app.loadTimezone()
 
 	// initialize the global logger

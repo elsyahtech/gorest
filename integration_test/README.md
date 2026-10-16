@@ -70,6 +70,27 @@ instead of skipping the remote database tests.
 See [ORM scenarios by driver](#orm-scenarios-by-driver) for test coverage and
 driver-specific differences.
 
+The PostgreSQL RLS scenario is
+`TestPostgresRowLevelSecurityEnforcesTenantPolicy` in
+[`postgres/coverage_test.go`](./postgres/coverage_test.go). It checks
+tenant-filtered reads for two tenants, an allowed same-tenant insert, rejection
+of a cross-tenant insert, and that a transaction-local tenant setting is cleared
+after commit/rollback. It limits the SQL pool to one connection and checks the
+PostgreSQL backend PID to confirm the pooled connection is reused across those
+transactions.
+
+Run it with `GOREST_IT_POSTGRES_USERNAME` set to the application role you want
+to validate, and use an isolated test database. The test logs PostgreSQL's
+`current_user` (not its password) and requires a role that is neither a
+superuser nor has the `BYPASSRLS` attribute; PostgreSQL bypasses row-security
+policies for those roles, so the test explicitly skips when connected with one.
+For evidence about the production application role, run the guide using that
+same role in the isolated database, or document any differences in role
+attributes and grants; a run with a different integration account does not
+establish production-role behavior. The test creates and drops its own table,
+so the configured role also needs the necessary DDL privileges in that test
+database/schema.
+
 ## MySQL
 
 Set `GOREST_IT_MYSQL_*` according to the shared environment-variable table.
@@ -213,8 +234,8 @@ Run only the shared SQL ORM scenarios against MySQL, Oracle, SQL Server, or
 SQLite with:
 
 ```sh
-GOREST_IT_REQUIRED=1 go test -tags=integration ./integration_test/mysql ./integration_test/oracle ./integration_test/sqlserver -run TestORMAuditCoverage -count=1 -v
-go test -tags=integration ./integration_test/sqlite -run TestORMAuditCoverage -count=1 -v
+GOREST_IT_REQUIRED=1 go test -tags=integration ./integration_test/mysql ./integration_test/oracle ./integration_test/sqlserver -run TestORMCoverage -count=1 -v
+go test -tags=integration ./integration_test/sqlite -run TestORMCoverage -count=1 -v
 ```
 
 The SQL scenarios cover explicit joins, belongs-to/has-many preload mapping,
@@ -227,8 +248,23 @@ driver-specific delay mechanism and depends on server permissions and driver
 cancellation behavior. The batch scenario concerns one multi-row statement,
 not transactions spanning multiple statements or chunks.
 
-PostgreSQL has its own package-level scenarios for these behaviors. MongoDB
-checks include nullable document mapping, alternate-unique-key Upsert,
+PostgreSQL uses separate tests in [`postgres/coverage_test.go`](./postgres/coverage_test.go):
+
+| Scenario | PostgreSQL test |
+| --- | --- |
+| Explicit JOIN and belongs-to/has-many preload mapping | `TestPostgresJoinAndRelationPreloadMapping` |
+| Nullable result mapping | `TestPostgresNullableColumnMapping` |
+| Pagination boundary inputs | `TestPostgresPaginationBoundaries` |
+| Multi-row INSERT statement atomicity | `TestPostgresBulkInsertFailureIsStatementAtomic` |
+| Live-query context cancellation | `TestPostgresContextCancellationStopsLiveQuery` |
+| Primary-key, alternate-unique-key, and conditional Upsert | `TestPostgresUpsertBehaviorMatrix` |
+
+There is currently no dedicated PostgreSQL integration test for invalid ORM
+input rejection. That scenario is covered by the shared `TestORMCoverage` in
+the MySQL, Oracle, SQL Server, and SQLite packages, not by the PostgreSQL
+package.
+
+MongoDB checks include nullable document mapping, alternate-unique-key Upsert,
 unfiltered-write rejection, and propagation of an already-canceled context.
 ScyllaDB checks include composite-primary-key Upsert validation, nullable
 column mapping, unfiltered-write rejection, and propagation of an

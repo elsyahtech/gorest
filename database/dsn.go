@@ -104,7 +104,21 @@ func sqliteDSN(cfg *Config, _ string) string {
 }
 
 // Oracle DSN builder dengan wallet (TLS) dan Instant Client support (godror/OCI).
-func oracleDSN(cfg *Config, _ string) string {
+func oracleDSN(cfg *Config, timezone string) (string, error) {
+	params, err := oracleConnectionParams(cfg, timezone)
+	if err != nil {
+		return "", err
+	}
+
+	return params.StringWithPassword(), nil
+}
+
+func oracleConnectionParams(cfg *Config, timezone string) (godror.ConnectionParams, error) {
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return godror.ConnectionParams{}, fmt.Errorf("configure Oracle timezone %q: %w", timezone, err)
+	}
+
 	scheme := ""
 
 	if cfg.TLS == TLSEnabled {
@@ -129,9 +143,9 @@ func oracleDSN(cfg *Config, _ string) string {
 	params.PoolParams.MaxSessions = cfg.MaxOpenConnections       //nolint:staticcheck
 	params.PoolParams.MinSessions = cfg.MaxIdleConnections       //nolint:staticcheck
 	params.PoolParams.SessionTimeout = cfg.ConnectionMaxLifetime //nolint:staticcheck
-	params.Timezone = time.Local
+	params.Timezone = location
 
-	return params.StringWithPassword()
+	return params, nil
 }
 
 // Mongo DSN builders dengan SSL support.

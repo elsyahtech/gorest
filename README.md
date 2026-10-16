@@ -146,7 +146,7 @@ The specific components used depend on the module you need.
 ### 1. Application Lifecycle & Engine
 - **Application Lifecycle** — Provides a structured lifecycle for application initialization and startup.
 - **Thread-Safe Initialization** — Protects critical initialization paths from concurrent execution.
-- **Global Timezone Synchronization** — Keeps application modules aligned with the configured application timezone.
+- **Database Timezone Configuration** — Passes the configured timezone to database drivers that support it without changing the process-wide timezone.
 - **Startup Timeout** — Uses a startup context timeout to prevent initialization from waiting indefinitely on slow external dependencies.
 
 ### 2. Integrated Infrastructure
@@ -284,7 +284,7 @@ app := gorest.New(gorest.Config{
     // Operating environment mode (e.g., "development", "staging", "production").
     Environment: "development",
 
-    // Global timezone synchronization to ensure consistent time parsing, logging, and timestamps.
+    // Timezone used by database drivers that support application timezone configuration.
     Timezone: "Asia/Jakarta",
 
     // Debug mode. When true, the HTTP server is bypassed and only the CLI/console runner executes,
@@ -295,7 +295,7 @@ app := gorest.New(gorest.Config{
 - **AppName:** Identifies your service name. Crucial for microservice architectures, log tracing, and service meshes.
 - **Version:** Tracks your deployment version, heavily integrated into CI/CD release tagging.
 - **Environment:** Controls runtime behaviors (development, staging, production).
-- **Timezone:** Enforces a unified system-wide timezone (Asia/Jakarta, UTC, etc.) to eliminate time drift across logs, database timestamps, and token expiration logic.
+- **Timezone:** Configures the timezone for database drivers that support it (currently MySQL and Oracle). It does not change Go's process-wide `time.Local`; configure timezone handling explicitly in application code for logs, token expiration, and other values.
 - **Debug:** When set to true, halts the HTTP server listener so developers can safely run local debugging, dry-run SQL migrations, or test data seeders via console.
 
 ---

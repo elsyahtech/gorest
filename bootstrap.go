@@ -10,12 +10,9 @@ import (
 )
 
 func (app *App) loadTimezone() {
-	location, err := time.LoadLocation(app.config.Timezone)
-	if err != nil {
+	if _, err := time.LoadLocation(app.config.Timezone); err != nil {
 		golog.Fatalf("failed to load timezone %q: %v. Please check timezone configuration.", app.config.Timezone, err)
 	}
-
-	time.Local = location
 }
 
 func (app *App) runMigration() error {

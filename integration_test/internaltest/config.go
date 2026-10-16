@@ -19,6 +19,11 @@ import (
 
 func OpenApp(t *testing.T, driver string) *gorest.App {
 	t.Helper()
+	return OpenAppWithConfig(t, driver, nil)
+}
+
+func OpenAppWithConfig(t *testing.T, driver string, configure func(*database.Config)) *gorest.App {
+	t.Helper()
 
 	prefix := "GOREST_IT_" + strings.ToUpper(driver)
 	config := database.Config{
@@ -45,6 +50,10 @@ func OpenApp(t *testing.T, driver string) *gorest.App {
 		config.SSLCAPath = os.Getenv(prefix + "_SSL_CA")
 		config.LibDir = os.Getenv(prefix + "_LIB_DIR")
 		config.TrustServerCertificate = strings.EqualFold(os.Getenv(prefix+"_TRUST_SERVER_CERTIFICATE"), "true")
+	}
+
+	if configure != nil {
+		configure(&config)
 	}
 
 	normalized := database.Run(config)

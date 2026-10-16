@@ -3,6 +3,7 @@ package database
 import (
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/lib/pq"
@@ -110,6 +111,28 @@ func TestPostgresDSNRoundTripsCredentials(t *testing.T) {
 		parsed.Query().Get("sslkey") != cfg.SSLKeyPath ||
 		parsed.Query().Get("sslrootcert") != cfg.SSLCAPath {
 		t.Errorf("certificate parameters = %v", parsed.Query())
+	}
+}
+
+func TestOracleConnectionParamsUseConfiguredTimezone(t *testing.T) {
+	cfg := testDSNConfig()
+	params, err := oracleConnectionParams(cfg, "Asia/Jakarta")
+	if err != nil {
+		t.Fatalf("oracleConnectionParams() error = %v", err)
+	}
+
+	location, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		t.Fatalf("time.LoadLocation() error = %v", err)
+	}
+	if params.Timezone.String() != location.String() {
+		t.Errorf("timezone = %q, want %q", params.Timezone, location)
+	}
+}
+
+func TestOracleConnectionParamsRejectInvalidTimezone(t *testing.T) {
+	if _, err := oracleConnectionParams(testDSNConfig(), "Invalid/Timezone"); err == nil {
+		t.Fatal("oracleConnectionParams() unexpectedly accepted an invalid timezone")
 	}
 }
 

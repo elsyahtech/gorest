@@ -343,6 +343,217 @@ func TestPostgresUpsertBehaviorMatrix(t *testing.T) {
 	}
 }
 
+func TestPostgresRowLevelSecurityEnforcesTenantPolicy(t *testing.T) {
+	app := internaltest.OpenAppWithConfig(t, database.POSTGRES, func(config *database.Config) {
+		config.MaxOpenConnections = 1
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	rows, message, code, err := app.Database().QuerySQL(ctx,
+		"SELECT current_user, rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user")
+	if err != nil {
+		t.Fatalf("check PostgreSQL role RLS bypass attributes (HTTP %d, %s): %v", code, message, err)
+	}
+	if !rows.Next() {
+		rows.Close()
+		t.Fatalf("current PostgreSQL role was not found: %v", rows.Err())
+	}
+	var role string
+	var bypassesRLS bool
+	if err := rows.Scan(&role, &bypassesRLS); err != nil {
+		rows.Close()
+		t.Fatalf("scan PostgreSQL role RLS bypass attributes: %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatalf("close PostgreSQL role RLS query: %v", err)
+	}
+	if bypassesRLS {
+		t.Skip("PostgreSQL integration role is superuser or has BYPASSRLS; use a non-bypass role to exercise row-level security")
+	}
+	t.Logf("PostgreSQL RLS test connected as role %q", role)
+
+	table := "audit_rls_" + integrationSuffix()
+	internaltest.ExecSQL(t, app,
+		"CREATE TABLE "+table+" (id BIGINT PRIMARY KEY, tenant_id TEXT NOT NULL, value TEXT NOT NULL)")
+	t.Cleanup(func() {
+		if _, _, _, err := app.Database().ExecSQL(context.Background(), "DROP TABLE IF EXISTS "+table); err != nil {
+			t.Errorf("drop integration table %s: %v", table, err)
+		}
+	})
+	internaltest.ExecSQL(t, app,
+		"INSERT INTO "+table+" (id, tenant_id, value) VALUES ($1, $2, $3), ($4, $5, $6)",
+		int64(1), "tenant-a", "visible", int64(2), "tenant-b", "hidden")
+	internaltest.ExecSQL(t, app, "ALTER TABLE "+table+" ENABLE ROW LEVEL SECURITY")
+	internaltest.ExecSQL(t, app, "ALTER TABLE "+table+" FORCE ROW LEVEL SECURITY")
+	internaltest.ExecSQL(t, app,
+		"CREATE POLICY tenant_isolation ON "+table+
+			" USING (tenant_id = current_setting('gorest.tenant_id', true))"+
+			" WITH CHECK (tenant_id = current_setting('gorest.tenant_id', true))")
+
+	type rlsRecord struct {
+		ID       int64  `gorest:"id, primary_key"`
+		TenantID string `gorest:"tenant_id"`
+		Value    string `gorest:"value"`
+	}
+	tx, message, code, err := app.Database().BeginTx()
+	if err != nil {
+		t.Fatalf("begin tenant-a transaction (HTTP %d, %s): %v", code, message, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			if _, _, err := tx.Rollback(); err != nil {
+				t.Errorf("rollback tenant-a RLS transaction: %v", err)
+			}
+		}
+	}()
+	backendPID := postgresBackendPID(t, tx, ctx)
+	setPostgresTenantContext(t, tx, ctx, "tenant-a")
+
+	var visible []rlsRecord
+	query := tx.Table(table).OrderBy("id", "ASC").Find(&visible)
+	if query.Error != nil {
+		t.Fatalf("query rows under tenant-a RLS policy: %v", query.Error)
+	}
+	if len(visible) != 1 || visible[0].ID != 1 || visible[0].Value != "visible" {
+		t.Fatalf("tenant-a RLS result = %#v, want only tenant-a row", visible)
+	}
+
+	internaltest.RequireNoORMError(t, tx.Table(table).Create(&rlsRecord{
+		ID: 3, TenantID: "tenant-a", Value: "inserted",
+	}))
+	if _, _, err := tx.Commit(); err != nil {
+		t.Fatalf("commit allowed tenant-a write: %v", err)
+	}
+	committed = true
+
+	tx, message, code, err = app.Database().BeginTx()
+	if err != nil {
+		t.Fatalf("begin tenant-b transaction (HTTP %d, %s): %v", code, message, err)
+	}
+	txCommitted := false
+	defer func() {
+		if !txCommitted {
+			if _, _, err := tx.Rollback(); err != nil {
+				t.Errorf("rollback tenant-b RLS transaction: %v", err)
+			}
+		}
+	}()
+	if got := postgresBackendPID(t, tx, ctx); got != backendPID {
+		t.Fatalf("tenant-b transaction used backend PID %d, want reused pooled connection PID %d", got, backendPID)
+	}
+
+	visible = nil
+	query = tx.Table(table).OrderBy("id", "ASC").Find(&visible)
+	if query.Error != nil {
+		t.Fatalf("query rows before setting tenant-b context: %v", query.Error)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("tenant context leaked from committed transaction: %#v", visible)
+	}
+
+	setPostgresTenantContext(t, tx, ctx, "tenant-b")
+
+	visible = nil
+	query = tx.Table(table).OrderBy("id", "ASC").Find(&visible)
+	if query.Error != nil {
+		t.Fatalf("query rows under tenant-b RLS policy: %v", query.Error)
+	}
+	if len(visible) != 1 || visible[0].ID != 2 || visible[0].Value != "hidden" {
+		t.Fatalf("tenant-b RLS result = %#v, want only tenant-b row", visible)
+	}
+
+	query = tx.Table(table).Create(&rlsRecord{
+		ID: 4, TenantID: "tenant-a", Value: "must be rejected",
+	})
+	if query.Error == nil {
+		t.Fatal("RLS policy allowed tenant-b to insert a tenant-a row")
+	}
+	if _, _, err := tx.Rollback(); err != nil {
+		t.Fatalf("rollback rejected cross-tenant RLS write: %v", err)
+	}
+	txCommitted = true
+
+	rows, message, code, err = app.Database().QuerySQL(ctx, "SELECT pg_backend_pid()")
+	if err != nil {
+		t.Fatalf("query backend PID after transaction-local context reset (HTTP %d, %s): %v", code, message, err)
+	}
+	if !rows.Next() {
+		rows.Close()
+		t.Fatalf("query backend PID after transaction-local context reset returned no row: %v", rows.Err())
+	}
+	var reusedPID int
+	if err := rows.Scan(&reusedPID); err != nil {
+		rows.Close()
+		t.Fatalf("scan backend PID after transaction-local context reset: %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatalf("close backend PID query: %v", err)
+	}
+	if reusedPID != backendPID {
+		t.Fatalf("post-transaction query used backend PID %d, want reused pooled connection PID %d", reusedPID, backendPID)
+	}
+
+	visible = nil
+	query = app.Database().Table(table).OrderBy("id", "ASC").Find(&visible)
+	if query.Error != nil {
+		t.Fatalf("query rows without transaction-local tenant context: %v", query.Error)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("tenant rows visible after transaction-local context reset: %#v", visible)
+	}
+}
+
+func setPostgresTenantContext(t *testing.T, tx interface {
+	QuerySQL(context.Context, string, ...any) (*sql.Rows, string, int, error)
+}, ctx context.Context, tenant string) {
+	t.Helper()
+
+	rows, message, code, err := tx.QuerySQL(ctx,
+		"SELECT set_config('gorest.tenant_id', $1, true)", tenant)
+	if err != nil {
+		t.Fatalf("set transaction-local tenant context (HTTP %d, %s): %v", code, message, err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatalf("set_config() returned no row: %v", rows.Err())
+	}
+	var configuredTenant string
+	if err := rows.Scan(&configuredTenant); err != nil {
+		t.Fatalf("scan transaction-local tenant context: %v", err)
+	}
+	if configuredTenant != tenant {
+		t.Fatalf("configured tenant = %q, want %q", configuredTenant, tenant)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate transaction-local tenant context result: %v", err)
+	}
+}
+
+func postgresBackendPID(t *testing.T, tx interface {
+	QuerySQL(context.Context, string, ...any) (*sql.Rows, string, int, error)
+}, ctx context.Context) int {
+	t.Helper()
+
+	rows, message, code, err := tx.QuerySQL(ctx, "SELECT pg_backend_pid()")
+	if err != nil {
+		t.Fatalf("query PostgreSQL backend PID (HTTP %d, %s): %v", code, message, err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatalf("query PostgreSQL backend PID returned no row: %v", rows.Err())
+	}
+	var pid int
+	if err := rows.Scan(&pid); err != nil {
+		t.Fatalf("scan PostgreSQL backend PID: %v", err)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate PostgreSQL backend PID result: %v", err)
+	}
+	return pid
+}
+
 func integrationSuffix() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())
 }

@@ -36,11 +36,11 @@ type Config struct {
 	// Default: development
 	Environment string `json:"environment"`
 
-	// This function allows to setup app timezone for the app
-	// Timezone specifies the location for time.Time values between a string including database.
-	// This setting affects how application handles and interprets time (DATETIME and TIMESTAMP), etc.
+	// Timezone specifies the IANA location used by database drivers that support
+	// an application timezone (currently MySQL and Oracle). It does not modify
+	// the process-wide time.Local value.
 	// Common values: "UTC", "Asia/Jakarta", "Local", or any IANA Time Zone application name.
-	// If not set, application will use the server's default timezone.
+	// If not set, the default timezone is UTC.
 	// Example: "Asia/Jakarta" for Southeast Asia servers.
 	// Reference: https://dev.mysql.com/doc/refman/8.0/en/time-zone-support.html
 	// Default: UTC

@@ -64,7 +64,7 @@ func sqliteConnection(ctx context.Context, cfg *Config, timezone, driver string)
 // database using global configuration settings
 // ==========================================================================.
 func oracleConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, oracleDSN)
+	return connectDatabase(ctx, cfg, timezone, driver, nil)
 }
 
 // ===================================================================
@@ -182,6 +182,13 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 			} else {
 				database = sql.OpenDB(connector)
 			}
+		}
+	} else if driver == ORACLE {
+		dsn, configErr := oracleDSN(cfg, timezone)
+		if configErr != nil {
+			err = configErr
+		} else {
+			database, err = sql.Open(sqlDriver, dsn)
 		}
 	} else if dsnBuilder == nil {
 		err = fmt.Errorf("missing DSN builder for %s", driver)
