@@ -1,7 +1,7 @@
 package helper
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:revive
 	"crypto/rand"
 	"crypto/sha512"
 	"crypto/subtle"
@@ -218,7 +218,8 @@ func parseArgonUint(field, key string, bitSize int) (uint64, error) {
 		return 0, fmt.Errorf("invalid value for %s", key) // empty or leading zeros
 	}
 
-	return strconv.ParseUint(digits, 10, bitSize) // rejects +, -, spaces, trailing chars
+	// rejects +, -, spaces, trailing chars
+	return strconv.ParseUint(digits, 10, bitSize) //nolint:wrapcheck
 }
 
 // VerifyArgon checks a raw password against an Argon2id hash in PHC string format
@@ -257,28 +258,32 @@ func VerifyArgon(value, encodedHash string) (res bool, msg string, code int, err
 		return fail(errors.New("invalid parameters format"))
 	}
 
-	m, err := parseArgonUint(params[0], "m", 32)
+	emm, err := parseArgonUint(params[0], "m", 32)
 	if err != nil {
 		return fail(fmt.Errorf("invalid memory: %w", err))
 	}
-	t, err := parseArgonUint(params[1], "t", 32)
+
+	tee, err := parseArgonUint(params[1], "t", 32)
 	if err != nil {
 		return fail(fmt.Errorf("invalid time: %w", err))
 	}
-	p, err := parseArgonUint(params[2], "p", 8)
+
+	pee, err := parseArgonUint(params[2], "p", 8)
 	if err != nil {
 		return fail(fmt.Errorf("invalid threads: %w", err))
 	}
 
-	memory, iterations, threads := uint32(m), uint32(t), uint8(p)
+	memory, iterations, threads := uint32(emm), uint32(tee), uint8(pee)
 
 	// Policy limits (reject zero, too small, and too large).
 	if iterations == 0 || iterations > argonMaxTime {
 		return fail(fmt.Errorf("time out of range: %d", iterations))
 	}
+
 	if threads == 0 || threads > argonMaxThreads {
 		return fail(fmt.Errorf("threads out of range: %d", threads))
 	}
+
 	if memory < argonMinMemory || memory > argonMaxMemory || memory < 8*uint32(threads) {
 		return fail(fmt.Errorf("memory out of range: %d", memory))
 	}

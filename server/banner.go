@@ -23,7 +23,7 @@ func printStartupBanner(
 	environment string,
 	modules []string,
 	routes ...any,
-) error {
+) {
 	address := serverAddress(config.Host, config.Port)
 
 	memoryUsage := getMemoryUsage()
@@ -81,8 +81,6 @@ func printStartupBanner(
 
 	fmt.Println("╚═════════════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
-
-	return nil
 }
 
 func getRegisteredEndpoints(server *Server) []string {

@@ -59,12 +59,15 @@ func (app *App) Start() *App {
 
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(quit)
+
 	if !app.config.Debug && app.server != nil && app.config.server != nil {
 		app.server.ExpectListen()
 	}
+
 	startServer()
 
 	sig := <-quit
+
 	app.Log(map[string]any{"signal": sig.String()}, true).Info("Application received shutdown signal...")
 
 	if message, _, err := app.Close(); err != nil {

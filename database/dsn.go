@@ -24,6 +24,7 @@ func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configure MySQL timezone %q: %w", timezone, err)
 	}
+
 	dsnConfig.Loc = location
 
 	if err := dsnConfig.Apply(mysql.Charset(cfg.Charset, "")); err != nil {

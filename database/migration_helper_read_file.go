@@ -20,7 +20,6 @@ func readFiles(driver, dir string) ([]File, string, error) {
 	}
 
 	entries, err := os.ReadDir(dir)
-
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, "", nil // no directory = no files, not an error
@@ -70,7 +69,7 @@ func readFiles(driver, dir string) ([]File, string, error) {
 }
 
 // fileExtension returns the migration file extension for a driver.
-func fileExtension(driver string) (string, string, error) {
+func fileExtension(driver string) (res string, msg string, err error) {
 	switch driver {
 	case MONGO:
 		return ".json", "", nil

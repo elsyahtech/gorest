@@ -68,6 +68,7 @@ func New(ctx context.Context, config *Config) (*Redis, string, error) {
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		const message = "ensure redis service/daemon is running and ensure network connectivity to the server is stable"
+
 		pingErr := fmt.Errorf("try ping to redis host: %w", err)
 
 		if closeErr := client.Close(); closeErr != nil {

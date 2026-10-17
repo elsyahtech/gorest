@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+//nolint:revive
 var (
 	mongoGroupAggregateExpr = regexp.MustCompile(`(?i)^\s*(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(\*|[\w.]+)\s*\)\s*(?:AS\s+)?([\w]+)?\s*$`)
 	mongoHavingExpr         = regexp.MustCompile(`(?i)^\s*(COUNT\s*\(\s*(?:\*|[\w.]+)\s*\)|SUM\s*\(\s*[\w.]+\s*\)|AVG\s*\(\s*[\w.]+\s*\)|MIN\s*\(\s*[\w.]+\s*\)|MAX\s*\(\s*[\w.]+\s*\)|[\w.]+)\s*(=|<>|!=|>=|>|<=|<)\s*\?\s*$`)
@@ -32,7 +33,9 @@ func (orm *ORM) buildMongoGroupPipeline(
 ) (mongo.Pipeline, error) {
 	if len(orm.Preloads) > 0 {
 		return nil, orm.setError(
-			"Gorest ORM does not support combining Preload() with MongoDB GroupBy() aggregation. Run the aggregation and load related records in a separate query, or build a native pipeline. Reference: https://www.mongodb.com/docs/manual/core/aggregation-pipeline/",
+			"Gorest ORM does not support combining Preload() with MongoDB GroupBy() aggregation. "+
+				"Run the aggregation and load related records in a separate query, or build a native pipeline. "+
+				"Reference: https://www.mongodb.com/docs/manual/core/aggregation-pipeline/",
 			errors.New("find: preload is unsupported with MongoDB aggregation"),
 			http.StatusBadRequest,
 		)
@@ -57,6 +60,7 @@ func (orm *ORM) buildMongoGroupPipeline(
 
 	for _, col := range groupColumns {
 		field := mongoFieldName(col, collection)
+
 		canonical, ok := knownColumns[strings.ToLower(field)]
 		if !ok {
 			return nil, orm.mongoGroupInputError(
@@ -64,6 +68,7 @@ func (orm *ORM) buildMongoGroupPipeline(
 				"unknown MongoDB group column",
 			)
 		}
+
 		field = canonical
 
 		groupKeys[strings.ToLower(field)] = field
@@ -90,13 +95,16 @@ func (orm *ORM) buildMongoGroupPipeline(
 
 		operation := strings.ToUpper(match[1])
 		field := mongoFieldName(match[2], collection)
+
 		if field != "*" {
 			canonical, ok := knownColumns[strings.ToLower(field)]
 			if !ok {
 				return mongoGroupAccumulator{}, fmt.Errorf("aggregate field %q is not tagged with gorest on %s", field, structType.Name())
 			}
+
 			field = canonical
 		}
+
 		identity := strings.ToLower(operation + "(" + field + ")")
 
 		if field == "*" {
@@ -149,7 +157,10 @@ func (orm *ORM) buildMongoGroupPipeline(
 
 	for _, expression := range selected {
 		if strings.TrimSpace(expression) == "*" {
-			return nil, orm.mongoGroupInputError("Select(\"*\") is not valid for grouped MongoDB results; select group columns and aggregate expressions.", "wildcard projection with GroupBy")
+			return nil, orm.mongoGroupInputError(
+				"Select(\"*\") is not valid for grouped MongoDB results; select group columns and aggregate expressions.",
+				"wildcard projection with GroupBy",
+			)
 		}
 
 		if match := mongoGroupAggregateExpr.FindStringSubmatch(expression); match != nil {
@@ -163,7 +174,10 @@ func (orm *ORM) buildMongoGroupPipeline(
 		field := mongoFieldName(expression, collection)
 
 		if _, isGroupKey := groupKeys[strings.ToLower(field)]; !isGroupKey {
-			return nil, orm.mongoGroupInputError(fmt.Sprintf("selected field %q must be grouped or aggregated", expression), "ungrouped selected field")
+			return nil, orm.mongoGroupInputError(
+				fmt.Sprintf("selected field %q must be grouped or aggregated", expression),
+				"ungrouped selected field",
+			)
 		}
 	}
 
@@ -179,7 +193,10 @@ func (orm *ORM) buildMongoGroupPipeline(
 		match := mongoHavingExpr.FindStringSubmatch(clause)
 
 		if match == nil || idx >= len(orm.HavingArgs) {
-			return nil, orm.mongoGroupInputError("MongoDB Having() supports one ? placeholder and a simple comparison per call, such as Having(\"COUNT(*) > ?\", 2).", "unsupported having expression")
+			return nil, orm.mongoGroupInputError(
+				"MongoDB Having() supports one ? placeholder and a simple comparison per call, such as Having(\"COUNT(*) > ?\", 2).",
+				"unsupported having expression",
+			)
 		}
 
 		expression := strings.TrimSpace(match[1])
@@ -203,7 +220,10 @@ func (orm *ORM) buildMongoGroupPipeline(
 		} else if field, ok := groupKeys[strings.ToLower(mongoFieldName(expression, collection))]; ok {
 			target = "_id." + field
 		} else {
-			return nil, orm.mongoGroupInputError(fmt.Sprintf("Having() field %q must be a group column or selected aggregate alias", expression), "unknown having field")
+			return nil, orm.mongoGroupInputError(
+				fmt.Sprintf("Having() field %q must be a group column or selected aggregate alias", expression),
+				"unknown having field",
+			)
 		}
 
 		operator := map[string]string{"=": "$eq", "!=": "$ne", "<>": "$ne", ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte"}[match[2]]
@@ -211,7 +231,10 @@ func (orm *ORM) buildMongoGroupPipeline(
 	}
 
 	if len(orm.HavingArgs) != len(orm.HavingClauses) {
-		return nil, orm.mongoGroupInputError("MongoDB Having() requires exactly one argument for each condition.", "mismatched Having arguments")
+		return nil, orm.mongoGroupInputError(
+			"MongoDB Having() requires exactly one argument for each condition.",
+			"mismatched Having arguments",
+		)
 	}
 
 	pipeline = append(pipeline, bson.D{{Key: "$group", Value: groupDoc}})
@@ -263,4 +286,4 @@ func splitMongoSelectColumns(columns []string) []string {
 	}
 
 	return fields
-}
+} //nolint:revive

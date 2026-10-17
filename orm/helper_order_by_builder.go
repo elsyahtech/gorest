@@ -17,20 +17,25 @@ type orderByTerm struct {
 // tags and returns normalized terms for each database driver's query format.
 func (orm *ORM) parseOrderByTerms(structType reflect.Type, tableName string, clauses []string) ([]orderByTerm, error) {
 	columns, _ := taggedColumns(structType)
+
 	knownColumns := make(map[string]string, len(columns))
+
 	for _, column := range columns {
 		knownColumns[strings.ToLower(column)] = column
 	}
 
 	var terms []orderByTerm
+
 	for _, rawClause := range clauses {
 		for _, rawTerm := range strings.Split(rawClause, ",") {
 			parts := strings.Fields(strings.TrimSpace(rawTerm))
+
 			if len(parts) == 0 || len(parts) > 2 {
 				return nil, orm.invalidOrderBy(fmt.Sprintf("invalid ORDER BY expression %q", rawTerm))
 			}
 
 			direction := ""
+
 			if len(parts) == 2 {
 				direction = strings.ToUpper(parts[1])
 				if direction != asc && direction != desc {
@@ -39,7 +44,9 @@ func (orm *ORM) parseOrderByTerms(structType reflect.Type, tableName string, cla
 			}
 
 			identifierParts := strings.Split(parts[0], ".")
+
 			columnName := identifierParts[len(identifierParts)-1]
+
 			for _, identifier := range identifierParts {
 				if !isSafeOrderByIdentifier(identifier) {
 					return nil, orm.invalidOrderBy(fmt.Sprintf("invalid ORDER BY column %q", parts[0]))
@@ -79,12 +86,15 @@ func (orm *ORM) buildOrderByClause(structType reflect.Type, tableName string) (s
 	orderTerms := make([]string, 0, len(terms))
 	for _, term := range terms {
 		column := term.Column
+
 		if term.Qualifier != "" {
 			column = term.Qualifier + "." + column
 		}
+
 		if term.Direction != "" {
 			column += " " + term.Direction
 		}
+
 		orderTerms = append(orderTerms, column)
 	}
 

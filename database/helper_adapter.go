@@ -22,6 +22,7 @@ func (*Database) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
 			errors.New("encodeMongoCollection: destination is nil"),
 			http.StatusBadRequest,
 		)
+
 		return nil, message, httpCode, err
 	}
 
@@ -32,8 +33,10 @@ func (*Database) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
 				errors.New("encodeMongoCollection: destination is a nil pointer"),
 				http.StatusBadRequest,
 			)
+
 			return nil, message, httpCode, err
 		}
+
 		value = value.Elem()
 	}
 
@@ -44,6 +47,7 @@ func (*Database) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
 			fmt.Errorf("encodeMongoCollection: %w", err),
 			http.StatusBadRequest,
 		)
+
 		return nil, message, httpCode, wrappedErr
 	}
 
@@ -55,6 +59,7 @@ func mongoDocumentByGorestTag(value reflect.Value) (bson.M, error) {
 		if value.IsNil() {
 			return nil, errors.New("document is a nil pointer")
 		}
+
 		value = value.Elem()
 	}
 
@@ -64,6 +69,7 @@ func mongoDocumentByGorestTag(value reflect.Value) (bson.M, error) {
 
 	document := make(bson.M)
 	typ := value.Type()
+
 	for idx := 0; idx < value.NumField(); idx++ {
 		field := typ.Field(idx)
 		if field.PkgPath != "" {
@@ -79,6 +85,7 @@ func mongoDocumentByGorestTag(value reflect.Value) (bson.M, error) {
 		if name == "" || name == "-" {
 			continue
 		}
+
 		if _, exists := document[name]; exists {
 			return nil, fmt.Errorf("multiple struct fields use gorest tag %q", name)
 		}
@@ -86,8 +93,10 @@ func mongoDocumentByGorestTag(value reflect.Value) (bson.M, error) {
 		fieldValue := value.Field(idx)
 		if fieldValue.Kind() == reflect.Pointer && fieldValue.IsNil() {
 			document[name] = nil
+
 			continue
 		}
+
 		document[name] = fieldValue.Interface()
 	}
 
@@ -130,12 +139,14 @@ func (*Database) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, de
 
 	isSlice := destination.Kind() == reflect.Slice
 	structType := destination.Type()
+
 	if isSlice {
 		structType = structType.Elem()
 		if structType.Kind() == reflect.Pointer {
 			structType = structType.Elem()
 		}
 	}
+
 	if structType.Kind() != reflect.Struct {
 		return setError(
 			"The destination slice must contain structs or pointers to structs.",
@@ -149,8 +160,10 @@ func (*Database) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, de
 	}
 
 	rowsAffected := 0
+
 	for cursor.Next(ctx) {
 		var doc bson.M
+
 		if err := bson.Unmarshal(cursor.Current, &doc); err != nil {
 			return setError(
 				"Failed to decode the MongoDB document.",
@@ -168,17 +181,22 @@ func (*Database) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, de
 
 		if !isSlice {
 			destination.Set(value)
+
 			rowsAffected++
+
 			break
 		}
 
 		if destination.Type().Elem().Kind() == reflect.Pointer {
 			ptr := reflect.New(structType)
+
 			ptr.Elem().Set(value)
+
 			destination.Set(reflect.Append(destination, ptr))
 		} else {
 			destination.Set(reflect.Append(destination, value))
 		}
+
 		rowsAffected++
 	}
 
@@ -199,6 +217,7 @@ func (*Database) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, de
 func assignMongoDocumentByGorestTag(target reflect.Value, doc bson.M) error {
 	fieldLookup := make(map[string]int, target.NumField())
 	targetType := target.Type()
+
 	for idx := 0; idx < target.NumField(); idx++ {
 		field := targetType.Field(idx)
 		if field.PkgPath != "" {
@@ -243,43 +262,57 @@ func assignMongoFieldValue(target reflect.Value, raw any) error {
 
 	if target.Kind() == reflect.Pointer {
 		value := reflect.New(target.Type().Elem())
+
 		if err := assignMongoFieldValue(value.Elem(), raw); err != nil {
 			return err
 		}
+
 		target.Set(value)
+
 		return nil
 	}
 
 	if date, ok := raw.(bson.DateTime); ok {
 		raw = date.Time()
 	}
+
 	if objectID, ok := raw.(bson.ObjectID); ok && target.Kind() == reflect.String {
 		target.SetString(objectID.Hex())
+
 		return nil
 	}
+
 	if binary, ok := raw.(bson.Binary); ok && target.Kind() == reflect.Slice && target.Type().Elem().Kind() == reflect.Uint8 {
 		raw = binary.Data
 	}
 
 	source := reflect.ValueOf(raw)
+
 	if source.Type().AssignableTo(target.Type()) {
 		target.Set(source)
+
 		return nil
 	}
+
 	if source.Type().ConvertibleTo(target.Type()) {
 		target.Set(source.Convert(target.Type()))
+
 		return nil
 	}
+
 	if target.Type() == reflect.TypeOf(time.Time{}) {
 		if value, ok := raw.(time.Time); ok {
 			target.Set(reflect.ValueOf(value))
+
 			return nil
 		}
 	}
+
 	if target.Kind() == reflect.Interface {
 		target.Set(source)
+
 		return nil
 	}
 
 	return fmt.Errorf("cannot assign BSON value of type %T to field type %s", raw, target.Type())
-}
+} //nolint:revive

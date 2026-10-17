@@ -427,6 +427,7 @@ func resolveDir(baseDir, dir, defaultDir, driver string) string {
 	}
 
 	resolvedDir := filepath.Clean(dir)
+
 	relativeDir, err := filepath.Rel(filepath.Clean(baseDir), resolvedDir)
 	if err == nil && relativeDir != "." && relativeDir != ".." &&
 		!strings.HasPrefix(relativeDir, ".."+string(filepath.Separator)) &&

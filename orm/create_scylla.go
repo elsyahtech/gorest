@@ -56,13 +56,12 @@ func (orm *ORM) createScylla(data any) error {
 
 			queryStr += " IF NOT EXISTS"
 
-			applied, message, httpCode, execErr := orm.Database.ExecCQLCAS(
+			applied, message, httpCode, execErr := orm.Database.MapScanCAS(
 				execCtx,
 				orm.DatabaseConfig,
 				queryStr,
 				valueArgs...,
 			)
-
 			if execErr != nil {
 				orm.RowsAffected = created
 

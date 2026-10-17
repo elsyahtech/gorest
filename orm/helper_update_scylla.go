@@ -31,7 +31,7 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 		strings.Join(whereClause.parts, " AND "),
 	)
 
-	applied, _, _, err := orm.Database.ScanCQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.args...)
+	applied, _, _, err := orm.Database.MapScanCAS(execCtx, orm.DatabaseConfig, queryStr, whereClause.args...)
 	if err != nil {
 		return orm.setScyllaWriteError("Update", err)
 	}
@@ -91,14 +91,16 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 			strings.Join(whereClauses, " AND "),
 		)
 
-		applied, _, _, err := orm.Database.ScanCQL(execCtx, orm.DatabaseConfig, queryStr, query.args...)
+		applied, _, _, err := orm.Database.MapScanCAS(execCtx, orm.DatabaseConfig, queryStr, query.args...)
 		if err != nil {
 			return orm.setScyllaWriteError("Update", err)
 		}
+
 		if applied {
 			totalRowsAffected++
 		}
 	}
+
 	if totalRowsAffected == 0 {
 		return orm.setNotFound("update")
 	}

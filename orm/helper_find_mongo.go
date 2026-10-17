@@ -151,9 +151,11 @@ func (orm *ORM) buildMongoSort(clauses []string, collectionName string, structTy
 	sort := make(bson.D, 0, len(terms))
 	for _, term := range terms {
 		direction := 1
+
 		if term.Direction == desc {
 			direction = -1
 		}
+
 		sort = append(sort, bson.E{Key: term.Column, Value: direction})
 	}
 
@@ -208,9 +210,12 @@ func (orm *ORM) buildMongoDistinctPipeline(filter bson.M, sort bson.D, table str
 
 	groupID := bson.D{}
 	project := bson.D{{Key: "_id", Value: 0}}
+
 	seen := make(map[string]struct{}, len(orm.DistinctCols))
+
 	for idx, raw := range orm.DistinctCols {
 		column := strings.TrimSpace(raw)
+
 		if !mongoIdentifier.MatchString(column) {
 			return nil, orm.setError(
 				"Distinct() accepts field names only; remove empty values, expressions, and aliases.",
@@ -221,9 +226,11 @@ func (orm *ORM) buildMongoDistinctPipeline(filter bson.M, sort bson.D, table str
 
 		field := mongoFieldName(column, table)
 		output := field
+
 		if dot := strings.LastIndexByte(output, '.'); dot >= 0 {
 			output = output[dot+1:]
 		}
+
 		if _, exists := seen[output]; exists {
 			return nil, orm.setError(
 				"Distinct() fields must have unique output names after removing the collection prefix.",
@@ -231,26 +238,34 @@ func (orm *ORM) buildMongoDistinctPipeline(filter bson.M, sort bson.D, table str
 				http.StatusBadRequest,
 			)
 		}
+
 		seen[output] = struct{}{}
+
 		key := fmt.Sprintf("field%d", idx)
+
 		groupID = append(groupID, bson.E{Key: key, Value: "$" + field})
 		project = append(project, bson.E{Key: output, Value: "$_id." + key})
 	}
 
 	pipeline := mongo.Pipeline{}
+
 	if len(filter) > 0 {
 		pipeline = append(pipeline, bson.D{{Key: "$match", Value: filter}})
 	}
+
 	pipeline = append(pipeline,
 		bson.D{{Key: "$group", Value: bson.D{{Key: "_id", Value: groupID}}}},
 		bson.D{{Key: "$project", Value: project}},
 	)
+
 	if len(sort) > 0 {
 		pipeline = append(pipeline, bson.D{{Key: "$sort", Value: sort}})
 	}
+
 	if orm.OffsetVal > 0 {
 		pipeline = append(pipeline, bson.D{{Key: "$skip", Value: orm.OffsetVal}})
 	}
+
 	if orm.LimitVal > 0 {
 		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: orm.LimitVal}})
 	}

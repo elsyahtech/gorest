@@ -8,6 +8,7 @@ func (orm *ORM) safeWriteString(s string) {
 	}
 }
 
+//nolint:unused
 func (orm *ORM) safeWriteByte(c byte) {
 	if err := orm.StringBuilder.WriteByte(c); err != nil {
 		log.Printf("safeWriteByte error: %v", err)

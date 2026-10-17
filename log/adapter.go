@@ -16,6 +16,7 @@ func (log *Log) Close() (string, int, error) {
 	}
 
 	var closeErr error
+
 	if err := log.logger.Sync(); err != nil {
 		closeErr = errors.Join(closeErr, fmt.Errorf("close log sync failed: %w", err))
 	}
@@ -25,6 +26,7 @@ func (log *Log) Close() (string, int, error) {
 			closeErr = errors.Join(closeErr, fmt.Errorf("close log output failed: %w", err))
 		}
 	}
+
 	if closeErr != nil {
 		return "Ensure the underlying file system or logging output stream is writable and healthy.",
 			http.StatusInternalServerError,

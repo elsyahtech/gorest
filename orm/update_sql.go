@@ -70,7 +70,9 @@ func (orm *ORM) updateSQL(data any) error {
 	if retPlan != nil && activeDriver == database.ORACLE {
 		if len(rowsVal) != 1 {
 			return orm.setError(
-				"Gorest ORM Oracle Update().Return() currently handles one record per call. Update records individually or omit Return() for a bulk update. See the ORM driver matrix: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#4-return-values-from-writes",
+				"Gorest ORM Oracle Update().Return() currently handles one record per call. "+
+					"Update records individually or omit Return() for a bulk update. See the ORM driver "+
+					"matrix: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#4-return-values-from-writes",
 				errors.New("update: bulk Update().Return() is not implemented by the Gorest Oracle ORM path"),
 				http.StatusBadRequest,
 			)

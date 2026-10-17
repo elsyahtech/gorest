@@ -59,6 +59,7 @@ func (orm *ORM) extractColumnMetaData(rowsVal []reflect.Value, opName string) co
 func (orm *ORM) validateUpdateColumns(meta columnMetaData) error {
 	for _, columnIndex := range meta.columnIndex {
 		isPrimaryKey := false
+
 		for _, primaryKeyIndex := range meta.primaryKeyIndex {
 			if columnIndex == primaryKeyIndex {
 				isPrimaryKey = true

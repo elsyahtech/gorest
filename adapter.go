@@ -157,7 +157,7 @@ func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo
 			errors.New("database service is not running")
 	}
 
-	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest)
+	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest) //nolint:wrapcheck
 }
 
 // EncodeMongoCollection converts a struct (or other value) into a bson.M document,
@@ -172,7 +172,7 @@ func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int
 			errors.New("database service is not running")
 	}
 
-	return dbSession.database.EncodeMongoCollection(dest)
+	return dbSession.database.EncodeMongoCollection(dest) //nolint:wrapcheck
 }
 
 // MongoCreateCollection creates a new MongoDB collection in the configured database.
@@ -242,8 +242,8 @@ func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...
 // whether the condition was met and the change was applied.
 // A false result with a nil error means the condition was not met; the caller decides how to handle it
 // (for example 404 for IF EXISTS, 409 for IF NOT EXISTS).
-func (dbSession *DBSession) ScanCQL(ctx context.Context, query string, args ...any) (bool, string, int, error) {
-	if dbSession == nil || dbSession.database == nil {
+func (dbSession *DBSession) MapScanCAS(ctx context.Context, query string, args ...any) (bool, string, int, error) {
+	if dbSession == nil || dbSession.database == nil || dbSession.config == nil {
 		return false, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
@@ -251,7 +251,7 @@ func (dbSession *DBSession) ScanCQL(ctx context.Context, query string, args ...a
 			errors.New("database service is not running")
 	}
 
-	applied, message, httpCode, err := dbSession.database.ScanCQL(ctx, dbSession.config, query, args...)
+	applied, message, httpCode, err := dbSession.database.MapScanCAS(ctx, dbSession.config, query, args...)
 	if err != nil {
 		return false, message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -286,7 +286,7 @@ type QueryBuilderSQLSession func(ctx context.Context, executor SQLExecutor) erro
 // RawQuerySQLWithTx to execute raw queries through the active transaction instead.
 //
 // Deprecated: use RawQuerySQLWithTx to have operations participate in the active transaction.
-func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL) error {
+func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fun QueryBuilderSQL) error {
 	if dbSession == nil || dbSession.database == nil {
 		return errors.New("database service is not running")
 	}
@@ -299,11 +299,11 @@ func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL)
 		return errors.New("RawQuerySQL uses the connection pool and cannot be called with an active transaction; use RawQuerySQLWithTx")
 	}
 
-	if fn == nil {
+	if fun == nil {
 		return errors.New("SQL query callback is nil")
 	}
 
-	if err := fn(ctx, dbSession.database.SQL); err != nil {
+	if err := fun(ctx, dbSession.database.SQL); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
@@ -316,7 +316,7 @@ func (dbSession *DBSession) RawQuerySQL(ctx context.Context, fn QueryBuilderSQL)
 // and are committed or rolled back with it. Prefer ExecSQL and QuerySQL when possible.
 // The callback remains responsible for safe SQL construction, parameter binding,
 // and closing any rows it opens.
-func (dbSession *DBSession) RawQuerySQLWithTx(ctx context.Context, fn QueryBuilderSQLSession) error {
+func (dbSession *DBSession) RawQuerySQLWithTx(ctx context.Context, fun QueryBuilderSQLSession) error {
 	if dbSession == nil || dbSession.database == nil {
 		return errors.New("database service is not running")
 	}
@@ -325,7 +325,7 @@ func (dbSession *DBSession) RawQuerySQLWithTx(ctx context.Context, fn QueryBuild
 		return errors.New("SQL database is not running")
 	}
 
-	if fn == nil {
+	if fun == nil {
 		return errors.New("SQL query callback is nil")
 	}
 
@@ -339,7 +339,7 @@ func (dbSession *DBSession) RawQuerySQLWithTx(ctx context.Context, fn QueryBuild
 		executor = dbSession.database.Tx
 	}
 
-	if err := fn(ctx, executor); err != nil {
+	if err := fun(ctx, executor); err != nil {
 		return fmt.Errorf("%w", err)
 	}
 
@@ -469,7 +469,9 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 	}
 
 	err := dbSession.database.Tx.Rollback()
+
 	dbSession.database.Tx = nil
+
 	if dbSession.txCancel != nil {
 		dbSession.txCancel()
 		dbSession.txCancel = nil
@@ -507,7 +509,9 @@ func (dbSession *DBSession) Commit() (string, int, error) {
 	}
 
 	err := dbSession.database.Tx.Commit()
+
 	dbSession.database.Tx = nil
+
 	if dbSession.txCancel != nil {
 		dbSession.txCancel()
 		dbSession.txCancel = nil
@@ -538,11 +542,14 @@ func (app *App) Close() (string, int, error) {
 	if app.server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), server.DefaultServerShutdownTimeout)
 		err := app.server.Shutdown(ctx)
-		cancel()
+
+		defer cancel()
+
 		if err != nil {
 			msg := "failed to gracefully shut down HTTP server"
 			app.Log(Map{LogFieldKeyError: err}).Error(msg)
 			message, httpCode = msg, http.StatusInternalServerError
+
 			errs = append(errs, fmt.Errorf("failed to shut down HTTP server: %w", err))
 		}
 	}
@@ -553,6 +560,7 @@ func (app *App) Close() (string, int, error) {
 			app.Log(Map{LogFieldKeyError: err}).Error(msg)
 
 			message, httpCode = msg, http.StatusInternalServerError
+
 			errs = append(errs, fmt.Errorf("failed to disconnect redis: %w", err))
 		}
 	}
@@ -566,6 +574,7 @@ func (app *App) Close() (string, int, error) {
 			app.Log(Map{LogFieldKeyError: err}).Error(msg)
 
 			message, httpCode = msg, code
+
 			errs = append(errs, fmt.Errorf("failed to disconnect database: %w", err))
 		}
 	}
@@ -575,6 +584,7 @@ func (app *App) Close() (string, int, error) {
 		msg, code, err := app.log.Close()
 		if err != nil {
 			message, httpCode = msg, code
+
 			errs = append(errs, fmt.Errorf("failed to disconnect logger: %w", err))
 		}
 	}

@@ -356,7 +356,7 @@ func (orm *ORM) queryReturnRows(
 }
 
 func (orm *ORM) queryReturnRowsWithDatabase(
-	db *database.Database,
+	database *database.Database,
 	execCtx context.Context,
 	queryStr string,
 	args []any,
@@ -364,7 +364,8 @@ func (orm *ORM) queryReturnRowsWithDatabase(
 	operation string,
 ) ([]reflect.Value, error) {
 	args = orm.sanitizeArgs(args)
-	rows, _, _, err := db.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
+
+	rows, _, _, err := database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
 	if err != nil {
 		return nil, orm.setDatabaseOperationError(operation, err)
 	}

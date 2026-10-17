@@ -50,8 +50,10 @@ func (orm *ORM) findMongo(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+
 	if orm.limitSet && orm.LimitVal == 0 {
 		alwaysFalse := bson.M{"$expr": bson.M{"$eq": bson.A{1, 0}}}
+
 		if len(filter) == 0 {
 			filter = alwaysFalse
 		} else {
@@ -67,6 +69,7 @@ func (orm *ORM) findMongo(data any) error {
 
 	grouped := len(orm.GroupByClauses) > 0 || len(orm.HavingClauses) > 0
 	joining := len(orm.JoinClauses) > 0
+
 	if (orm.IsDistinct || joining) && grouped {
 		return orm.setError(
 			"MongoDB Find() cannot combine Join() or Distinct() with GroupBy() or Having(); choose one aggregation shape for this query.",
@@ -74,10 +77,12 @@ func (orm *ORM) findMongo(data any) error {
 			http.StatusBadRequest,
 		)
 	}
+
 	var (
 		findOpts *options.FindOptionsBuilder
 		pipeline mongo.Pipeline
 	)
+
 	if orm.IsDistinct {
 		pipeline, err = orm.buildMongoDistinctPipeline(filter, sort, tableName)
 	} else if grouped {
@@ -87,6 +92,7 @@ func (orm *ORM) findMongo(data any) error {
 	} else {
 		findOpts, err = orm.buildMongoOptionFindMongo(tableName, preload, sort, isSlice)
 	}
+
 	if err != nil {
 		return orm.Error
 	}
@@ -103,11 +109,13 @@ func (orm *ORM) findMongo(data any) error {
 
 	// 12. Execute Mongo find or aggregation query.
 	var cursor *mongo.Cursor
+
 	if grouped || orm.IsDistinct || joining {
 		cursor, err = coll.Aggregate(execCtx, pipeline)
 	} else {
 		cursor, err = coll.Find(execCtx, filter, findOpts)
 	}
+
 	if err != nil {
 		if grouped || orm.IsDistinct || joining {
 			return orm.setDatabaseOperationError("Find", err)
@@ -151,6 +159,7 @@ func (orm *ORM) findMongo(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+
 	if !isSlice && orm.RowsAffected == 0 {
 		return orm.setNotFound("find")
 	}

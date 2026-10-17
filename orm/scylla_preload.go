@@ -16,7 +16,12 @@ import (
 // bagi coordinator, jadi chunk-nya lebih kecil daripada SQL/Mongo.
 const scyllaInChunkSize = 100
 
-const scyllaPreloadCondHint = "Gorest ScyllaDB Preload conditions accept simple AND-connected predicates; OR, IS NULL, and parenthesized boolean expressions are not supported by this parser. LIKE is supported for string columns in CQL and is case-sensitive; non-key filtering may require ALLOW FILTERING and can be expensive. References: https://docs.scylladb.com/manual/stable/cql/dml/select.html#the-where-clause and https://docs.scylladb.com/manual/stable/cql/dml/select.html#like-operator"
+const scyllaPreloadCondHint = "Gorest ScyllaDB Preload conditions accept simple AND-connected predicates; " +
+	"OR, IS NULL, and parenthesized boolean expressions are not supported by this parser. " +
+	"LIKE is supported for string columns in CQL and is case-sensitive; non-key filtering may " +
+	"require ALLOW FILTERING and can be expensive. " +
+	"References: https://docs.scylladb.com/manual/stable/cql/dml/select.html#the-where-clause " +
+	"and  https://docs.scylladb.com/manual/stable/cql/dml/select.html#like-operator"
 
 var cqlUnsupportedIsNull = regexp.MustCompile(`(?i)\sIS\s+(NOT\s+)?NULL\b`)
 

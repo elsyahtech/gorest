@@ -14,9 +14,11 @@ func (orm *ORM) setError(message string, err error, code ...int) error {
 	}
 
 	var driver string
+
 	if orm.DatabaseConfig != nil {
 		driver = orm.DatabaseConfig.Driver
 	}
+
 	orm.Error = withHTTPCode(err, orm.HTTPCode, driver)
 
 	return orm.Error

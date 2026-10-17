@@ -317,6 +317,7 @@ func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounter int, v
 
 	for _, clause := range orm.HavingClauses {
 		placeholderCount := countActivePlaceholders(clause, activeDriver)
+
 		if argIndex+placeholderCount > len(orm.HavingArgs) {
 			return nil, 0, orm.setError(
 				"Ensure the number of placeholders in .Having() matches the number of arguments provided.",
@@ -326,9 +327,12 @@ func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounter int, v
 		}
 
 		normalized, nextCounter := normalizeWherePlaceholders(clause, activeDriver, argCounter)
+
 		argCounter = nextCounter
+
 		havingParts = append(havingParts, normalized)
 		valueArgs = append(valueArgs, orm.HavingArgs[argIndex:argIndex+placeholderCount]...)
+
 		argIndex += placeholderCount
 	}
 
@@ -507,6 +511,7 @@ func (orm *ORM) buildRowsScanFindSQL(req *structBuildRowsScanFindSQL) error {
 		}
 
 		fieldMapRowsScanFindSQL(resStructScanColumnRows.fieldMappings, resStructScanColumnRows.fieldHolders)
+
 		orm.RowsAffected++
 
 		// Preload Mapping (if active)

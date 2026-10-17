@@ -157,12 +157,15 @@ func warnOnUnboundedTimeouts(core *fiber.Config) {
 	}
 
 	var unbounded []string
+
 	if core.ReadTimeout == 0 {
 		unbounded = append(unbounded, "ReadTimeout")
 	}
+
 	if core.WriteTimeout == 0 {
 		unbounded = append(unbounded, "WriteTimeout")
 	}
+
 	if len(unbounded) == 0 {
 		return
 	}

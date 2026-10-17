@@ -39,6 +39,7 @@ func (orm *ORM) updateMongo(data any) error {
 
 		return orm.setError(message, errors.New("update: missing primary key for update"))
 	}
+
 	if err := orm.validateUpdateColumns(meta); err != nil {
 		return err
 	}

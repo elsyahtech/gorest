@@ -14,6 +14,7 @@ import (
 
 const redactedValue = "xxxxx"
 
+//nolint:revive
 var (
 	cookieHeaderPattern        = regexp.MustCompile(`(?i)(\b(?:cookie|set-cookie)\b\s*[:=]\s*)[^\r\n]+`)
 	sensitiveAssignmentPattern = regexp.MustCompile(`(?i)(\b(?:password|passwd|pwd|token|access[_ -]?token|refresh[_ -]?token|secret|credential|authorization|proxy[_ -]?authorization|cookie|set-cookie|session(?:[_ -]?(?:id|key|token))?|api[_ -]?key|private[_ -]?key|client[_ -]?secret|ssn|social[_ -]?security|credit[_ -]?card|card[_ -]?(?:number|no)|cvv|cvc)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&]+)`)
@@ -41,14 +42,17 @@ func (core redactingCore) Check(entry zapcore.Entry, checked *zapcore.CheckedEnt
 
 func (core redactingCore) Write(entry zapcore.Entry, fields []zap.Field) error {
 	entry.Message = redactString(entry.Message)
-	return core.Core.Write(entry, redactFields(fields))
+
+	return core.Core.Write(entry, redactFields(fields)) //nolint:wrapcheck
 }
 
 func redactFields(fields []zap.Field) []zap.Field {
 	redacted := make([]zap.Field, len(fields))
+
 	for index, field := range fields {
 		redacted[index] = redactField(field)
 	}
+
 	return redacted
 }
 
@@ -58,6 +62,7 @@ func redactField(field zap.Field) zap.Field {
 		field.String = redactedValue
 		field.Integer = 0
 		field.Interface = nil
+
 		return field
 	}
 
@@ -83,6 +88,7 @@ func redactField(field zap.Field) zap.Field {
 			field.Type = zapcore.ReflectType
 			field.Interface = redactValue(reflect.ValueOf(field.Interface), 0)
 		}
+	default:
 	}
 
 	return field
@@ -91,30 +97,36 @@ func redactField(field zap.Field) zap.Field {
 func redactString(value string) string {
 	value = cookieHeaderPattern.ReplaceAllString(value, "${1}"+redactedValue)
 	value = sensitiveAssignmentPattern.ReplaceAllString(value, "${1}"+redactedValue)
-	value = bearerPattern.ReplaceAllString(value, "$1 "+redactedValue)
+	value = bearerPattern.ReplaceAllString(value, "${1} "+redactedValue)
 	value = jwtPattern.ReplaceAllString(value, redactedValue)
 	value = emailPattern.ReplaceAllString(value, redactedValue)
+
 	return phonePattern.ReplaceAllStringFunc(value, func(candidate string) string {
 		digitCount := 0
+
 		for _, char := range candidate {
 			if unicode.IsDigit(char) {
 				digitCount++
 			}
 		}
+
 		if digitCount >= 10 && digitCount <= 15 {
 			return redactedValue
 		}
+
 		return candidate
 	})
 }
 
 func isSensitiveKey(key string) bool {
 	var normalized strings.Builder
+
 	for _, char := range strings.ToLower(key) {
 		if unicode.IsLetter(char) || unicode.IsDigit(char) {
 			normalized.WriteRune(char)
 		}
 	}
+
 	normalizedKey := normalized.String()
 
 	for _, marker := range []string{
@@ -128,6 +140,7 @@ func isSensitiveKey(key string) bool {
 		}
 	}
 
+	//nolint:revive
 	return normalizedKey == "email" ||
 		strings.HasSuffix(normalizedKey, "email") ||
 		strings.HasSuffix(normalizedKey, "mailaddress") ||
@@ -141,89 +154,24 @@ func redactValue(value reflect.Value, depth int) any {
 	if !value.IsValid() {
 		return nil
 	}
+
 	if depth > 16 {
 		return redactedValue
 	}
 
 	switch value.Kind() {
-	case reflect.Interface:
-		if value.IsNil() {
-			return nil
-		}
-		return redactValue(value.Elem(), depth+1)
-	case reflect.Pointer:
-		if value.IsNil() {
-			return nil
-		}
-		return redactValue(value.Elem(), depth+1)
+	case reflect.Interface, reflect.Pointer:
+		return redactIndirect(value, depth)
 	case reflect.String:
 		return redactString(value.String())
 	case reflect.Map:
-		if value.IsNil() {
-			return nil
-		}
-		result := make(map[string]any, value.Len())
-		iter := value.MapRange()
-		for iter.Next() {
-			key := iter.Key()
-			item := iter.Value()
-			keyString := fmt.Sprint(key.Interface())
-			var cleaned any
-			if isSensitiveKey(keyString) {
-				cleaned = redactedValue
-			} else {
-				cleaned = redactValue(item, depth+1)
-			}
-			result[redactString(keyString)] = cleaned
-		}
-		return result
+		return redactMap(value, depth)
 	case reflect.Slice:
-		if value.IsNil() {
-			return nil
-		}
-		if value.Type().Elem().Kind() == reflect.Uint8 {
-			return redactString(string(value.Bytes()))
-		}
-		result := make([]any, value.Len())
-		for index := 0; index < value.Len(); index++ {
-			result[index] = redactValue(value.Index(index), depth+1)
-		}
-		return result
+		return redactSlice(value, depth)
 	case reflect.Array:
-		result := make([]any, value.Len())
-		for index := 0; index < value.Len(); index++ {
-			result[index] = redactValue(value.Index(index), depth+1)
-		}
-		return result
+		return redactElements(value, depth)
 	case reflect.Struct:
-		if value.CanInterface() {
-			if err, ok := value.Interface().(error); ok {
-				return redactString(err.Error())
-			}
-			if stringer, ok := value.Interface().(fmt.Stringer); ok {
-				return redactString(stringer.String())
-			}
-		}
-		result := make(map[string]any, value.NumField())
-		for index := 0; index < value.NumField(); index++ {
-			fieldType := value.Type().Field(index)
-			if fieldType.PkgPath != "" {
-				continue
-			}
-			key := fieldType.Name
-			if jsonTag := strings.Split(fieldType.Tag.Get("json"), ",")[0]; jsonTag != "" && jsonTag != "-" {
-				key = jsonTag
-			}
-			fieldValue := value.Field(index)
-			var cleaned any
-			if isSensitiveKey(key) {
-				cleaned = redactedValue
-			} else {
-				cleaned = redactValue(fieldValue, depth+1)
-			}
-			result[redactString(key)] = cleaned
-		}
-		return result
+		return redactStruct(value, depth)
 	case reflect.Bool:
 		return value.Bool()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -236,15 +184,122 @@ func redactValue(value reflect.Value, depth int) any {
 		return value.Complex()
 	}
 
-	if value.CanInterface() {
-		if stringer, ok := value.Interface().(fmt.Stringer); ok {
-			return redactString(stringer.String())
-		}
-		if err, ok := value.Interface().(error); ok {
-			return redactString(err.Error())
-		}
-		return redactString(fmt.Sprint(value.Interface()))
+	return redactFallback(value)
+}
+
+func redactIndirect(value reflect.Value, depth int) any {
+	if value.IsNil() {
+		return nil
 	}
 
-	return redactedValue
+	return redactValue(value.Elem(), depth+1)
+}
+
+func redactEntry(key string, item reflect.Value, depth int) any {
+	if isSensitiveKey(key) {
+		return redactedValue
+	}
+
+	return redactValue(item, depth+1)
+}
+
+func redactMap(value reflect.Value, depth int) any {
+	if value.IsNil() {
+		return nil
+	}
+
+	result := make(map[string]any, value.Len())
+	iter := value.MapRange()
+
+	for iter.Next() {
+		keyString := fmt.Sprint(iter.Key().Interface())
+
+		result[redactString(keyString)] = redactEntry(keyString, iter.Value(), depth)
+	}
+
+	return result
+}
+
+func redactSlice(value reflect.Value, depth int) any {
+	if value.IsNil() {
+		return nil
+	}
+
+	if value.Type().Elem().Kind() == reflect.Uint8 {
+		return redactString(string(value.Bytes()))
+	}
+
+	return redactElements(value, depth)
+}
+
+func redactElements(value reflect.Value, depth int) []any {
+	result := make([]any, value.Len())
+
+	for index := 0; index < value.Len(); index++ {
+		result[index] = redactValue(value.Index(index), depth+1)
+	}
+
+	return result
+}
+
+func redactStruct(value reflect.Value, depth int) any {
+	if text, ok := structAsText(value); ok {
+		return redactString(text)
+	}
+
+	result := make(map[string]any, value.NumField())
+
+	for index := 0; index < value.NumField(); index++ {
+		fieldType := value.Type().Field(index)
+
+		if fieldType.PkgPath != "" {
+			continue
+		}
+
+		key := structFieldKey(fieldType)
+
+		result[redactString(key)] = redactEntry(key, value.Field(index), depth)
+	}
+
+	return result
+}
+
+func structAsText(value reflect.Value) (string, bool) {
+	if !value.CanInterface() {
+		return "", false
+	}
+
+	if err, ok := value.Interface().(error); ok {
+		return err.Error(), true
+	}
+
+	if stringer, ok := value.Interface().(fmt.Stringer); ok {
+		return stringer.String(), true
+	}
+
+	return "", false
+}
+
+func structFieldKey(fieldType reflect.StructField) string {
+	if jsonTag := strings.Split(fieldType.Tag.Get("json"), ",")[0]; jsonTag != "" && jsonTag != "-" {
+		return jsonTag
+	}
+
+	return fieldType.Name
+}
+
+func redactFallback(value reflect.Value) any {
+	if !value.CanInterface() {
+		return redactedValue
+	}
+
+	if stringer, ok := value.Interface().(fmt.Stringer); ok {
+		return redactString(stringer.String())
+	}
+
+	if err, ok := value.Interface().(error); ok {
+		return redactString(err.Error())
+	}
+
+	return redactString(fmt.Sprint(value.Interface()))
 }

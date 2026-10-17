@@ -49,6 +49,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 		if orm.HTTPCode == 0 {
 			orm.HTTPCode = http.StatusInternalServerError
 		}
+
 		orm.Error = withHTTPCode(orm.Error, orm.HTTPCode, driver)
 	} else if orm.HTTPCode == 0 {
 		orm.HTTPCode = http.StatusOK
@@ -65,6 +66,7 @@ func (orm *ORM) validateLimitOffset() error {
 			http.StatusBadRequest,
 		)
 	}
+
 	if orm.OffsetVal < 0 {
 		return orm.setError(
 			"Offset() must be zero or a positive integer.",

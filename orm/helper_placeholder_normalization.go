@@ -8,21 +8,28 @@ import (
 
 func normalizeWherePlaceholders(clause string, activeDriver string, startArgCounter int) (string, int) {
 	var normalized strings.Builder
+
 	normalized.Grow(len(clause))
 
 	counter := startArgCounter
+
 	for idx := 0; idx < len(clause); {
 		if activeDriver == database.ORACLE && idx+1 < len(clause) &&
 			(clause[idx] == 'q' || clause[idx] == 'Q') && clause[idx+1] == '\'' {
 			end := skipOracleQuotedString(clause, idx)
+
 			normalized.WriteString(clause[idx:end])
+
 			idx = end
+
 			continue
 		}
 
 		if end, ok := skipSQLQuotedSection(clause, idx, activeDriver); ok {
 			normalized.WriteString(clause[idx:end])
+
 			idx = end
+
 			continue
 		}
 
@@ -30,19 +37,26 @@ func normalizeWherePlaceholders(clause string, activeDriver string, startArgCoun
 			end := strings.IndexByte(clause[idx:], '\n')
 			if end < 0 {
 				normalized.WriteString(clause[idx:])
+
 				break
 			}
 
 			end += idx
+
 			normalized.WriteString(clause[idx:end])
+
 			idx = end
+
 			continue
 		}
 
 		if strings.HasPrefix(clause[idx:], "/*") {
 			end := skipSQLBlockComment(clause, idx, activeDriver)
+
 			normalized.WriteString(clause[idx:end])
+
 			idx = end
+
 			continue
 		}
 
@@ -54,7 +68,9 @@ func normalizeWherePlaceholders(clause string, activeDriver string, startArgCoun
 
 			normalized.WriteByte('?')
 			normalized.WriteString(clause[idx+2 : end])
+
 			idx = end
+
 			continue
 		}
 
@@ -67,20 +83,27 @@ func normalizeWherePlaceholders(clause string, activeDriver string, startArgCoun
 				}
 
 				end += idx + len(delimiter)*2
+
 				normalized.WriteString(clause[idx:end])
+
 				idx = end
+
 				continue
 			}
 		}
 
 		if end, ok := sqlPlaceholderEnd(clause, idx); ok {
 			normalized.WriteString(getPlaceholder(activeDriver, counter))
+
 			counter++
+
 			idx = end
+
 			continue
 		}
 
 		normalized.WriteByte(clause[idx])
+
 		idx++
 	}
 
@@ -89,7 +112,9 @@ func normalizeWherePlaceholders(clause string, activeDriver string, startArgCoun
 
 func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, bool) {
 	quote := clause[start]
+
 	var closing byte
+
 	switch quote {
 	case '\'', '"':
 		closing = quote
@@ -97,11 +122,13 @@ func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, b
 		if activeDriver != database.MYSQL && activeDriver != database.SQLITE {
 			return start, false
 		}
+
 		closing = quote
 	case '[':
 		if activeDriver != database.SQLSERVER {
 			return start, false
 		}
+
 		closing = ']'
 	default:
 		return start, false
@@ -117,6 +144,7 @@ func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, b
 	for idx := start + 1; idx < len(clause); idx++ {
 		if backslashEscapes && clause[idx] == '\\' {
 			idx++
+
 			continue
 		}
 
@@ -126,6 +154,7 @@ func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, b
 
 		if idx+1 < len(clause) && clause[idx+1] == closing {
 			idx++
+
 			continue
 		}
 
@@ -149,11 +178,13 @@ func startsSQLLineComment(clause string, idx int, activeDriver string) bool {
 	}
 
 	next := clause[idx+2]
+
 	return next == ' ' || next == '\t' || next == '\n' || next == '\r' || next == '\f'
 }
 
 func skipSQLBlockComment(clause string, start int, activeDriver string) int {
 	depth := 1
+
 	for idx := start + 2; idx < len(clause); idx++ {
 		switch {
 		case activeDriver == database.POSTGRES && strings.HasPrefix(clause[idx:], "/*"):
@@ -161,7 +192,9 @@ func skipSQLBlockComment(clause string, start int, activeDriver string) int {
 			idx++
 		case strings.HasPrefix(clause[idx:], "*/"):
 			depth--
+
 			idx++
+
 			if depth == 0 {
 				return idx + 1
 			}
@@ -177,14 +210,17 @@ func postgresDollarQuoteDelimiter(clause string, start int) (string, bool) {
 	}
 
 	for idx := start + 1; idx < len(clause); idx++ {
-		ch := clause[idx]
-		if ch == '$' {
+		cls := clause[idx]
+
+		if cls == '$' {
 			return clause[start : idx+1], true
 		}
-		if idx == start+1 && !isSQLIdentifierStartByte(ch) {
+
+		if idx == start+1 && !isSQLIdentifierStartByte(cls) {
 			return "", false
 		}
-		if !isSQLIdentifierByte(ch) {
+
+		if !isSQLIdentifierByte(cls) {
 			return "", false
 		}
 	}
@@ -201,6 +237,7 @@ func sqlPlaceholderEnd(clause string, start int) (int, bool) {
 		for idx < len(clause) && isASCIIDigit(clause[idx]) {
 			idx++
 		}
+
 		return idx, idx > start+1
 	case '@':
 		if start+2 >= len(clause) || (clause[start+1] != 'p' && clause[start+1] != 'P') {
@@ -211,6 +248,7 @@ func sqlPlaceholderEnd(clause string, start int) (int, bool) {
 		for idx < len(clause) && isASCIIDigit(clause[idx]) {
 			idx++
 		}
+
 		return idx, idx > start+2
 	default:
 		return start, false
@@ -236,6 +274,7 @@ func skipOracleQuotedString(clause string, start int) int {
 
 	opening := clause[start+2]
 	closing := opening
+
 	switch opening {
 	case '[':
 		closing = ']'
@@ -254,4 +293,4 @@ func skipOracleQuotedString(clause string, start int) int {
 	}
 
 	return len(clause)
-}
+} //nolint:revive

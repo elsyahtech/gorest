@@ -47,6 +47,7 @@ func New(config *Config, appName string) (*Log, string, error) {
 	}
 	if _, err := writer.Write(nil); err != nil {
 		const message = "Log Initialize: ensure log file can be created and writable"
+
 		_ = writer.Close()
 
 		return nil, message, fmt.Errorf("open log file: %w", err)
@@ -68,5 +69,6 @@ func New(config *Config, appName string) (*Log, string, error) {
 	}
 
 	log.closeFn = writer.Close
+
 	return &log, "", nil
 }

@@ -78,12 +78,13 @@ func (server *Server) Listen(address string, config fiber.ListenConfig) error {
 
 	server.ExpectListen()
 	defer server.markListenDone()
+
 	server.SRV.Hooks().OnListen(func(fiber.ListenData) error {
 		server.listeningOnce.Do(func() { close(server.listening) })
 		return nil
 	})
 
-	return server.SRV.Listen(address, config)
+	return server.SRV.Listen(address, config) //nolint:wrapcheck
 }
 
 func (server *Server) markListenDone() {
@@ -95,6 +96,7 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	if server == nil || server.SRV == nil {
 		return nil
 	}
+
 	if ctx == nil {
 		return errors.New("shutdown: context is nil")
 	}
@@ -103,7 +105,9 @@ func (server *Server) Shutdown(ctx context.Context) error {
 	scheduled := server.listenScheduled
 	listening := server.listening
 	listenDone := server.listenDone
+
 	server.lifecycleMu.Unlock()
+
 	if !scheduled {
 		return nil
 	}
@@ -123,6 +127,7 @@ func (server *Server) Shutdown(ctx context.Context) error {
 			return nil
 		default:
 		}
+
 		return fmt.Errorf("shutdown Fiber server: %w", shutdownErr)
 	}
 

@@ -324,6 +324,7 @@ func (orm *ORM) extractResultCreateSQL(result sql.Result, primaryKeyIndex []int,
 
 	// Message depends on the operation, not on whether an ID was returned.
 	idKey := lastInsertID
+
 	if orm.IsUpsert {
 		orm.Message = "Data saved successfully"
 		idKey = upsertedID

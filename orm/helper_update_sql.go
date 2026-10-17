@@ -35,6 +35,7 @@ func (orm *ORM) updateSingleSQL(
 	if err != nil {
 		return orm.Error
 	}
+
 	whereClause.args = orm.sanitizeArgs(whereClause.args)
 	if retPlan != nil && activeDriver == database.MYSQL {
 		return orm.updateMySQLSingleWithReturn(
@@ -56,6 +57,7 @@ func (orm *ORM) updateSingleSQL(
 		if err != nil {
 			return orm.Error
 		}
+
 		if len(scanned) == 0 {
 			return orm.setNotFound("update")
 		}
@@ -69,6 +71,7 @@ func (orm *ORM) updateSingleSQL(
 
 		return nil
 	}
+
 	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, whereClause.args...)
 	if err != nil {
 		return orm.setDatabaseOperationError("Update", err)
@@ -81,6 +84,7 @@ func (orm *ORM) updateSingleSQL(
 			affected = aff
 		}
 	}
+
 	if affected == 0 {
 		return orm.setNotFound("update")
 	}
@@ -108,6 +112,7 @@ func (orm *ORM) updateBulkSQL(
 	if err != nil {
 		return orm.Error
 	}
+
 	if retPlan != nil && activeDriver == database.MYSQL {
 		return orm.updateMySQLBulkWithReturn(execCtx, tableName, rowsVal, meta, updatableCols, retPlan)
 	}
@@ -129,6 +134,7 @@ func (orm *ORM) updateBulkSQL(
 	if err != nil {
 		return orm.Error
 	}
+
 	if totalRowsAffected == 0 {
 		return orm.setNotFound("update")
 	}
@@ -220,6 +226,7 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 			query.args = append(query.args, columnQuery.args...)
 			argCounter = columnQuery.argCounter
 		}
+
 		query.argCounter = argCounter
 
 		// Build the array WHERE clause

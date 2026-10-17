@@ -3,21 +3,23 @@ package database
 import (
 	"errors"
 
-	mysql "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/godror/godror"
 	"github.com/lib/pq"
-	sqlite "modernc.org/sqlite"
+	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // IsDuplicateKeyError reports whether err is a SQL duplicate or unique-key violation.
 func IsDuplicateKeyError(err error) bool {
 	var mysqlErr *mysql.MySQLError
+
 	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
 		return true
 	}
 
 	var postgresErr *pq.Error
+
 	if errors.As(err, &postgresErr) && postgresErr.Code == "23505" {
 		return true
 	}

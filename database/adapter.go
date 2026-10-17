@@ -395,54 +395,6 @@ func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, a
 	return "Data saved successfully", http.StatusOK, nil
 }
 
-// ExecCQLCAS executes a conditional CQL statement and reports whether the
-// condition was applied. It is intended for lightweight transactions such as
-// INSERT ... IF NOT EXISTS, where a false applied result is not a driver error.
-func (db *Database) ExecCQLCAS(ctx context.Context, config *Config, query string, args ...any) (bool, string, int, error) {
-	if db == nil || config == nil {
-		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, and the application must be running SCYLLA.",
-			errors.New("database service is not running"),
-		)
-
-		return false, message, code, err
-	}
-
-	if db.Scylla == nil {
-		message, code, err := setError(
-			"Ensure that your application is running with SCYLLA.",
-			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
-		)
-
-		return false, message, code, err
-	}
-
-	if ctx == nil || query == "" {
-		message, code, err := setError(
-			"Ensure the context and CQL query are not empty.",
-			errors.New("context or query is empty"),
-			http.StatusBadRequest,
-		)
-
-		return false, message, code, err
-	}
-
-	// INSERT ... IF NOT EXISTS returns the existing row columns when it is not
-	// applied. MapScanCAS safely consumes any table shape without requiring a
-	// destination argument for every returned column.
-	applied, err := db.Scylla.Query(query, args...).MapScanCASContext(ctx, make(map[string]any))
-	if err != nil {
-		message, code, err := setError(
-			"Ensure the target table exists and is accessible, and check the CQL syntax, table and column names, primary-key definition, and parameter types.",
-			fmt.Errorf("conditional CQL execution: %w", err),
-		)
-
-		return false, message, code, err
-	}
-
-	return applied, "Data saved successfully", http.StatusOK, nil
-}
-
 func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, args ...any) (*gocql.Iter, string, int, error) {
 	if db == nil {
 		message, code, err := setError(
@@ -486,7 +438,7 @@ func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, 
 	return db.Scylla.Query(query, args...).IterContext(ctx), "Data retrieved successfully", http.StatusOK, nil
 }
 
-func (db *Database) ScanCQL(ctx context.Context, config *Config, query string, args ...any) (applied bool, troubleshoot string, httpCode int, err error) {
+func (db *Database) MapScanCAS(ctx context.Context, config *Config, query string, args ...any) (applied bool, troubleshoot string, httpCode int, err error) {
 	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
@@ -533,7 +485,7 @@ func (db *Database) ScanCQL(ctx context.Context, config *Config, query string, a
 	applied, err = qry.MapScanCASContext(ctx, pyld)
 	if err != nil {
 		message, code, err := setError(
-			"Ensure that the record exists.",
+			"Ensure the target table exists and is accessible, and check the conditional CQL syntax, primary-key restrictions, and parameter types.",
 			err,
 		)
 
@@ -622,6 +574,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 				"MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA",
 			errors.New("database service is not running"),
 		)
+
 		return message, code, err
 	}
 
@@ -690,6 +643,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 			"Gorest does not currently support any database types other than these."
 
 		msg, code, err := setError(message, fmt.Errorf("database driver %q is not supported", activeDriver))
+
 		return msg, code, err
 	}
 
@@ -697,10 +651,11 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 		combinedMsg := "failed to close one or more database connections. "
 
 		if len(messages) > 0 {
-			combinedMsg += messages[0] // Bisa disesuaikan jika ingin menggabungkan semua pesan
+			combinedMsg += messages[0]
 		}
 
 		msg, code, err := setError(combinedMsg, errors.Join(errs...))
+
 		return msg, code, err
 	}
 

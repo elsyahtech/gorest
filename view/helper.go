@@ -62,6 +62,7 @@ func asError(value any) error {
 	if err, ok := value.(error); ok {
 		return err
 	}
+
 	return nil
 }
 
@@ -113,8 +114,10 @@ func (*JSON) NewResponse(fields map[string]any) *JSON {
 }
 
 func (*JSON) SendJSON(ctx *gorest.Context, response *JSON, err error) error {
-	if err = ctx.Status(response.HTTPCode).JSON(response); err != nil {
-		return fmt.Errorf("failed to send JSON Response: %w", err)
+	getErr := err
+
+	if getErr = ctx.Status(response.HTTPCode).JSON(response); getErr != nil {
+		return fmt.Errorf("failed to send JSON Response: %w", getErr)
 	}
 
 	return nil

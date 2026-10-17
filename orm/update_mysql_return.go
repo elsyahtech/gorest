@@ -41,9 +41,11 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 	}
 
 	whereArgs := append([]any(nil), whereClause.args[len(field.values):]...)
+
 	for idx, arg := range whereArgs {
 		whereArgs[idx] = orm.sanitizeArg(arg)
 	}
+
 	whereSQL := strings.Join(whereClause.parts, " AND ")
 	if whereSQL == "" {
 		return orm.setError(
@@ -57,11 +59,14 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 	// Copying the Database wrapper keeps this operation's Tx isolated from
 	// other goroutines using the application's shared Database instance.
 	execDB := orm.Database
-	var tx *sql.Tx
+
+	var transaction *sql.Tx
+
 	ownsTx := execDB.Tx == nil
 	if ownsTx {
 		var err error
-		tx, err = execDB.SQL.BeginTx(execCtx, nil)
+
+		transaction, err = execDB.SQL.BeginTx(execCtx, nil)
 		if err != nil {
 			return orm.setError(
 				"Ensure the MySQL server is reachable and can start a transaction.",
@@ -71,15 +76,16 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 		}
 
 		txDB := *execDB
-		txDB.Tx = tx
+		txDB.Tx = transaction
 		execDB = &txDB
 	}
 
 	committed := false
+
 	if ownsTx {
 		defer func() {
 			if !committed {
-				_ = tx.Rollback()
+				_ = transaction.Rollback()
 			}
 		}()
 	}
@@ -91,12 +97,17 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 		"SELECT %s FROM %s WHERE %s FOR UPDATE",
 		strings.Join(meta.primaryKeyColumns, ", "), tableName, whereSQL,
 	)
+
 	keyRows, _, _, err := execDB.QuerySQL(execCtx, orm.DatabaseConfig, keyQuery, whereArgs...)
 	if err != nil {
 		return orm.setDatabaseOperationError("Update", err)
 	}
+
 	keys, err := scanMySQLReturnKeys(keyRows, len(meta.primaryKeyColumns), meta, inputRows[0].Type())
+
+	//nolint:sqlclosecheck
 	closeErr := keyRows.Close()
+
 	if err != nil {
 		return orm.setError(
 			"Ensure MySQL can read the primary keys of rows matching the update filter.",
@@ -104,6 +115,7 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 			http.StatusInternalServerError,
 		)
 	}
+
 	if closeErr != nil {
 		return orm.setError(
 			"Ensure the MySQL result stream can be closed cleanly.",
@@ -111,15 +123,19 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 			http.StatusInternalServerError,
 		)
 	}
+
 	if len(keys) == 0 {
 		return orm.setNotFound("update")
 	}
 
 	updateQuery := buildUpdateStatement(tableName, setClause, whereSQL, nil, database.MYSQL)
+
 	updateArgs := append([]any(nil), whereClause.args...)
+
 	for idx, arg := range updateArgs {
 		updateArgs[idx] = orm.sanitizeArg(arg)
 	}
+
 	if _, _, _, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...); err != nil {
 		return orm.setDatabaseOperationError("Update", err)
 	}
@@ -129,11 +145,13 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 	if keyWidth := len(meta.primaryKeyColumns); keyWidth > 0 && chunkSize*keyWidth > 60000 {
 		chunkSize = 60000 / keyWidth
 	}
+
 	if chunkSize < 1 {
 		chunkSize = 1
 	}
 
 	var scanned []reflect.Value
+
 	for start := 0; start < len(keys); start += chunkSize {
 		end := start + chunkSize
 		if end > len(keys) {
@@ -141,12 +159,15 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 		}
 
 		selectQuery, selectArgs := buildMySQLReturnSelect(tableName, plan.queryCols, meta.primaryKeyColumns, keys[start:end])
+
 		chunk, err := orm.queryReturnRowsWithDatabase(execDB, execCtx, selectQuery, selectArgs, plan, "Update")
 		if err != nil {
 			return err
 		}
+
 		scanned = append(scanned, chunk...)
 	}
+
 	if len(scanned) == 0 {
 		return orm.setNotFound("update")
 	}
@@ -154,18 +175,20 @@ func (orm *ORM) updateMySQLSingleWithReturn(
 	if err := orm.finishReturn(plan, scanned, inputRows); err != nil {
 		return err
 	}
+
 	orm.LastInsertId = lastInsertIDFromReturn(plan, scanned, inputRows, meta)
 	orm.Message = "Data updated successfully"
 	orm.HTTPCode = http.StatusOK
 
 	if ownsTx {
-		if err := tx.Commit(); err != nil {
+		if err := transaction.Commit(); err != nil {
 			return orm.setError(
 				"Ensure the MySQL transaction can be committed successfully.",
 				fmt.Errorf("update: commit MySQL Return transaction: %w", err),
 				http.StatusInternalServerError,
 			)
 		}
+
 		committed = true
 	}
 
@@ -194,11 +217,15 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 	// Use a local transaction when the caller has not already supplied one.
 	// Copying the wrapper avoids changing the shared Database.Tx field.
 	execDB := orm.Database
-	var tx *sql.Tx
+
+	var transaction *sql.Tx
+
 	ownsTx := execDB.Tx == nil
+
 	if ownsTx {
 		var err error
-		tx, err = execDB.SQL.BeginTx(execCtx, nil)
+
+		transaction, err = execDB.SQL.BeginTx(execCtx, nil)
 		if err != nil {
 			return orm.setError(
 				"Ensure the MySQL server is reachable and can start a transaction.",
@@ -208,20 +235,22 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 		}
 
 		txDB := *execDB
-		txDB.Tx = tx
+		txDB.Tx = transaction
 		execDB = &txDB
 	}
 
 	committed := false
+
 	if ownsTx {
 		defer func() {
 			if !committed {
-				_ = tx.Rollback()
+				_ = transaction.Rollback()
 			}
 		}()
 	}
 
 	chunkSize := buildChunkSize(database.MYSQL, len(updatableCols), len(meta.primaryKeyIndex))
+
 	var keys [][]any
 
 	for start := 0; start < len(rowsVal); start += chunkSize {
@@ -229,17 +258,21 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 		if end > len(rowsVal) {
 			end = len(rowsVal)
 		}
+
 		chunkRows := rowsVal[start:end]
 
 		query := &resBuildQueryUpdateSQL{}
 		argCounter := 1
+
 		for idx := range updatableCols {
 			columnQuery := orm.buildQueryUpdateSQL(chunkRows, &meta, argCounter, &updatableCols[idx], database.MYSQL)
 			query.clauses = append(query.clauses, columnQuery.clauses...)
 			query.args = append(query.args, columnQuery.args...)
 			argCounter = columnQuery.argCounter
 		}
+
 		query.argCounter = argCounter
+
 		setArgCount := len(query.args)
 
 		whereClauses, err := orm.buildBulkWhereClause(&reqBuildBulkWhereClause{
@@ -254,21 +287,28 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 		}
 
 		whereArgs := append([]any(nil), query.args[setArgCount:]...)
+
 		for idx, arg := range whereArgs {
 			whereArgs[idx] = orm.sanitizeArg(arg)
 		}
+
 		whereSQL := strings.Join(whereClauses, " AND ")
 
 		keyQuery := fmt.Sprintf(
 			"SELECT %s FROM %s WHERE %s FOR UPDATE",
 			strings.Join(meta.primaryKeyColumns, ", "), tableName, whereSQL,
 		)
+
 		keyRows, _, _, err := execDB.QuerySQL(execCtx, orm.DatabaseConfig, keyQuery, whereArgs...)
 		if err != nil {
 			return orm.setDatabaseOperationError("Update", err)
 		}
+
 		chunkKeys, scanErr := scanMySQLReturnKeys(keyRows, len(meta.primaryKeyColumns), meta, rowsVal[0].Type())
+
+		//nolint:sqlclosecheck
 		closeErr := keyRows.Close()
+
 		if scanErr != nil {
 			return orm.setError(
 				"Ensure MySQL can read the primary keys of rows matching the bulk update.",
@@ -276,6 +316,7 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 				http.StatusInternalServerError,
 			)
 		}
+
 		if closeErr != nil {
 			return orm.setError(
 				"Ensure the MySQL result stream can be closed cleanly.",
@@ -283,17 +324,21 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 				http.StatusInternalServerError,
 			)
 		}
+
 		keys = append(keys, chunkKeys...)
 
 		updateQuery := buildUpdateStatement(tableName, strings.Join(query.clauses, ", "), whereSQL, nil, database.MYSQL)
 		updateArgs := append([]any(nil), query.args...)
+
 		for idx, arg := range updateArgs {
 			updateArgs[idx] = orm.sanitizeArg(arg)
 		}
+
 		result, _, _, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...)
 		if err != nil {
 			return orm.setDatabaseOperationError("Update", err)
 		}
+
 		_ = result
 	}
 
@@ -305,29 +350,37 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 	if keyWidth := len(meta.primaryKeyColumns); keyWidth > 0 && chunkSize*keyWidth > 60000 {
 		chunkSize = 60000 / keyWidth
 	}
+
 	if chunkSize < 1 {
 		chunkSize = 1
 	}
 
 	var scanned []reflect.Value
+
 	for start := 0; start < len(keys); start += chunkSize {
 		end := start + chunkSize
 		if end > len(keys) {
 			end = len(keys)
 		}
+
 		selectQuery, selectArgs := buildMySQLReturnSelect(tableName, plan.queryCols, meta.primaryKeyColumns, keys[start:end])
+
 		chunk, err := orm.queryReturnRowsWithDatabase(execDB, execCtx, selectQuery, selectArgs, plan, "Update")
 		if err != nil {
 			return err
 		}
+
 		scanned = append(scanned, chunk...)
 	}
+
 	if len(scanned) == 0 {
 		return orm.setNotFound("update")
 	}
+
 	if err := orm.finishReturn(plan, scanned, rowsVal); err != nil {
 		return err
 	}
+
 	orm.LastInsertId = lastInsertIDFromReturn(plan, scanned, rowsVal, meta)
 	// UPDATE ... RETURN semantics count matched rows, including rows whose new
 	// values equal their existing values (MySQL may report only changed rows).
@@ -336,13 +389,14 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 	orm.HTTPCode = http.StatusOK
 
 	if ownsTx {
-		if err := tx.Commit(); err != nil {
+		if err := transaction.Commit(); err != nil {
 			return orm.setError(
 				"Ensure the MySQL transaction can be committed successfully.",
 				fmt.Errorf("update: commit MySQL Return transaction: %w", err),
 				http.StatusInternalServerError,
 			)
 		}
+
 		committed = true
 	}
 
@@ -351,25 +405,30 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 
 func scanMySQLReturnKeys(rows *sql.Rows, columnCount int, meta columnMetaData, rowType reflect.Type) ([][]any, error) {
 	if rows == nil {
-		return nil, errors.New("query returned a nil rows handle")
+		return nil, errors.New("query returned a nil rows handle") //nolint:wrapcheck
 	}
 
 	keys := make([][]any, 0)
+
 	for rows.Next() {
 		values := make([]any, columnCount)
 		destinations := make([]any, columnCount)
+
 		for idx := range values {
 			destinations[idx] = &values[idx]
 		}
+
 		if err := rows.Scan(destinations...); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan MySQL Return keys: %w", err)
 		}
 
 		for idx, fieldIndex := range meta.primaryKeyIndex {
 			fieldType := rowType.Field(fieldIndex).Type
+
 			for fieldType.Kind() == reflect.Pointer {
 				fieldType = fieldType.Elem()
 			}
+
 			if fieldType.Kind() == reflect.String {
 				if bytes, ok := values[idx].([]byte); ok {
 					values[idx] = string(bytes)
@@ -381,7 +440,7 @@ func scanMySQLReturnKeys(rows *sql.Rows, columnCount int, meta columnMetaData, r
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w", err)
 	}
 
 	return keys, nil
@@ -390,12 +449,15 @@ func scanMySQLReturnKeys(rows *sql.Rows, columnCount int, meta columnMetaData, r
 func buildMySQLReturnSelect(tableName string, returnColumns, primaryKeyColumns []string, keys [][]any) (string, []any) {
 	keyPredicates := make([]string, 0, len(keys))
 	args := make([]any, 0, len(keys)*len(primaryKeyColumns))
+
 	for _, key := range keys {
 		parts := make([]string, 0, len(primaryKeyColumns))
+
 		for idx, column := range primaryKeyColumns {
 			parts = append(parts, column+" = ?")
 			args = append(args, key[idx])
 		}
+
 		keyPredicates = append(keyPredicates, "("+strings.Join(parts, " AND ")+")")
 	}
 
@@ -405,4 +467,4 @@ func buildMySQLReturnSelect(tableName string, returnColumns, primaryKeyColumns [
 	)
 
 	return query, args
-}
+} //nolint:revive

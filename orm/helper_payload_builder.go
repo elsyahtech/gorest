@@ -17,6 +17,8 @@ type resultBuildUpdatePayload struct {
 }
 
 // Extract Single Update Fields: separates PK and non-PK columns for single update purposes.
+//
+//nolint:unparam
 func buildUpdatePayload(row reflect.Value, meta columnMetaData, activeDriver string, startArgCounter int) *resultBuildUpdatePayload {
 	var (
 		setClauses []string

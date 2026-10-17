@@ -4,8 +4,9 @@ import "strings"
 
 // qualifyUpsertClause adds a table prefix to columns to prevent ambiguity in
 // ON CONFLICT / MERGE clauses (Postgres & SQL Server).
-func (orm *ORM) upsertClause(clause, table string) string {
+func (*ORM) upsertClause(clause, table string) string {
 	last := 0
+
 	var builder strings.Builder
 
 	for _, loc := range upsertColRe.FindAllStringSubmatchIndex(clause, -1) {

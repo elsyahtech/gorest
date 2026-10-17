@@ -58,6 +58,7 @@ func (orm *ORM) findScylla(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+
 	if len(orm.GroupByClauses) > 0 {
 		orm.safeWriteString(" GROUP BY ")
 		orm.safeWriteString(strings.Join(orm.GroupByClauses, ", "))
@@ -68,15 +69,20 @@ func (orm *ORM) findScylla(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+
 	if len(orderTerms) > 0 {
 		orderBy := make([]string, 0, len(orderTerms))
+
 		for _, term := range orderTerms {
 			part := term.Column
+
 			if term.Direction != "" {
 				part += " " + term.Direction
 			}
+
 			orderBy = append(orderBy, part)
 		}
+
 		orm.safeWriteString(" ORDER BY ")
 		orm.safeWriteString(strings.Join(orderBy, ", "))
 	}
@@ -113,6 +119,7 @@ func (orm *ORM) findScylla(data any) error {
 	if err := orm.buildIterScanFindScylla(iter, structInfo.structType, fieldLookupMap, isSlice, valElem, structInfo.structValue); err != nil {
 		return orm.Error
 	}
+
 	if !isSlice && orm.RowsAffected == 0 {
 		return orm.setNotFound("find")
 	}

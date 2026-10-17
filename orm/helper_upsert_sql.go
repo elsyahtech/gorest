@@ -51,7 +51,10 @@ func (orm *ORM) prepareUpsertSQL(meta columnMetaData, driver string) error {
 func (orm *ORM) validatePrepareUpsertSQL(driver string, meta columnMetaData) error {
 	if driver == database.MYSQL && len(orm.UpsertClauses) > 0 {
 		return orm.setError(
-			"Gorest ORM does not implement conditional Upsert() for MySQL. Use Upsert(\"column\") or write a native INSERT ... ON DUPLICATE KEY UPDATE statement. References: https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html and https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#5-upsert",
+			"Gorest ORM does not implement conditional Upsert() for MySQL. "+
+				"Use Upsert(\"column\") or write a native INSERT ... ON DUPLICATE KEY UPDATE statement. "+
+				"References: https://dev.mysql.com/doc/refman/8.4/en/insert-on-duplicate.html "+
+				"and https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#5-upsert",
 			errors.New("create: conditional Upsert() is not implemented by the Gorest MySQL ORM path"),
 		)
 	}
@@ -83,7 +86,9 @@ func (orm *ORM) validatePrepareUpsertSQL(driver string, meta columnMetaData) err
 		for _, col := range orm.UpsertUpdateCols {
 			if containsFold(orm.UpsertConflictCols, col) {
 				return orm.setError(
-					fmt.Sprintf("Oracle MERGE cannot update column %q because it appears in the ON condition. Choose another update column. Reference: https://docs.oracle.com/en/database/oracle/oracle-database/26/sqlrf/MERGE.html", col),
+					fmt.Sprintf("Oracle MERGE cannot update column %q because it appears in the ON condition. "+
+						"Choose another update column. "+
+						"Reference: https://docs.oracle.com/en/database/oracle/oracle-database/26/sqlrf/MERGE.html", col),
 					fmt.Errorf("create: upsert update column %q is also a conflict column (ORA-38104)", col),
 				)
 			}

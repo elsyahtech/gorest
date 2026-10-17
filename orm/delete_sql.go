@@ -59,12 +59,14 @@ func (orm *ORM) deleteSQL(data any) error {
 	queryStr := orm.StringBuilder.String()
 
 	whereArgs := orm.sanitizeArgs(resDelPayload.whereArgs)
+
 	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, queryStr, whereArgs...)
 	if err != nil {
 		return orm.setDatabaseOperationError("Delete", err)
 	}
 
 	orm.extractResultDeleteSQL(result)
+
 	if orm.RowsAffected == 0 {
 		return orm.setNotFound("delete")
 	}

@@ -2,7 +2,6 @@ package orm
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -65,7 +64,7 @@ func (orm *ORM) Find(data any) *ORM {
 			orm.Message = "Use either Select() or Distinct(columns), not both. Distinct(columns) selects the distinct columns."
 			orm.Error = orm.setError(
 				orm.Message,
-				fmt.Errorf("find: Select() conflicts with Distinct(columns)"),
+				errors.New("find: Select() conflicts with Distinct(columns)"),
 				http.StatusBadRequest,
 			)
 

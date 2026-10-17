@@ -82,6 +82,7 @@ func (orm *ORM) validateStructTags(data any, structRequirement fieldRequirement,
 	if err != nil {
 		return orm.Error
 	}
+
 	if structRequirement.validateRequired {
 		if err := orm.validateRequiredFields(val, structType, opName); err != nil {
 			return err
@@ -97,31 +98,37 @@ func (orm *ORM) validateRequiredFields(value reflect.Value, structType reflect.T
 			if row.IsNil() {
 				return nil // Nil slice elements are reported by the existing payload validation.
 			}
+
 			row = row.Elem()
 		}
 
 		for fieldIndex := 0; fieldIndex < structType.NumField(); fieldIndex++ {
 			field := structType.Field(fieldIndex)
+
 			if strings.TrimSpace(strings.Split(field.Tag.Get("gorest"), ",")[0]) == "-" ||
 				!hasGorestTagOption(field.Tag.Get("gorest"), "required") {
 				continue
 			}
 
 			fieldValue := row.Field(fieldIndex)
+
 			for fieldValue.Kind() == reflect.Pointer || fieldValue.Kind() == reflect.Interface {
 				if fieldValue.IsNil() {
 					return orm.requiredFieldError(field.Tag.Get("gorest"), rowIndex, opName)
 				}
+
 				fieldValue = fieldValue.Elem()
 			}
 
 			isEmpty := false
+
 			switch fieldValue.Kind() {
 			case reflect.String:
 				isEmpty = strings.TrimSpace(fieldValue.String()) == ""
 			case reflect.Slice, reflect.Map, reflect.Array:
 				isEmpty = fieldValue.Len() == 0
 			}
+
 			if isEmpty {
 				return orm.requiredFieldError(field.Tag.Get("gorest"), rowIndex, opName)
 			}
@@ -136,6 +143,7 @@ func (orm *ORM) validateRequiredFields(value reflect.Value, structType reflect.T
 				return err
 			}
 		}
+
 		return nil
 	}
 
@@ -145,6 +153,7 @@ func (orm *ORM) validateRequiredFields(value reflect.Value, structType reflect.T
 func (orm *ORM) requiredFieldError(tag string, rowIndex int, opName string) error {
 	column := strings.TrimSpace(strings.Split(tag, ",")[0])
 	message := fmt.Sprintf("Field %q is required and must not be empty.", column)
+
 	if rowIndex > 0 {
 		message = fmt.Sprintf("Field %q is required and must not be empty (record %d).", column, rowIndex)
 	}
@@ -162,6 +171,7 @@ func hasGorestTagOption(tag, option string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -268,4 +278,4 @@ func (orm *ORM) buildTagInfoInvalidateStructTags(structType reflect.Type, struct
 	}
 
 	return tagInfo, nil
-}
+} // nolint:revive

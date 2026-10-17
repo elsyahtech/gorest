@@ -305,7 +305,9 @@ func isZeroValue(val any) bool {
 func (orm *ORM) prepareScyllaUpsert(meta columnMetaData) error {
 	if len(orm.UpsertClauses) > 0 {
 		return orm.setError(
-			"Gorest ORM does not support conditional Upsert() for ScyllaDB. ScyllaDB supports conditional writes through lightweight transactions; use native CQL with IF conditions and handle the applied result. Reference: https://docs.scylladb.com/manual/stable/features/lwt.html",
+			"Gorest ORM does not support conditional Upsert() for ScyllaDB. ScyllaDB supports conditional "+
+				"writes through lightweight transactions; use native CQL with IF conditions and handle the applied result. "+
+				"Reference: https://docs.scylladb.com/manual/stable/features/lwt.html",
 			errors.New("create: conditional Upsert() is not implemented by the Gorest ScyllaDB ORM path"),
 		)
 	}

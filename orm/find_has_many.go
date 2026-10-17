@@ -304,6 +304,7 @@ func (orm *ORM) execLoadHasMany(
 	grouped map[string][]reflect.Value,
 ) error {
 	args = orm.sanitizeArgs(args)
+
 	rows, _, _, err := orm.Database.QuerySQL(ctx, orm.DatabaseConfig, query, args...)
 	if err != nil {
 		return orm.setFindSQLQueryError(orm.DatabaseConfig.Driver, err)

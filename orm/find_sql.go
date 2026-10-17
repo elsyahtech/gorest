@@ -39,6 +39,7 @@ func (orm *ORM) findSQL(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+
 	whereClause.valueArgs, whereClause.argCounter, err = orm.buildGroupByHavingFindSQL(
 		activeDriver,
 		whereClause.argCounter,
@@ -53,6 +54,7 @@ func (orm *ORM) findSQL(data any) error {
 	if err != nil {
 		return orm.Error
 	}
+
 	if orderBy != "" {
 		orm.safeWriteString(orderBy)
 	}
@@ -76,6 +78,7 @@ func (orm *ORM) findSQL(data any) error {
 
 	// 12. Execute database query
 	queryArgs := orm.sanitizeArgs(whereClause.valueArgs)
+
 	rows, _, _, err := orm.Database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, queryArgs...)
 	if err != nil {
 		return orm.setFindSQLQueryError(activeDriver, err)
@@ -123,6 +126,7 @@ func (orm *ORM) findSQL(data any) error {
 	); err != nil {
 		return orm.Error
 	}
+
 	if !isSlice && orm.RowsAffected == 0 {
 		return orm.setNotFound("find")
 	}

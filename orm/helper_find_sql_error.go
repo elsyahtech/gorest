@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/elsyahtech/gorest/database"
-	mysql "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/godror/godror"
 	"github.com/lib/pq"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -26,43 +26,65 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 
 	switch driver {
 	case database.ORACLE:
-		if oracleErr, ok := godror.AsOraErr(err); ok {
-			switch oracleErr.Code() {
-			case 933, 936, 942:
-				return true
-			}
+		oracleErr, ok := godror.AsOraErr(err)
+		if !ok {
+			return false
+		}
+
+		switch oracleErr.Code() {
+		case 933, 936, 942:
+			return true
+		default:
+			return false
 		}
 	case database.MYSQL:
 		var mysqlErr *mysql.MySQLError
-		if errors.As(err, &mysqlErr) {
-			switch mysqlErr.Number {
-			case 1064, 1146:
-				return true
-			}
+
+		if !errors.As(err, &mysqlErr) {
+			return false
+		}
+
+		switch mysqlErr.Number {
+		case 1064, 1146:
+			return true
+		default:
+			return false
 		}
 	case database.POSTGRES:
 		var postgresErr *pq.Error
-		if errors.As(err, &postgresErr) {
-			switch postgresErr.Code {
-			case "42601", "42P01":
-				return true
-			}
+
+		if !errors.As(err, &postgresErr) {
+			return false
+		}
+
+		switch postgresErr.Code {
+		case "42601", "42P01":
+			return true
+		default:
+			return false
 		}
 	case database.SQLSERVER:
 		var sqlServerErr interface{ SQLErrorNumber() int32 }
-		if errors.As(err, &sqlServerErr) {
-			switch sqlServerErr.SQLErrorNumber() {
-			case 102, 156, 208:
-				return true
-			}
+
+		if !errors.As(err, &sqlServerErr) {
+			return false
+		}
+
+		switch sqlServerErr.SQLErrorNumber() {
+		case 102, 156, 208:
+			return true
+		default:
+			return false
 		}
 	case database.SQLITE:
 		errText := strings.ToLower(err.Error())
+
 		return strings.Contains(errText, "syntax error") ||
 			strings.Contains(errText, "incomplete input") ||
 			strings.Contains(errText, "no such table")
 	case database.MONGO:
 		var serverErr mongo.ServerError
+
 		if errors.As(err, &serverErr) {
 			for _, code := range []int{2, 9, 14, 168, 40324} {
 				if serverErr.HasErrorCode(code) {
@@ -72,6 +94,7 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 		}
 	case database.SCYLLA:
 		errText := strings.ToLower(err.Error())
+
 		return strings.Contains(errText, "select distinct queries must only request partition key columns") ||
 			strings.Contains(errText, "group by non-primary-key column") ||
 			strings.Contains(errText, "undefined column") ||

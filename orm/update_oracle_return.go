@@ -55,7 +55,6 @@ func (orm *ORM) updateOracleWithReturn(
 			meta,
 			plan,
 		)
-
 		if err != nil {
 			return err
 		}
@@ -115,6 +114,7 @@ func (orm *ORM) execOracleUpdateReturning(
 	)
 
 	args = orm.sanitizeArgs(args)
+
 	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, query, args...)
 	if err != nil {
 		return reflect.Value{}, false, orm.setDatabaseOperationError("Update return", err)
@@ -145,6 +145,7 @@ func (orm *ORM) execOracleUpdateReturning(
 		if bind.destination < 0 {
 			continue
 		}
+
 		if err := assignReflectValue(returned.Field(bind.destination), bind.holder.Interface()); err != nil {
 			return reflect.Value{}, false, orm.setError(
 				"Ensure Oracle returned column values can be assigned to the Return() destination fields.",
@@ -212,6 +213,7 @@ func destinationIdxOrMinusOne(idx int, ok bool) int {
 	if !ok {
 		return -1
 	}
+
 	return idx
 }
 
@@ -219,6 +221,7 @@ func isOracleOutputBindType(typ reflect.Type) bool {
 	if typ == reflect.TypeOf((*time.Time)(nil)).Elem() {
 		return true
 	}
+
 	switch typ.Kind() {
 	case reflect.String, reflect.Bool,
 		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,

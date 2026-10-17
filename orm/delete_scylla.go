@@ -42,9 +42,13 @@ func (orm *ORM) deleteScylla(data any) error {
 	defer cancel()
 
 	var deleted int64
+
 	for _, row := range rowsVal {
-		var whereClause string
-		var whereArgs []any
+		var (
+			whereClause string
+			whereArgs   []any
+		)
+
 		if len(rowsVal) > 1 {
 			whereClause, whereArgs, err = orm.buildDeletePayloadByPK(&reqBuildDeletePayloadByPK{
 				rowsVal:      []reflect.Value{row},
@@ -53,33 +57,41 @@ func (orm *ORM) deleteScylla(data any) error {
 			})
 		} else {
 			var payload *resultBuildDeletePayload
+
 			payload, err = orm.buildDeletePayload([]reflect.Value{row}, meta, activeDriver)
 			if payload != nil {
 				whereClause = payload.whereClause
 				whereArgs = payload.whereArgs
 			}
 		}
+
 		if err != nil {
 			return orm.Error
 		}
-		if strings.TrimSpace(whereClause) == "" {
-			const message = "refusing to run DELETE without a WHERE clause to avoid wiping the entire table"
 
-			return orm.setError(message, errors.New("delete: missing WHERE condition"))
+		if strings.TrimSpace(whereClause) == "" {
+			return orm.setError(
+				"refusing to run DELETE without a WHERE clause to avoid wiping the entire table",
+				errors.New("delete: missing WHERE condition"),
+			)
 		}
 
 		queryStr := fmt.Sprintf("DELETE FROM %s WHERE %s IF EXISTS", tableName, whereClause)
-		applied, _, _, err := orm.Database.ScanCQL(execCtx, orm.DatabaseConfig, queryStr, whereArgs...)
+
+		applied, _, _, err := orm.Database.MapScanCAS(execCtx, orm.DatabaseConfig, queryStr, whereArgs...)
 		if err != nil {
 			return orm.setScyllaWriteError("Delete", err)
 		}
+
 		if applied {
 			deleted++
 		}
 	}
+
 	if deleted == 0 {
 		return orm.setNotFound("delete")
 	}
+
 	orm.RowsAffected = deleted
 
 	orm.Result = map[string]any{
