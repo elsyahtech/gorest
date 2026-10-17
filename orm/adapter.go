@@ -46,6 +46,9 @@ func (orm *ORM) Find(data any) *ORM {
 			Error:   errors.New("find: orm is not running"),
 		}
 	}
+	if orm.Error != nil {
+		return orm
+	}
 
 	if err := orm.validateLimitOffset(); err != nil {
 		return orm
@@ -64,6 +67,9 @@ func (orm *ORM) Find(data any) *ORM {
 	}
 
 	if err := orm.validateSelectColumns(); err != nil {
+		return orm
+	}
+	if err := orm.validateSelectExpressions(orm.SelectedCols); err != nil {
 		return orm
 	}
 
@@ -94,8 +100,12 @@ func (orm *ORM) Select(cols ...string) *ORM {
 	}
 
 	orm.SelectedCols = cols
-
-	_ = orm.validateSelectColumns()
+	if err := orm.validateSelectColumns(); err != nil {
+		return orm
+	}
+	if err := orm.validateSelectExpressions(cols); err != nil {
+		return orm
+	}
 
 	return orm
 }
@@ -129,6 +139,10 @@ func (orm *ORM) Where(query string, args ...any) *ORM {
 	}
 
 	orm.WhereClauses = append(orm.WhereClauses, query)
+	if err := orm.validateWhereClause(query); err != nil {
+		orm.WhereClauses = orm.WhereClauses[:len(orm.WhereClauses)-1]
+		return orm
+	}
 
 	if len(args) > 0 {
 		orm.WhereArgs = append(orm.WhereArgs, args...)
@@ -160,6 +174,9 @@ func (orm *ORM) Distinct(cols ...string) *ORM {
 
 	orm.IsDistinct = true
 	orm.DistinctCols = cols
+	if err := orm.validateDistinctColumns(cols); err != nil {
+		return orm
+	}
 
 	return orm
 }
@@ -173,6 +190,10 @@ func (orm *ORM) Join(clause string) *ORM {
 	}
 
 	orm.JoinClauses = append(orm.JoinClauses, clause)
+	if err := orm.validateJoinClause(clause); err != nil {
+		orm.JoinClauses = orm.JoinClauses[:len(orm.JoinClauses)-1]
+		return orm
+	}
 
 	return orm
 }

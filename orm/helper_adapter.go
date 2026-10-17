@@ -10,6 +10,10 @@ import (
 )
 
 func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(any) error) *ORM {
+	if orm.Error != nil {
+		return orm
+	}
+
 	if orm.Database == nil || orm.DatabaseConfig == nil {
 		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 			"To use ORM, the application must use one of the following databases: " +

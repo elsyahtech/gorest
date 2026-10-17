@@ -588,6 +588,9 @@ func (orm *ORM) parsePreloadCondition(relation string, args []any, activeDriver 
 			fmt.Errorf("preload error: first extra argument of Preload(%q, ...) must be a non-empty condition string", relation),
 		)
 	}
+	if err := orm.validatePreloadCondition(clause); err != nil {
+		return "", nil, orm.Error
+	}
 
 	condArgs := args[1:]
 

@@ -57,6 +57,11 @@ func (orm *ORM) validateDBInstance(data any, targetDriver string, opName string)
 	}
 
 	tableName = *orm.Table
+	if targetDriver != database.MONGO {
+		if err := orm.validateTableIdentifier(tableName); err != nil {
+			return "", err
+		}
+	}
 
 	return tableName, nil
 }

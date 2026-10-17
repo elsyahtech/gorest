@@ -1,6 +1,9 @@
 package orm
 
-import "regexp"
+import (
+	"net/http"
+	"regexp"
+)
 
 var (
 	// The first argument to Upsert() is treated as a clause (rather than a column name)
@@ -19,4 +22,15 @@ var (
 
 func isUpsertClause(s string) bool {
 	return upsertClauseRe.MatchString(s)
+}
+
+func (orm *ORM) validateUpsertCondition(clause string) error {
+	if err := orm.validateWhereClause(clause); err != nil {
+		return orm.setError(
+			"Upsert() conditions must use supported column comparisons and bound '?' values.",
+			err,
+			http.StatusBadRequest,
+		)
+	}
+	return nil
 }

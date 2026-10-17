@@ -16,6 +16,10 @@ func (orm *ORM) Upsert(args ...any) *ORM {
 	// Validation of the number of placeholders versus arguments is performed in
 	// prepareUpsert (the driver is only known at Create).
 	if first, ok := args[0].(string); ok && isUpsertClause(first) {
+		if err := orm.validateUpsertCondition(first); err != nil {
+			return orm
+		}
+
 		orm.UpsertClauses = append(orm.UpsertClauses, first)
 		orm.UpsertArgs = append(orm.UpsertArgs, args[1:]...)
 
