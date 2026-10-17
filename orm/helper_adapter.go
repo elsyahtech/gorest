@@ -17,6 +17,10 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 
 		golog.Fatalf("Database is not running. Message: %s", message)
 
+		orm.Message = message
+		orm.HTTPCode = http.StatusNotImplemented
+		orm.Error = fmt.Errorf("%s: database is not running", opName)
+
 		return orm
 	}
 

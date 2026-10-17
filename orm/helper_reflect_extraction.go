@@ -7,6 +7,14 @@ import (
 )
 
 func (orm *ORM) extractReflectionValue(data any, opName string) (*reflect.Value, error) {
+	if data == nil {
+		return nil, orm.setError(
+			"Ensure the payload data passed is a struct, slice of structs (array), or pointers",
+			fmt.Errorf("%s: data cannot be nil", opName),
+			http.StatusBadRequest,
+		)
+	}
+
 	val := reflect.ValueOf(data)
 
 	for val.Kind() == reflect.Pointer {

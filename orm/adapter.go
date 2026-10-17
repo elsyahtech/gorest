@@ -8,18 +8,46 @@ import (
 )
 
 func (orm *ORM) Create(data any) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Create()",
+			Error:   errors.New("create: orm is not running"),
+		}
+	}
+
 	return orm.execOrm(data, "Create", orm.createSQL, orm.createMongo, orm.createScylla)
 }
 
 func (orm *ORM) Update(data any) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Update()",
+			Error:   errors.New("update: orm is not running"),
+		}
+	}
+
 	return orm.execOrm(data, "Update", orm.updateSQL, orm.updateMongo, orm.updateScylla)
 }
 
 func (orm *ORM) Delete(data any) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Delete()",
+			Error:   errors.New("delete: orm is not running"),
+		}
+	}
+
 	return orm.execOrm(data, "Delete", orm.deleteSQL, orm.deleteMongo, orm.deleteScylla)
 }
 
 func (orm *ORM) Find(data any) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Find()",
+			Error:   errors.New("find: orm is not running"),
+		}
+	}
+
 	if err := orm.validateLimitOffset(); err != nil {
 		return orm
 	}
@@ -51,6 +79,13 @@ func (orm *ORM) Find(data any) *ORM {
 }
 
 func (orm *ORM) Select(cols ...string) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Select()",
+			Error:   errors.New("select: orm is not running"),
+		}
+	}
+
 	orm.SelectedCols = cols
 
 	_ = orm.validateSelectColumns()
@@ -59,6 +94,10 @@ func (orm *ORM) Select(cols ...string) *ORM {
 }
 
 func (orm *ORM) validateSelectColumns() error {
+	if orm == nil {
+		return errors.New("validateSelectColumns: orm is not running")
+	}
+
 	for _, column := range orm.SelectedCols {
 		for _, expression := range strings.Split(column, ",") {
 			if strings.TrimSpace(expression) == "" {
@@ -75,6 +114,13 @@ func (orm *ORM) validateSelectColumns() error {
 }
 
 func (orm *ORM) Where(query string, args ...any) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Where()",
+			Error:   errors.New("where: orm is not running"),
+		}
+	}
+
 	orm.WhereClauses = append(orm.WhereClauses, query)
 
 	if len(args) > 0 {
@@ -85,12 +131,26 @@ func (orm *ORM) Where(query string, args ...any) *ORM {
 }
 
 func (orm *ORM) AllowFiltering() *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call AllowFiltering()",
+			Error:   errors.New("allowFiltering: orm is not running"),
+		}
+	}
+
 	orm.AllowFilteringFlag = true
 
 	return orm
 }
 
 func (orm *ORM) Distinct(cols ...string) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Distinct()",
+			Error:   errors.New("distinct: orm is not running"),
+		}
+	}
+
 	orm.IsDistinct = true
 	orm.DistinctCols = cols
 
@@ -98,12 +158,26 @@ func (orm *ORM) Distinct(cols ...string) *ORM {
 }
 
 func (orm *ORM) Join(clause string) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Join()",
+			Error:   errors.New("join: orm is not running"),
+		}
+	}
+
 	orm.JoinClauses = append(orm.JoinClauses, clause)
 
 	return orm
 }
 
 func (orm *ORM) Limit(limit int) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Limit()",
+			Error:   errors.New("limit: orm is not running"),
+		}
+	}
+
 	orm.LimitVal = limit
 	orm.limitSet = true
 	_ = orm.validateLimitOffset()
@@ -112,6 +186,13 @@ func (orm *ORM) Limit(limit int) *ORM {
 }
 
 func (orm *ORM) Offset(offset int) *ORM {
+	if orm == nil {
+		return &ORM{
+			Message: "Ensure that you have call Table() before call Offset()",
+			Error:   errors.New("offset: orm is not running"),
+		}
+	}
+
 	orm.OffsetVal = offset
 	_ = orm.validateLimitOffset()
 

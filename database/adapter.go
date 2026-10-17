@@ -21,7 +21,7 @@ type TransactionFunc func(ctx context.Context, tx *sql.Tx) error
 // MYSQL, POSTGRES, SQLSERVER, ORACLE and SQLITE
 // ========================================================================================================.
 func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, args ...any) (sql.Result, string, int, error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
 				"and the application must use one of the following databases: "+
@@ -91,7 +91,7 @@ func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, a
 }
 
 func (db *Database) QuerySQL(ctx context.Context, config *Config, query string, args ...any) (*sql.Rows, string, int, error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
 				"and the application must use one of the following databases: "+
@@ -165,7 +165,7 @@ func (db *Database) BeginTx(config *Config, opts ...*sql.TxOptions) (*Database, 
 }
 
 func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...*sql.TxOptions) (*Database, string, int, error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
 				"and the application must use one of the following databases: "+
@@ -342,7 +342,7 @@ func (db *Database) CreateCollection(
 // SCYLLA
 // ========================================================================================================.
 func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, args ...any) (string, int, error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",
@@ -439,7 +439,7 @@ func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, 
 }
 
 func (db *Database) ScanCQL(ctx context.Context, config *Config, query string, args ...any) (applied bool, troubleshoot string, httpCode int, err error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",

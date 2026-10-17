@@ -30,6 +30,7 @@ func Run(config ...Config) Config {
 
 func New(config *Config) (*Server, string, error) {
 	var cfg Config
+
 	if config == nil {
 		cfg = configDefault()
 	} else {
@@ -142,6 +143,16 @@ func StartServer(
 	modules []string,
 	routes ...any,
 ) (string, error) {
+	if server == nil || config == nil {
+		return "ensure that you have run server.Run(server.Config{...}) in your application",
+			errors.New("startServer: server is not running")
+	}
+
+	if log == nil {
+		return "ensure that you have run log.Run(log.Config{...}) in your application",
+			errors.New("startServer: log is not running")
+	}
+
 	defer server.markListenDone()
 
 	port := config.Port
