@@ -18,6 +18,14 @@ func (orm *ORM) findSQL(data any) error {
 	// 4. Resolve struct info (type, slice value, and slice flag)
 	structInfo, isSlice := resolveStructInfo(valElem)
 
+	if len(orm.GroupByClauses) > 0 {
+		columns, err := orm.validateGroupByColumns(structInfo.structType, tableName)
+		if err != nil {
+			return orm.Error
+		}
+		orm.GroupByClauses = columns
+	}
+
 	// 5. Build preloads metadata
 	preload, err := orm.buildSQLPreloads(structInfo.structType, tableName, activeDriver)
 	if err != nil {

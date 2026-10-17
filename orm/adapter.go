@@ -55,6 +55,10 @@ func (orm *ORM) Find(data any) *ORM {
 		return orm
 	}
 
+	if orm.groupByInvalid {
+		return orm
+	}
+
 	if err := orm.validateSelectColumns(); err != nil {
 		return orm
 	}

@@ -130,7 +130,7 @@ func databaseTroubleshootingMessage(kind databaseOperationErrorKind) string {
 func databaseErrorReference(driverName string) string {
 	switch driverName {
 	case database.ORACLE:
-		return "https://docs.oracle.com/en/database/oracle/oracle-database/23/errmg/"
+		return "https://docs.oracle.com/en/database/oracle/oracle-database/23/"
 	case database.SQLSERVER:
 		return "https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver17"
 	case database.MYSQL:
