@@ -46,6 +46,7 @@ type ORM struct {
 	IsReturn           bool
 	orderByInvalid     bool
 	groupByInvalid     bool
+	havingInvalid      bool
 	limitSet           bool
 }
 

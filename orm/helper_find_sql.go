@@ -316,6 +316,10 @@ func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounter int, v
 	)
 
 	for _, clause := range orm.HavingClauses {
+		if err := orm.validateHavingClause(clause); err != nil {
+			return nil, 0, err
+		}
+
 		placeholderCount := countActivePlaceholders(clause, activeDriver)
 
 		if argIndex+placeholderCount > len(orm.HavingArgs) {
