@@ -2,6 +2,7 @@ package orm
 
 import (
 	"errors"
+	"net/http"
 )
 
 func (orm *ORM) createScylla(data any) error {
@@ -47,9 +48,42 @@ func (orm *ORM) createScylla(data any) error {
 	defer cancel()
 
 	// 8. Execute Query DB
-	_, _, err = orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)
-	if err != nil {
-		return orm.setScyllaWriteError("Create", err)
+	if !orm.IsUpsert {
+		var created int64
+
+		for _, row := range rowsVal {
+			queryStr, valueArgs := buildRow(row)
+			queryStr += " IF NOT EXISTS"
+
+			applied, message, httpCode, execErr := orm.Database.ExecCQLCAS(
+				execCtx,
+				orm.DatabaseConfig,
+				queryStr,
+				valueArgs...,
+			)
+			if execErr != nil {
+				orm.RowsAffected = created
+
+				return orm.setError(message, execErr, httpCode)
+			}
+			if !applied {
+				orm.RowsAffected = created
+
+				return orm.setDatabaseOperationErrorKind(
+					"Create",
+					errors.New("create: duplicate primary key (INSERT IF NOT EXISTS was not applied)"),
+					databaseConflictError,
+					http.StatusConflict,
+				)
+			}
+
+			created++
+		}
+	} else {
+		_, _, err = orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)
+		if err != nil {
+			return orm.setScyllaWriteError("Create", err)
+		}
 	}
 
 	orm.Message = "Data created successfully"

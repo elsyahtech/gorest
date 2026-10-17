@@ -395,6 +395,49 @@ func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, a
 	return "Data saved successfully", http.StatusOK, nil
 }
 
+// ExecCQLCAS executes a conditional CQL statement and reports whether the
+// condition was applied. It is intended for lightweight transactions such as
+// INSERT ... IF NOT EXISTS, where a false applied result is not a driver error.
+func (db *Database) ExecCQLCAS(ctx context.Context, config *Config, query string, args ...any) (bool, string, int, error) {
+	if db == nil || config == nil {
+		message, code, err := setError(
+			"Ensure that you have run database.Run(database.Config{...}) in your app, and the application must be running SCYLLA.",
+			errors.New("database service is not running"),
+		)
+
+		return false, message, code, err
+	}
+	if db.Scylla == nil {
+		message, code, err := setError(
+			"Ensure that your application is running with SCYLLA.",
+			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
+		)
+
+		return false, message, code, err
+	}
+	if ctx == nil || query == "" {
+		message, code, err := setError(
+			"Ensure the context and CQL query are not empty.",
+			errors.New("context or query is empty"),
+			http.StatusBadRequest,
+		)
+
+		return false, message, code, err
+	}
+
+	applied, err := db.Scylla.Query(query, args...).ScanCASContext(ctx)
+	if err != nil {
+		message, code, err := setError(
+			"Ensure the target table exists and is accessible, and check the CQL syntax, table and column names, primary-key definition, and parameter types.",
+			fmt.Errorf("conditional CQL execution: %w", err),
+		)
+
+		return false, message, code, err
+	}
+
+	return applied, "", http.StatusOK, nil
+}
+
 func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, args ...any) (*gocql.Iter, string, int, error) {
 	if db == nil {
 		message, code, err := setError(

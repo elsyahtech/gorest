@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/elsyahtech/gorest/database"
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/elsyahtech/gorest/database"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -31,9 +31,11 @@ func (orm *ORM) setDatabaseOperationError(operation string, err error) error {
 	}
 
 	driverName := ""
+
 	if orm.DatabaseConfig != nil {
 		driverName = orm.DatabaseConfig.Driver
 	}
+
 	kind, status := classifyDatabaseOperationError(driverName, err)
 
 	return orm.setDatabaseOperationErrorKind(operation, err, kind, status)
@@ -74,13 +76,18 @@ func classifyDatabaseOperationError(driverName string, err error) (databaseOpera
 	if errors.Is(err, context.DeadlineExceeded) || mongo.IsTimeout(err) {
 		return databaseTimeoutError, http.StatusGatewayTimeout
 	}
-	var scyllaWriteTimeout *gocql.RequestErrWriteTimeout
-	var scyllaReadTimeout *gocql.RequestErrReadTimeout
+
+	var (
+		scyllaWriteTimeout *gocql.RequestErrWriteTimeout
+		scyllaReadTimeout  *gocql.RequestErrReadTimeout
+	)
+
 	if errors.As(err, &scyllaWriteTimeout) || errors.As(err, &scyllaReadTimeout) {
 		return databaseTimeoutError, http.StatusGatewayTimeout
 	}
 
 	var scyllaUnavailable *gocql.RequestErrUnavailable
+
 	if errors.As(err, &scyllaUnavailable) {
 		return databaseUnavailableError, http.StatusServiceUnavailable
 	}

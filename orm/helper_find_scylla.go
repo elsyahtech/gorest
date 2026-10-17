@@ -121,7 +121,7 @@ func (orm *ORM) execBuildWhereClauseFindScylla(
 func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 	if len(orm.HavingClauses) > 0 {
 		return orm.setError(
-			"ScyllaDB CQL does not support HAVING. Filter aggregate results in application code or use another query strategy. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
+			"ScyllaDB CQL does not support HAVING. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
 			errors.New("find: unsupported Having clause for ScyllaDB"),
 			http.StatusBadRequest,
 		)
