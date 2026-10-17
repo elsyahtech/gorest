@@ -74,7 +74,7 @@ func (orm *ORM) createScylla(data any) error {
 
 				return orm.setDatabaseOperationErrorKind(
 					"Create",
-					errors.New("create: duplicate primary key (INSERT IF NOT EXISTS was not applied)"),
+					errors.New("data violates a primary-key or unique constraint"),
 					databaseConflictError,
 					http.StatusConflict,
 				)
