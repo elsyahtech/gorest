@@ -68,6 +68,7 @@ func (orm *ORM) createScylla(data any) error {
 
 				return orm.setError(message, execErr, httpCode)
 			}
+
 			if !applied {
 				orm.RowsAffected = created
 
@@ -80,8 +81,6 @@ func (orm *ORM) createScylla(data any) error {
 			}
 
 			created++
-
-			continue
 		}
 	} else {
 		_, _, err = orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)

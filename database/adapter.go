@@ -427,7 +427,10 @@ func (db *Database) ExecCQLCAS(ctx context.Context, config *Config, query string
 		return false, message, code, err
 	}
 
-	applied, err := db.Scylla.Query(query, args...).ScanCASContext(ctx)
+	// INSERT ... IF NOT EXISTS returns the existing row columns when it is not
+	// applied. MapScanCAS safely consumes any table shape without requiring a
+	// destination argument for every returned column.
+	applied, err := db.Scylla.Query(query, args...).MapScanCASContext(ctx, make(map[string]any))
 	if err != nil {
 		message, code, err := setError(
 			"Ensure the target table exists and is accessible, and check the CQL syntax, table and column names, primary-key definition, and parameter types.",
@@ -437,7 +440,7 @@ func (db *Database) ExecCQLCAS(ctx context.Context, config *Config, query string
 		return false, message, code, err
 	}
 
-	return applied, "", http.StatusOK, nil
+	return applied, "Data saved successfully", http.StatusOK, nil
 }
 
 func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, args ...any) (*gocql.Iter, string, int, error) {
