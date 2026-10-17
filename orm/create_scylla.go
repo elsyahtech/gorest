@@ -53,6 +53,7 @@ func (orm *ORM) createScylla(data any) error {
 
 		for _, row := range rowsVal {
 			queryStr, valueArgs := buildRow(row)
+
 			queryStr += " IF NOT EXISTS"
 
 			applied, message, httpCode, execErr := orm.Database.ExecCQLCAS(
@@ -61,6 +62,7 @@ func (orm *ORM) createScylla(data any) error {
 				queryStr,
 				valueArgs...,
 			)
+
 			if execErr != nil {
 				orm.RowsAffected = created
 
@@ -78,6 +80,8 @@ func (orm *ORM) createScylla(data any) error {
 			}
 
 			created++
+
+			continue
 		}
 	} else {
 		_, _, err = orm.Database.ExecCQL(execCtx, orm.DatabaseConfig, resultArg.queryStr, resultArg.valueArgs...)

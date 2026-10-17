@@ -407,6 +407,7 @@ func (db *Database) ExecCQLCAS(ctx context.Context, config *Config, query string
 
 		return false, message, code, err
 	}
+
 	if db.Scylla == nil {
 		message, code, err := setError(
 			"Ensure that your application is running with SCYLLA.",
@@ -415,6 +416,7 @@ func (db *Database) ExecCQLCAS(ctx context.Context, config *Config, query string
 
 		return false, message, code, err
 	}
+
 	if ctx == nil || query == "" {
 		message, code, err := setError(
 			"Ensure the context and CQL query are not empty.",
