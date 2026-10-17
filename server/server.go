@@ -164,9 +164,7 @@ func StartServer(
 	portStr := strconv.Itoa(port)
 	address := serverAddress(config.Host, port)
 
-	if err := printStartupBanner(server, config, log, appName, version, timezone, environment, modules, routes...); err != nil {
-		return "please contact us on github", fmt.Errorf("gorest error: %w", err)
-	}
+	printStartupBanner(server, config, log, appName, version, timezone, environment, modules, routes...)
 
 	if err := server.Listen(address, fiber.ListenConfig{DisableStartupMessage: true}); err != nil {
 		message := fmt.Sprintf("ensure the server configuration is set up correctly, "+
