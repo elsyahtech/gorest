@@ -472,7 +472,9 @@ If the stored row has `old@example.com`, `true`, and `25`, the full update above
 
 Zero values (`""`, `false`, `0`) are values, not indicators that a field was omitted. Use pointers or a dedicated patch model when the request needs to distinguish “not provided” from “set to the zero value.” `Select("email")` is another option when the update should touch only a known subset of fields.
 
-Bulk Update is not uniformly all-or-nothing. SQL splits large updates into chunks; if a later chunk fails, earlier chunks may already be committed unless the caller uses an active SQL transaction. MongoDB uses unordered `BulkWrite`, so some writes may succeed when another fails. ScyllaDB issues one conditional update per input row; an error partway through can leave earlier rows updated. Use a supported transaction where appropriate, or design bulk operations to be safely retried and reconciled.
+Before a bulk update, Gorest checks that every supplied primary key exists. SQL and MongoDB do this with one lookup; ScyllaDB checks each full primary key before starting updates. If keys are missing, the operation returns HTTP 404 and lists all missing keys, for example `Bulk update contains primary keys that do not exist: user-123, user-456`. No update is issued in this case, so an invalid key cannot silently leave the other requested rows updated.
+
+This preflight check covers missing records; it does not make every bulk update atomic against other write failures or concurrent changes. SQL splits large updates into chunks, so a later chunk can fail after earlier chunks have run unless the caller uses an active SQL transaction. MongoDB uses unordered `BulkWrite`, and ScyllaDB issues one conditional update per input row; write errors can leave earlier rows updated. Use a supported transaction where appropriate, or design bulk operations to be safely retried and reconciled.
 
 ```go
 changes := []User{
