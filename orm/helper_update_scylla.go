@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 )
@@ -53,6 +54,46 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 }
 
 func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rowsVal []reflect.Value, meta columnMetaData, activeDriver string) error {
+	// Scylla only permits IN for specific partition-key shapes. Probe each full
+	// primary key before issuing any conditional updates so composite keys work too.
+	var missing []string
+	seenMissing := map[string]bool{}
+	for _, row := range rowsVal {
+		var terms []string
+		args := make([]any, 0, len(meta.primaryKeyIndex))
+		for i, fieldIdx := range meta.primaryKeyIndex {
+			terms = append(terms, meta.primaryKeyColumns[i]+" = ?")
+			args = append(args, row.Field(fieldIdx).Interface())
+		}
+		query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(meta.primaryKeyColumns, ", "), tableName, strings.Join(terms, " AND "))
+		iter, _, _, err := orm.Database.QueryCQL(execCtx, orm.DatabaseConfig, query, args...)
+		if err != nil {
+			return orm.setScyllaWriteError("Update", err)
+		}
+		values := make([]any, len(meta.primaryKeyIndex))
+		for i := range values {
+			values[i] = new(any)
+		}
+		found := iter.Scan(values...)
+		if err := iter.Close(); err != nil {
+			return orm.setScyllaWriteError("Update", err)
+		}
+		if !found {
+			key := make([]any, len(meta.primaryKeyIndex))
+			for i, idx := range meta.primaryKeyIndex {
+				key[i] = row.Field(idx).Interface()
+			}
+			keyLabel := primaryKeyTuple(key)
+			if !seenMissing[keyLabel] {
+				missing = append(missing, primaryKeyLabel(key))
+				seenMissing[keyLabel] = true
+			}
+		}
+	}
+	if len(missing) > 0 {
+		return orm.setError("Bulk update contains primary keys that do not exist: "+strings.Join(missing, ", "), errors.New("update: records not found: "+strings.Join(missing, ", ")), http.StatusNotFound)
+	}
+
 	var (
 		totalRowsAffected int64
 		query             resBuildQueryUpdateSQL
