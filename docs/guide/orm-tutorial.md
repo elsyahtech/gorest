@@ -131,7 +131,7 @@ if query.Error != nil {
 }
 ```
 
-Before a bulk update, Gorest checks that all supplied IDs exist. If one or more are missing, it returns HTTP 404 and lists the missing IDs; no updates are issued. SQL and MongoDB perform this check in one lookup, while ScyllaDB checks each full primary key. This prevents a missing ID from being silently ignored while the other rows update.
+Each row in a bulk update must have a distinct primary key. Duplicate keys are rejected with HTTP 400 and listed in the error because multiple payloads for one record would make the update ambiguous. Gorest then checks that all supplied IDs exist. If one or more are missing, it returns HTTP 404 and lists the missing IDs; no updates are issued. SQL and MongoDB perform this check in one lookup, while ScyllaDB checks each full primary key. This prevents a missing ID from being silently ignored while the other rows update.
 
 The preflight check handles missing IDs, but bulk updates can still partially complete if a later write fails or another process changes the records concurrently. SQL callers can use a transaction where supported. Review the [driver-specific bulk update notes](orm.md#4-update) before relying on atomic behavior.
 

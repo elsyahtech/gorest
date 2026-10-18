@@ -54,6 +54,10 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 }
 
 func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rowsVal []reflect.Value, meta columnMetaData, activeDriver string) error {
+	if err := orm.validateUniqueBulkUpdateKeys(rowsVal, meta); err != nil {
+		return err
+	}
+
 	// Scylla only permits IN for specific partition-key shapes. Probe each full
 	// primary key before issuing any conditional updates so composite keys work too.
 	var missing []string

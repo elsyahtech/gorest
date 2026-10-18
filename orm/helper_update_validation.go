@@ -17,6 +17,10 @@ import (
 // the bulk UPDATE is issued. It deliberately ignores custom update predicates:
 // this validation guarantees the supplied records exist.
 func (orm *ORM) validateBulkUpdateRowsSQL(ctx context.Context, table string, rows []reflect.Value, meta columnMetaData, driver string) error {
+	if err := orm.validateUniqueBulkUpdateKeys(rows, meta); err != nil {
+		return err
+	}
+
 	var clauses []string
 	var args []any
 	for _, row := range rows {
@@ -75,6 +79,10 @@ func (orm *ORM) validateBulkUpdateRowsSQL(ctx context.Context, table string, row
 }
 
 func (orm *ORM) validateBulkUpdateRowsMongo(ctx context.Context, coll *mongo.Collection, rows []reflect.Value, meta columnMetaData) error {
+	if err := orm.validateUniqueBulkUpdateKeys(rows, meta); err != nil {
+		return err
+	}
+
 	filters := make([]bson.M, 0, len(rows))
 	for _, row := range rows {
 		filter := bson.M{}
@@ -124,6 +132,29 @@ func (orm *ORM) validateBulkUpdateRowsMongo(ctx context.Context, coll *mongo.Col
 		return orm.setError("Bulk update contains primary keys that do not exist: "+strings.Join(missing, ", "), errors.New("update: records not found: "+strings.Join(missing, ", ")), http.StatusNotFound)
 	}
 	return nil
+}
+
+func (orm *ORM) validateUniqueBulkUpdateKeys(rows []reflect.Value, meta columnMetaData) error {
+	seen := make(map[string]bool, len(rows))
+	duplicates := make(map[string]bool)
+	var duplicateLabels []string
+	for _, row := range rows {
+		values := make([]any, len(meta.primaryKeyIndex))
+		for i, idx := range meta.primaryKeyIndex {
+			values[i] = row.Field(idx).Interface()
+		}
+		key := primaryKeyTuple(values)
+		if seen[key] && !duplicates[key] {
+			duplicateLabels = append(duplicateLabels, primaryKeyLabel(values))
+			duplicates[key] = true
+		}
+		seen[key] = true
+	}
+	if len(duplicateLabels) == 0 {
+		return nil
+	}
+	message := "Bulk update contains duplicate primary keys: " + strings.Join(duplicateLabels, ", ")
+	return orm.setError(message, errors.New("update: duplicate primary keys: "+strings.Join(duplicateLabels, ", ")), http.StatusBadRequest)
 }
 
 func primaryKeyTuple(values []any) string {
