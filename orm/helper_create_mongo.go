@@ -62,9 +62,11 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 			}
 			orm.LastInsertId = strings.Join(idStrs, ",")
 		}
+
 		if err != nil {
 			return orm.setMongoWriteError("Create", err)
 		}
+
 		if res == nil {
 			return orm.setDatabaseOperationErrorKind(
 				"Create",
@@ -73,6 +75,7 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 				http.StatusInternalServerError,
 			)
 		}
+
 		if len(res.InsertedIDs) != len(rowsVal) {
 			return orm.setDatabaseOperationErrorKind(
 				"Create",
