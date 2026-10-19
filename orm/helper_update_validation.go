@@ -72,7 +72,11 @@ func (orm *ORM) validateBulkUpdateRowsSQL(ctx context.Context, table string, row
 	}
 
 	if len(missing) > 0 {
-		return orm.setError("Bulk update contains primary keys that do not exist: "+strings.Join(missing, ", "), fmt.Errorf("update: records not found: %s", strings.Join(missing, ", ")), http.StatusNotFound)
+		return orm.setError(
+			"Bulk update contains primary keys that do not exist: "+strings.Join(missing, ", "),
+			fmt.Errorf("update: records not found: %s", strings.Join(missing, ", ")),
+			http.StatusNotFound,
+		)
 	}
 
 	return nil
