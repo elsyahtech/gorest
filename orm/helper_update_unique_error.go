@@ -94,9 +94,10 @@ func (orm *ORM) enrichBulkUpdateUniqueViolation(err error, rows []reflect.Value,
 		context = fmt.Sprintf("Bulk update conflicts on unique column(s) %s; submitted values: %s", strings.Join(columns, ", "), strings.Join(details, "; "))
 	}
 
+	// The response layer combines Message with Error. Keep the diagnostic context
+	// in Message only to avoid repeating it in the rendered error string.
 	orm.Message = context
-	orm.Error = fmt.Errorf("%s: %w", context, err)
-	return orm.Error
+	return err
 }
 
 func containsString(values []string, target string) bool {
