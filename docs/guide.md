@@ -105,7 +105,7 @@ Gorest uses the `gorest` struct tag to map Go fields to database columns or docu
 ```go
 type User struct {
 	ID           string      `gorest:"id, primary_key, required" json:"id"`
-	Email        string      `gorest:"email, required" json:"email"`
+	Email        string      `gorest:"email, required, unique" json:"email"`
 	Password     string      `gorest:"password, required" json:"password"`
 	DepartmentID string      `gorest:"department_id, required" json:"departmentId"`
 	IsActive     bool        `gorest:"is_active" json:"isActive"`

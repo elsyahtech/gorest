@@ -51,25 +51,22 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 			orm.LastInsertId = ""
 		}
 	default:
-		res, err := coll.InsertMany(orm.Context, rowsVal)
+		// Continue inserting independent documents when one write fails. MongoDB's
+		// default is ordered, which stops the batch at the first failed document.
+		res, err := coll.InsertMany(ctx, rowsVal, options.InsertMany().SetOrdered(false))
+		if res != nil {
+			orm.RowsAffected = int64(len(res.InsertedIDs))
+			var idStrs []string
+			for _, id := range res.InsertedIDs {
+				idStrs = append(idStrs, fmt.Sprintf("%v", id))
+			}
+			orm.LastInsertId = strings.Join(idStrs, ",")
+		}
 		if err != nil {
 			return orm.setMongoWriteError("Create", err)
 		}
 
-		orm.RowsAffected = int64(len(res.InsertedIDs))
 		orm.Result = res
-
-		if len(res.InsertedIDs) > 0 {
-			var idStrs []string
-
-			for _, id := range res.InsertedIDs {
-				idStrs = append(idStrs, fmt.Sprintf("%v", id))
-			}
-
-			orm.LastInsertId = strings.Join(idStrs, ",")
-		} else {
-			orm.LastInsertId = ""
-		}
 	}
 
 	orm.Result = map[string]any{

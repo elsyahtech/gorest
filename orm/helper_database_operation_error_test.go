@@ -35,13 +35,13 @@ func TestDatabaseOperationErrorsHaveConsistentDriverContract(t *testing.T) {
 			if !errors.As(err, &coded) || coded.HTTPStatusCode() != http.StatusInternalServerError {
 				t.Fatalf("HTTP status = %v, want %d", orm.HTTPCode, http.StatusInternalServerError)
 			}
-			if !strings.Contains(err.Error(), "database: execution_failed: driver detail") {
-				t.Fatalf("error name is not standardized: %v", err)
+			if err.Error() != "driver detail" {
+				t.Fatalf("source error text was changed: %v", err)
 			}
-			if !strings.HasPrefix(orm.Message, "create failed: ") {
+			if !strings.HasPrefix(orm.Message, "The database operation could not be completed.") {
 				t.Fatalf("unexpected troubleshooting message: %q", orm.Message)
 			}
-			if !strings.Contains(orm.Message, databaseErrorReference(driverName)) {
+			if !strings.Contains(orm.Message, databaseErrorReference(driverName, databaseExecutionError)) {
 				t.Fatalf("troubleshooting message is missing the %s reference: %q", driverName, orm.Message)
 			}
 		})
@@ -85,19 +85,19 @@ func TestDatabaseOperationErrorHTTPClassification(t *testing.T) {
 	}
 }
 
-func TestInvalidDatabaseQueryUsesBadRequestClassification(t *testing.T) {
+func TestMissingSchemaColumnUsesInternalServerErrorClassification(t *testing.T) {
 	orm := &ORM{DatabaseConfig: &database.Config{Driver: database.SQLITE}}
 	err := orm.setDatabaseOperationError("Find", errors.New("no such column: missing"))
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	if orm.HTTPCode != http.StatusBadRequest {
-		t.Fatalf("HTTP status = %d, want %d", orm.HTTPCode, http.StatusBadRequest)
+	if orm.HTTPCode != http.StatusInternalServerError {
+		t.Fatalf("HTTP status = %d, want %d", orm.HTTPCode, http.StatusInternalServerError)
 	}
-	if !strings.Contains(err.Error(), "database: invalid_query:") {
-		t.Fatalf("error name is not standardized: %v", err)
+	if err.Error() != "no such column: missing" {
+		t.Fatalf("source error text was changed: %v", err)
 	}
-	if !strings.Contains(orm.Message, "database rejected the query") {
+	if !strings.Contains(orm.Message, "database operation could not be completed") {
 		t.Fatalf("unexpected troubleshooting message: %q", orm.Message)
 	}
 }

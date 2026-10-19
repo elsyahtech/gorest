@@ -99,7 +99,7 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 		}
 	}
 	if len(missing) > 0 {
-		return orm.setError("Bulk update contains primary keys that do not exist: "+strings.Join(missing, ", "), errors.New("update: records not found: "+strings.Join(missing, ", ")), http.StatusNotFound)
+		return orm.setError("The requested records were not found. Check these primary keys: "+strings.Join(missing, ", ")+". Reference: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract", errors.New("update: records not found: "+strings.Join(missing, ", ")), http.StatusNotFound)
 	}
 
 	var (

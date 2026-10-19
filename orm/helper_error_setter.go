@@ -25,8 +25,10 @@ func (orm *ORM) setError(message string, err error, code ...int) error {
 }
 
 func (orm *ORM) setNotFound(opName string) error {
+	message := "Ensure the requested record exists and that the filter for this operation matches its key."
+	message += " Reference: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract"
 	return orm.setError(
-		"Ensure the requested record exists and that the filter for this operation matches its key.",
+		message,
 		errors.New(opName+": record not found"),
 		http.StatusNotFound)
 }

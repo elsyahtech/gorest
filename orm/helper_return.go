@@ -114,7 +114,7 @@ func (orm *ORM) planReturn(data any, rowsVal []reflect.Value, meta columnMetaDat
 	case database.MYSQL, database.POSTGRES, database.SQLITE, database.SQLSERVER, database.ORACLE:
 	default:
 		return nil, orm.setError(
-			fmt.Sprintf("Gorest ORM Return() is not implemented for %s. See the driver feature matrix for current support: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#7-driver-feature-matrix", ormDriverLabel(driver)),
+			fmt.Sprintf("Gorest ORM Return() is not implemented for %s. See the driver feature matrix for current support: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#7-driver-feature-matrix", driver),
 			fmt.Errorf("create: Return is not supported on driver %s", driver),
 		)
 	}
@@ -370,13 +370,16 @@ func (orm *ORM) queryReturnRowsWithDatabase(
 		return nil, orm.setDatabaseOperationError(operation, err)
 	}
 
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil && orm.Error == nil {
-			orm.setDatabaseOperationError(operation, closeErr)
-		}
-	}()
+	scanned, scanErr := orm.scanReturnRows(rows, plan)
+	closeErr := rows.Close()
+	if scanErr != nil {
+		return nil, scanErr
+	}
+	if closeErr != nil {
+		return nil, orm.setDatabaseOperationError(operation, closeErr)
+	}
 
-	return orm.scanReturnRows(rows, plan)
+	return scanned, nil
 }
 
 func (orm *ORM) finishReturn(plan *returnPlan, scanned, inputRows []reflect.Value) error {
@@ -434,15 +437,7 @@ func (orm *ORM) scanReturnRows(rows *sql.Rows, plan *returnPlan) ([]reflect.Valu
 	}
 
 	if err = rows.Err(); err != nil {
-		if database.IsDuplicateKeyError(err) {
-			return nil, orm.setError(
-				"A record with the same value for a primary key or unique column already exists.",
-				err,
-				http.StatusConflict,
-			)
-		}
-
-		return nil, orm.setError("ensure that database result stream is valid and complete", err)
+		return nil, orm.setDatabaseOperationError("Create", err)
 	}
 
 	return scanned, nil

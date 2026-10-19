@@ -2,6 +2,7 @@ package orm
 
 import (
 	"errors"
+	"net/http"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -28,9 +29,7 @@ func (orm *ORM) deleteMongo(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record to insert
 	if len(rowsVal) == 0 {
-		const message = "ensure that the data list is not empty"
-
-		return orm.setError(message, errors.New("delete: data list cannot be empty"))
+		return orm.setError("Ensure the request contains at least one record.", errors.New("delete: data list cannot be empty"), http.StatusBadRequest)
 	}
 
 	// 4. Extract updatable columns, their struct field index, and the primary key column(s)/index from the struct tags.
@@ -47,7 +46,7 @@ func (orm *ORM) deleteMongo(data any) error {
 	if len(filter) == 0 {
 		const message = "refusing to run Delete without a filter to avoid wiping the entire collection"
 
-		return orm.setError(message, errors.New("delete: missing filter condition"))
+		return orm.setError(message, errors.New("delete: missing filter condition"), http.StatusBadRequest)
 	}
 
 	// 13. Set context timeout

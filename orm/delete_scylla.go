@@ -3,6 +3,7 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 )
@@ -29,9 +30,7 @@ func (orm *ORM) deleteScylla(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record to delete.
 	if len(rowsVal) == 0 {
-		const message = "ensure that the data list is not empty"
-
-		return orm.setError(message, errors.New("delete: data list cannot be empty"))
+		return orm.setError("Ensure the request contains at least one record.", errors.New("delete: data list cannot be empty"), http.StatusBadRequest)
 	}
 
 	// 4. Extract updatable columns, their struct field index, and the primary key column(s)/index from the struct tags.
@@ -73,6 +72,7 @@ func (orm *ORM) deleteScylla(data any) error {
 			return orm.setError(
 				"refusing to run DELETE without a WHERE clause to avoid wiping the entire table",
 				errors.New("delete: missing WHERE condition"),
+				http.StatusBadRequest,
 			)
 		}
 

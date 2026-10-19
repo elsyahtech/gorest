@@ -2,6 +2,7 @@ package orm
 
 import (
 	"errors"
+	"net/http"
 )
 
 func (orm *ORM) createMongo(data any) error {
@@ -27,9 +28,7 @@ func (orm *ORM) createMongo(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record to insert
 	if len(rowsVal) == 0 {
-		const message = "ensure that the data list is not empty"
-
-		return orm.setError(message, errors.New("create: data list cannot be empty"))
+		return orm.setError("Ensure the request contains at least one record.", errors.New("create: data list cannot be empty"), http.StatusBadRequest)
 	}
 
 	// 4. Set context timeout if configured

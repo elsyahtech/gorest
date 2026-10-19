@@ -2,6 +2,7 @@ package orm
 
 import (
 	"errors"
+	"net/http"
 )
 
 func (orm *ORM) updateScylla(data any) error {
@@ -26,9 +27,7 @@ func (orm *ORM) updateScylla(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record to update
 	if len(rowsVal) == 0 {
-		const message = "ensure that the data list is not empty"
-
-		return orm.setError(message, errors.New("update: data list cannot be empty"))
+		return orm.setError("Ensure the request contains at least one record.", errors.New("update: data list cannot be empty"), http.StatusBadRequest)
 	}
 
 	// 4. Extract updatable columns, their struct field index, and the primary key column(s)/index from the struct tags.
@@ -37,7 +36,7 @@ func (orm *ORM) updateScylla(data any) error {
 	if len(meta.primaryKeyIndex) == 0 {
 		const message = "Ensure your struct has a primary_key tag designated for updates."
 
-		return orm.setError(message, errors.New("update: missing primary key for update"))
+		return orm.setError(message, errors.New("update: missing primary key for update"), http.StatusBadRequest)
 	}
 
 	if err := orm.validateUpdateColumns(meta); err != nil {

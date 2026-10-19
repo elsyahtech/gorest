@@ -28,7 +28,7 @@ func (orm *ORM) createScylla(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record
 	if len(rowsVal) == 0 {
-		return orm.setError("ensure that the data list is not empty", errors.New("create: data list cannot be empty"))
+		return orm.setError("Ensure the request contains at least one record.", errors.New("create: data list cannot be empty"), http.StatusBadRequest)
 	}
 
 	// 4. Extract updatable columns, their struct field index, and the primary key column(s)/index from the struct tags.
@@ -56,7 +56,7 @@ func (orm *ORM) createScylla(data any) error {
 
 			queryStr += " IF NOT EXISTS"
 
-			applied, message, httpCode, execErr := orm.Database.MapScanCAS(
+			applied, _, _, execErr := orm.Database.MapScanCAS(
 				execCtx,
 				orm.DatabaseConfig,
 				queryStr,
@@ -65,7 +65,7 @@ func (orm *ORM) createScylla(data any) error {
 			if execErr != nil {
 				orm.RowsAffected = created
 
-				return orm.setError(message, execErr, httpCode)
+				return orm.setScyllaWriteError("Create", execErr)
 			}
 
 			if !applied {

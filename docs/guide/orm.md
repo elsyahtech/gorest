@@ -421,7 +421,7 @@ For SQL, duplicate primary-key or unique-key violations detected by the adapter 
 
 Use `Select()` to limit the columns written. In SQL, a database default can apply only when its column is omitted from the `INSERT`; an included zero value such as `false`, `0`, or `""` is explicit and does not request the default. A zero-valued SQL primary-key field is omitted by ORM, so the database can generate it only when the column type and schema support generation. MongoDB creates its own `_id`, but ORM does not generate a custom `id` field for you; ScyllaDB requires the primary key. For portable models, assign application-generated key values and use `Select()` deliberately when relying on SQL defaults. MongoDB and ScyllaDB do not share SQL column-default behavior. Keep `NOT NULL`, unique, and other integrity constraints in the database as an additional guard.
 
-For bulk Create, SQL sends one multi-row `INSERT`, MongoDB calls `InsertMany`, and ScyllaDB uses a CQL batch. ORM does not wrap all bulk creates in a shared transaction. Do not assume a failed MongoDB bulk insert or ScyllaDB batch was rolled back as a unit; inspect the database and underlying error before retrying.
+For bulk Create, SQL sends one multi-row `INSERT`, MongoDB calls unordered `InsertMany`, and ScyllaDB uses a CQL batch. MongoDB continues attempting the remaining documents after a write error, but successful documents are not rolled back; check `query.RowsAffected` and the error before retrying. ORM does not wrap all bulk creates in a shared transaction. Do not assume a failed MongoDB bulk insert or ScyllaDB batch was rolled back as a unit; inspect the database and underlying error before retrying. See MongoDB's [ordered and unordered insert behavior](https://www.mongodb.com/docs/drivers/go/current/crud/insert/#ordered-behavior).
 
 ```go
 newUsers := []User{
@@ -695,29 +695,33 @@ Use the sequence below to diagnose common failures. Reproduce the symptom with t
 
 ### Shared database error contract
 
-For database-operation failures in `Create()`, `Update()`, `Delete()`, and `Find()`, Gorest keeps the existing ORM response fields (`Error`, `Message`, and `HTTPCode`) and standardizes the error category and status across drivers:
+For `Create()`, `Update()`, `Delete()`, and `Find()`, Gorest uses the following HTTP contract for request validation and database-operation errors. The same status and troubleshooting wording apply to Oracle, SQL Server, MySQL, PostgreSQL, SQLite, MongoDB, and ScyllaDB:
 
-| Error category in `query.Error` | HTTP status | Meaning |
+| Error type | HTTP status | `Message` troubleshooting instruction (the official reference is appended to this text) |
 |---|---:|---|
-| `database: conflict` | 409 | A primary-key or unique constraint rejected the write. |
-| `database: invalid_query` | 400 | A driver-specific error code or recognized query message indicates invalid syntax, a missing table/column, invalid grouping, or an unsupported Scylla query rule. |
-| `database: timeout` | 504 | The database operation exceeded its deadline or timed out. |
-| `database: unavailable` | 503 | The driver reported a network or connection failure. |
-| `database: execution_failed` | 500 | The database operation failed for another reason. |
+| Invalid request, such as an empty CRUD payload, missing update primary key, missing delete filter, or duplicate primary keys in one bulk update | 400 | Follow the specific validation instruction, which includes a reference to this ORM guide. |
+| Requested record does not exist | 404 | `Ensure the requested record exists and that the filter for this operation matches its key.` Bulk update lists all missing keys. |
+| Primary-key/unique constraint conflict, including duplicate values within a bulk request | 409 | `The submitted data conflicts with a primary-key or unique constraint. Check the conflicting key values and database constraints.` |
+| Invalid query syntax or unsupported query operation recognized by the driver classifier | 400 | `The database rejected the query syntax or requested operation. Check the query clauses and supported database features.` |
+| Database operation timeout | 504 | `The database operation timed out. Check database health, query duration, and the configured timeout.` |
+| Database connection/service unavailable | 503 | `The database is unavailable. Check that the database service is running and reachable.` |
+| Schema mismatch (for example, a missing table or column), permissions, data conversion, or another unclassified database failure | 500 | `The database operation could not be completed. Check database connectivity, permissions, schema, query syntax, and data types.` |
 
-`query.Error` wraps the original driver error, so it remains available to `errors.Is`, `errors.As`, and server-side logs. `query.Message` gives the operation and troubleshooting guidance and links to the configured vendor's documentation. Do not use raw driver error text as a public API response.
+For driver-originated failures, `query.Error` wraps only the source error with `%w`; its text is not decorated with a Gorest operation prefix or category. It remains available to `errors.Is`, `errors.As`, and server-side logs. `query.Message` contains the troubleshooting instruction and a `Reference:` URL selected by driver and error category. Handler code can add endpoint-specific wording when returning an API response. Do not use raw driver error text as a public API response.
 
-Use the relevant official reference when investigating a category or driver-specific error:
+The `Reference:` URL in `query.Message` comes from this driver/category map:
 
-| Driver | Official error or query reference |
-|---|---|
-| Oracle | [Oracle Database Error Messages](https://docs.oracle.com/en/database/oracle/oracle-database/23/errmg/) |
-| SQL Server | [Database Engine events and errors](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver17) |
-| MySQL | [MySQL Server Error Reference](https://dev.mysql.com/doc/mysql-errors/8.4/en/) |
-| PostgreSQL | [PostgreSQL Error Codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) |
-| SQLite | [SQLite Result and Error Codes](https://www.sqlite.org/rescode.html) |
-| MongoDB | [MongoDB Error Codes](https://www.mongodb.com/docs/manual/reference/error-codes/) |
-| ScyllaDB | [ScyllaDB CQL Reference](https://docs.scylladb.com/manual/stable/cql/) |
+| Driver | Conflict | Timeout | Unavailable | Invalid query | Other database error |
+|---|---|---|---|---|---|
+| Oracle | [ORA-00001](https://docs.oracle.com/en/error-help/db/ora-00001/) | [ORA-01013](https://docs.oracle.com/en/error-help/db/ora-01013/) | [ORA-03113](https://docs.oracle.com/en/error-help/db/ora-03113/) | [ORA-00933](https://docs.oracle.com/en/error-help/db/ora-00933/) | [Oracle error messages](https://docs.oracle.com/en/database/oracle/oracle-database/23/errmg/) |
+| SQL Server | [Errors 2000–2999](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors-2000-to-2999?view=sql-server-ver17) | [Errors 1000–1999](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors-1000-to-1999?view=sql-server-ver17) | [Database Engine error reference](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/errors-and-events-reference-database-engine?view=sql-server-ver17) | [Errors 0–999](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors-0-to-999?view=sql-server-ver17) | [Database Engine error reference](https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/errors-and-events-reference-database-engine?view=sql-server-ver17) |
+| MySQL | [Server errors](https://dev.mysql.com/doc/mysql-errors/8.4/en/server-error-reference.html) | [Server errors](https://dev.mysql.com/doc/mysql-errors/8.4/en/server-error-reference.html) | [Client errors](https://dev.mysql.com/doc/mysql-errors/8.4/en/client-error-reference.html) | [Server errors](https://dev.mysql.com/doc/mysql-errors/8.4/en/server-error-reference.html) | [Server errors](https://dev.mysql.com/doc/mysql-errors/8.4/en/server-error-reference.html) |
+| PostgreSQL | [SQLSTATE codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) | [SQLSTATE codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) | [SQLSTATE codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) | [SQLSTATE codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) | [SQLSTATE codes](https://www.postgresql.org/docs/current/errcodes-appendix.html) |
+| SQLite | [Constraint result codes](https://www.sqlite.org/rescode.html#constraint) | [Busy result codes](https://www.sqlite.org/rescode.html#busy) | [Cannot-open result codes](https://www.sqlite.org/rescode.html#cantopen) | [Error result codes](https://www.sqlite.org/rescode.html#error) | [Result and error codes](https://www.sqlite.org/rescode.html) |
+| MongoDB | [Duplicate key error code](https://www.mongodb.com/docs/manual/reference/error-codes/#mongodb-error-11000) | [MongoDB error codes](https://www.mongodb.com/docs/manual/reference/error-codes/) | [MongoDB error codes](https://www.mongodb.com/docs/manual/reference/error-codes/) | [MongoDB error codes](https://www.mongodb.com/docs/manual/reference/error-codes/) | [MongoDB error codes](https://www.mongodb.com/docs/manual/reference/error-codes/) |
+| ScyllaDB | [CQL reference](https://docs.scylladb.com/manual/stable/cql/) | [Troubleshooting](https://docs.scylladb.com/manual/stable/troubleshooting/) | [Troubleshooting](https://docs.scylladb.com/manual/stable/troubleshooting/) | [CQL reference](https://docs.scylladb.com/manual/stable/cql/) | [Troubleshooting](https://docs.scylladb.com/manual/stable/troubleshooting/) |
+
+Only recognized query syntax and unsupported query-operation errors map to 400. A missing table or column points to an ORM/model/database schema mismatch and maps to 500, not a client query error. Driver adapter error text stays in `query.Error`; it is not copied into `query.Message`.
 
 | Symptom / reproduction | Diagnosis | Action | Verify |
 |---|---|---|---|

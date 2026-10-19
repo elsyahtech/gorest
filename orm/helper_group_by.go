@@ -18,6 +18,7 @@ func (orm *ORM) validateGroupByColumns(structType reflect.Type, tableName string
 	}
 
 	var normalized []string
+
 	for _, clause := range orm.GroupByClauses {
 		for _, rawColumn := range strings.Split(clause, ",") {
 			parts := strings.Split(strings.TrimSpace(rawColumn), ".")

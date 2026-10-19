@@ -3,6 +3,7 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ func (orm *ORM) createSQL(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record to insert
 	if len(rowsVal) == 0 {
-		return orm.setError("ensure that the data list is not empty", errors.New("create: data list cannot be empty"))
+		return orm.setError("Ensure the request contains at least one record.", errors.New("create: data list cannot be empty"), http.StatusBadRequest)
 	}
 
 	// 4. Extract updatable columns, their struct field index, and the primary key column(s)/index from the struct tags.

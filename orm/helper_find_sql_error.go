@@ -20,7 +20,9 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 		return false
 	}
 
-	if isGroupBySelectionError(driver, err) || isUnknownColumnError(driver, err) {
+	// Invalid projections (unknown columns) and missing tables are schema
+	// mismatches, so they remain HTTP 500. Grouping mistakes are query errors.
+	if isGroupBySelectionError(driver, err) {
 		return true
 	}
 
@@ -32,7 +34,7 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 		}
 
 		switch oracleErr.Code() {
-		case 933, 936, 942:
+		case 933, 936:
 			return true
 		default:
 			return false
@@ -45,7 +47,7 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 		}
 
 		switch mysqlErr.Number {
-		case 1064, 1146:
+		case 1064:
 			return true
 		default:
 			return false
@@ -58,7 +60,7 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 		}
 
 		switch postgresErr.Code {
-		case "42601", "42P01":
+		case "42601":
 			return true
 		default:
 			return false
@@ -71,7 +73,7 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 		}
 
 		switch sqlServerErr.SQLErrorNumber() {
-		case 102, 156, 208:
+		case 102, 156:
 			return true
 		default:
 			return false
@@ -79,9 +81,7 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 	case database.SQLITE:
 		errText := strings.ToLower(err.Error())
 
-		return strings.Contains(errText, "syntax error") ||
-			strings.Contains(errText, "incomplete input") ||
-			strings.Contains(errText, "no such table")
+		return strings.Contains(errText, "syntax error") || strings.Contains(errText, "incomplete input")
 	case database.MONGO:
 		var serverErr mongo.ServerError
 
@@ -97,9 +97,6 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 
 		return strings.Contains(errText, "select distinct queries must only request partition key columns") ||
 			strings.Contains(errText, "group by non-primary-key column") ||
-			strings.Contains(errText, "undefined column") ||
-			strings.Contains(errText, "unknown column") ||
-			strings.Contains(errText, "unconfigured columnfamily") ||
 			strings.Contains(errText, "order by is only supported when the partition key is restricted by an eq or an in")
 	}
 

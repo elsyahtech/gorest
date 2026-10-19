@@ -74,7 +74,7 @@ func (orm *ORM) validateBulkUpdateRowsSQL(ctx context.Context, table string, row
 
 	if len(missing) > 0 {
 		return orm.setError(
-			"Bulk update contains primary keys that do not exist: "+strings.Join(missing, ", "),
+			"The requested records were not found. Check these primary keys: "+strings.Join(missing, ", ")+". Reference: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract",
 			fmt.Errorf("update: records not found: %s", strings.Join(missing, ", ")),
 			http.StatusNotFound,
 		)
@@ -158,7 +158,7 @@ func (orm *ORM) validateUniqueBulkUpdateKeys(rows []reflect.Value, meta columnMe
 	if len(duplicateLabels) == 0 {
 		return nil
 	}
-	message := "Bulk update contains duplicate primary keys: " + strings.Join(duplicateLabels, ", ")
+	message := "Remove duplicate primary keys from the bulk update request: " + strings.Join(duplicateLabels, ", ") + ". Reference: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract"
 	return orm.setError(message, errors.New("update: duplicate primary keys: "+strings.Join(duplicateLabels, ", ")), http.StatusBadRequest)
 }
 
@@ -234,7 +234,7 @@ func (orm *ORM) validateTaggedUniqueBulkUpdateValues(rows []reflect.Value, meta 
 		return nil
 	}
 	sort.Strings(conflicts)
-	message := "Bulk update contains duplicate values for unique field(s): " + strings.Join(conflicts, "; ")
+	message := "The bulk update contains values that conflict with a unique field: " + strings.Join(conflicts, "; ") + ". Reference: " + databaseErrorReference(orm.DatabaseConfig.Driver, databaseConflictError)
 	return orm.setError(message, errors.New("update: duplicate unique values in request: "+strings.Join(conflicts, "; ")), http.StatusConflict)
 }
 

@@ -132,9 +132,12 @@ func (orm *ORM) enrichBulkUpdateUniqueViolation(err error, rows []reflect.Value,
 		context = fmt.Sprintf("Bulk update conflicts on unique column(s) %s; %s: %s", strings.Join(columns, ", "), label, strings.Join(details, "; "))
 	}
 
-	// The response layer combines Message with Error. Keep the diagnostic context
-	// in Message only to avoid repeating it in the rendered error string.
-	orm.Message = context
+	// Keep the shared troubleshooting instruction and official reference while
+	// adding the request rows that can help the caller resolve this conflict.
+	if orm.Message == "" {
+		orm.Message = databaseTroubleshootingMessage(databaseConflictError)
+	}
+	orm.Message += " Details: " + context
 	return err
 }
 
