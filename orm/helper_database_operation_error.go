@@ -69,7 +69,7 @@ func (orm *ORM) setDatabaseOperationErrorKind(
 }
 
 func classifyDatabaseOperationError(driverName string, err error) (databaseOperationErrorKind, int) {
-	if database.IsDuplicateKeyError(err) || mongo.IsDuplicateKeyError(err) {
+	if database.IsDuplicateKeyError(err) || mongo.IsDuplicateKeyError(err) || isDuplicateRequestValueError(err) {
 		return databaseConflictError, http.StatusConflict
 	}
 
@@ -110,6 +110,20 @@ func classifyDatabaseOperationError(driverName string, err error) (databaseOpera
 	}
 
 	return databaseExecutionError, http.StatusInternalServerError
+}
+
+// Some databases and application triggers report request-level unique-value
+// collisions as text instead of a native unique-constraint error code.
+func isDuplicateRequestValueError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "duplicate email in request") ||
+		strings.Contains(message, "duplicate key") ||
+		strings.Contains(message, "unique constraint") ||
+		strings.Contains(message, "unique violation")
 }
 
 func databaseTroubleshootingMessage(kind databaseOperationErrorKind) string {
