@@ -62,6 +62,10 @@ func (orm *ORM) updateSingleMongo(execCtx context.Context, collection *mongo.Col
 }
 
 func (orm *ORM) updateBulkMongo(execCtx context.Context, collection *mongo.Collection, rowsVal []reflect.Value, meta columnMetaData) error {
+	if err := orm.validateTaggedUniqueBulkUpdateValues(rowsVal, meta); err != nil {
+		return err
+	}
+
 	if err := orm.validateBulkUpdateRowsMongo(execCtx, collection, rowsVal, meta); err != nil {
 		return err
 	}

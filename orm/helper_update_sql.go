@@ -108,6 +108,10 @@ func (orm *ORM) updateBulkSQL(
 	activeDriver string,
 	retPlan *returnPlan,
 ) error {
+	if err := orm.validateTaggedUniqueBulkUpdateValues(rowsVal, meta); err != nil {
+		return err
+	}
+
 	if err := orm.validateBulkUpdateRowsSQL(execCtx, tableName, rowsVal, meta, activeDriver); err != nil {
 		return err
 	}

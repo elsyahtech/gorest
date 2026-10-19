@@ -124,6 +124,7 @@ type User struct {
 4. **`immutable`** — Prevents the field from being changed by ORM `Update()` operations. Use it for values such as `created_at` that should not change after insertion.
 5. **`object_id`** — MongoDB option for query filters. If the mapped field is tagged with `object_id`, a valid 24-character hexadecimal string passed as a filter value is converted to BSON `ObjectID`. This option does not convert values during `Create()`.
 6. **`references`** — Relationship metadata used with relation fields. For example, `gorest:"-" references:"ID"` excludes the relation object as a database column and identifies the referenced field for preload mapping.
+7. **`unique`** — Marks a field whose values must be distinct within a bulk `Update()` request. Gorest rejects duplicate request values with HTTP 409 before writing. This is an application-level payload check, not a database uniqueness constraint; database-side uniqueness still needs to be enforced separately, especially on ScyllaDB.
 
 ### MongoDB `object_id` and `_id`
 

@@ -54,6 +54,10 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 }
 
 func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rowsVal []reflect.Value, meta columnMetaData, activeDriver string) error {
+	if err := orm.validateTaggedUniqueBulkUpdateValues(rowsVal, meta); err != nil {
+		return err
+	}
+
 	if err := orm.validateUniqueBulkUpdateKeys(rowsVal, meta); err != nil {
 		return err
 	}

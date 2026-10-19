@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -159,6 +160,82 @@ func (orm *ORM) validateUniqueBulkUpdateKeys(rows []reflect.Value, meta columnMe
 	}
 	message := "Bulk update contains duplicate primary keys: " + strings.Join(duplicateLabels, ", ")
 	return orm.setError(message, errors.New("update: duplicate primary keys: "+strings.Join(duplicateLabels, ", ")), http.StatusBadRequest)
+}
+
+// validateTaggedUniqueBulkUpdateValues rejects repeated values in the request
+// for fields explicitly marked unique in the gorest struct tag. It is a request
+// validation guard and does not replace a database uniqueness constraint.
+func (orm *ORM) validateTaggedUniqueBulkUpdateValues(rows []reflect.Value, meta columnMetaData) error {
+	if len(rows) < 2 {
+		return nil
+	}
+
+	structType := rows[0].Type()
+	var conflicts []string
+	for fieldIndex := 0; fieldIndex < structType.NumField(); fieldIndex++ {
+		field := structType.Field(fieldIndex)
+		if !hasGorestTagOption(field.Tag.Get("gorest"), "unique") {
+			continue
+		}
+		includedInUpdate := false
+		isPrimaryKey := false
+		for _, index := range meta.columnIndex {
+			if index == fieldIndex {
+				includedInUpdate = true
+				break
+			}
+		}
+		for _, index := range meta.primaryKeyIndex {
+			if index == fieldIndex {
+				isPrimaryKey = true
+				break
+			}
+		}
+		if !includedInUpdate || isPrimaryKey {
+			continue
+		}
+		column := strings.TrimSpace(strings.Split(field.Tag.Get("gorest"), ",")[0])
+		if column == "" || column == "-" {
+			continue
+		}
+
+		rowsByValue := make(map[string][]string, len(rows))
+		valuesByKey := make(map[string]any, len(rows))
+		for _, row := range rows {
+			fieldValue := row.Field(fieldIndex)
+			for fieldValue.Kind() == reflect.Pointer || fieldValue.Kind() == reflect.Interface {
+				if fieldValue.IsNil() {
+					break
+				}
+				fieldValue = fieldValue.Elem()
+			}
+			if !fieldValue.IsValid() || ((fieldValue.Kind() == reflect.Pointer || fieldValue.Kind() == reflect.Interface) && fieldValue.IsNil()) {
+				continue
+			}
+			value := fieldValue.Interface()
+			key := primaryKeyTuple([]any{value})
+			valuesByKey[key] = value
+			primaryKey := make([]any, len(meta.primaryKeyIndex))
+			for i, primaryKeyIndex := range meta.primaryKeyIndex {
+				primaryKey[i] = row.Field(primaryKeyIndex).Interface()
+			}
+			rowsByValue[key] = append(rowsByValue[key], primaryKeyLabel(primaryKey))
+		}
+
+		for key, primaryKeys := range rowsByValue {
+			if len(primaryKeys) < 2 {
+				continue
+			}
+			conflicts = append(conflicts, fmt.Sprintf("%s=%v (IDs: %s)", column, valuesByKey[key], strings.Join(primaryKeys, ", ")))
+		}
+	}
+
+	if len(conflicts) == 0 {
+		return nil
+	}
+	sort.Strings(conflicts)
+	message := "Bulk update contains duplicate values for unique field(s): " + strings.Join(conflicts, "; ")
+	return orm.setError(message, errors.New("update: duplicate unique values in request: "+strings.Join(conflicts, "; ")), http.StatusConflict)
 }
 
 func primaryKeyTuple(values []any) string {
