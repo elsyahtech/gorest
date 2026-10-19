@@ -123,7 +123,8 @@ func isDuplicateRequestValueError(err error) bool {
 	return strings.Contains(message, "duplicate email in request") ||
 		strings.Contains(message, "duplicate key") ||
 		strings.Contains(message, "unique constraint") ||
-		strings.Contains(message, "unique violation")
+		strings.Contains(message, "unique violation") ||
+		strings.Contains(message, "already exists")
 }
 
 func databaseTroubleshootingMessage(kind databaseOperationErrorKind) string {

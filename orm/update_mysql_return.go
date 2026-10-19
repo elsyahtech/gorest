@@ -336,7 +336,8 @@ func (orm *ORM) updateMySQLBulkWithReturn(
 
 		result, _, _, err := execDB.ExecSQL(execCtx, orm.DatabaseConfig, updateQuery, updateArgs...)
 		if err != nil {
-			return orm.setDatabaseOperationError("Update", err)
+			databaseErr := orm.setDatabaseOperationError("Update", err)
+			return orm.enrichBulkUpdateUniqueViolation(databaseErr, chunkRows, meta, database.MYSQL)
 		}
 
 		_ = result

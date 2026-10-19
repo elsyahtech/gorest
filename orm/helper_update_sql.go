@@ -275,7 +275,7 @@ func (orm *ORM) execBulkUpdateSQL(req *structExecBulkUpdateSQL) (int64, []reflec
 		result, _, _, err := orm.Database.ExecSQL(req.execCtx, orm.DatabaseConfig, queryStr, query.args...)
 		if err != nil {
 			databaseErr := orm.setDatabaseOperationError("Update", err)
-			return 0, nil, orm.enrichBulkUpdateUniqueViolation(databaseErr, chunkRows, *req.meta)
+			return 0, nil, orm.enrichBulkUpdateUniqueViolation(databaseErr, chunkRows, *req.meta, req.activeDriver)
 		}
 
 		if result == nil {

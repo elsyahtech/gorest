@@ -138,7 +138,8 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 
 		applied, _, _, err := orm.Database.MapScanCAS(execCtx, orm.DatabaseConfig, queryStr, query.args...)
 		if err != nil {
-			return orm.setScyllaWriteError("Update", err)
+			databaseErr := orm.setScyllaWriteError("Update", err)
+			return orm.enrichBulkUpdateUniqueViolation(databaseErr, []reflect.Value{row}, meta, activeDriver)
 		}
 
 		if applied {

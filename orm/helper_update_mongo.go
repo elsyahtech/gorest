@@ -93,7 +93,8 @@ func (orm *ORM) updateBulkMongo(execCtx context.Context, collection *mongo.Colle
 
 	result, err := collection.BulkWrite(execCtx, writeModels, options.BulkWrite().SetOrdered(false))
 	if err != nil {
-		return orm.setMongoWriteError("Update", err)
+		databaseErr := orm.setMongoWriteError("Update", err)
+		return orm.enrichBulkUpdateUniqueViolation(databaseErr, rowsVal, meta, orm.DatabaseConfig.Driver)
 	}
 
 	if result != nil {
