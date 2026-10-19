@@ -63,7 +63,24 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 			orm.LastInsertId = strings.Join(idStrs, ",")
 		}
 		if err != nil {
+			fmt.Printf("ERROR MONGO INSERT MANY: %+v\n", err)
 			return orm.setMongoWriteError("Create", err)
+		}
+		if res == nil {
+			return orm.setDatabaseOperationErrorKind(
+				"Create",
+				fmt.Errorf("MongoDB InsertMany returned no result for %d submitted documents", len(rowsVal)),
+				databaseExecutionError,
+				http.StatusInternalServerError,
+			)
+		}
+		if len(res.InsertedIDs) != len(rowsVal) {
+			return orm.setDatabaseOperationErrorKind(
+				"Create",
+				fmt.Errorf("MongoDB InsertMany reported %d inserted documents out of %d submitted documents", len(res.InsertedIDs), len(rowsVal)),
+				databaseExecutionError,
+				http.StatusInternalServerError,
+			)
 		}
 
 		orm.Result = res
