@@ -33,8 +33,6 @@ func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableNam
 }
 
 func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *mongo.Collection) error {
-	fmt.Printf(">>> JUMLAH DATA DALAM rowsVal: %d\n", len(rowsVal))
-
 	switch {
 	case len(rowsVal) == 0:
 		return nil
@@ -65,7 +63,6 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 			orm.LastInsertId = strings.Join(idStrs, ",")
 		}
 		if err != nil {
-			fmt.Printf("ERROR MONGO INSERT MANY: %+v\n", err)
 			return orm.setMongoWriteError("Create", err)
 		}
 		if res == nil {
