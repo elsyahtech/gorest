@@ -33,6 +33,8 @@ func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableNam
 }
 
 func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *mongo.Collection) error {
+	fmt.Printf(">>> JUMLAH DATA DALAM rowsVal: %d\n", len(rowsVal))
+
 	switch {
 	case len(rowsVal) == 0:
 		return nil
