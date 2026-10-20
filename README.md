@@ -31,24 +31,20 @@ GOREST provides modular support for:
 ---
 
 ## 💡 Why GOREST?
-Go gives developers a simple language, strong performance, and a flexible ecosystem.
 
-While flexibility provides significant benefits, engineering a production grade backend requires establishing robust standards for system architecture, data access, logging, configuration, and overall application lifecycle governance.
+Go gives developers a simple language, strong performance, and the freedom to choose their own tools. However, building maintainable backend applications also requires consistent conventions for application structure, configuration, logging, data access, and lifecycle management.
 
-Without a common foundation, different applications can gradually adopt different structures and conventions:
-- **Project A** → Structure A + Conventions A + Configuration A
-- **Project B** → Structure B + Conventions B + Configuration B
-- **Project C** → Custom structure + Custom conventions + Custom Configuration
+GOREST provides an opinionated foundation for these recurring concerns, helping teams reduce repetitive infrastructure work and keep applications consistent as they grow.
 
-This is not necessarily a problem for a single project. At team or organizational scale, however, architectural differences can make applications harder to understand, maintain, and transfer between developers.
+### What GOREST Provides
 
-GOREST takes an opinionated approach.
+- **Consistent Application Structure** — Establishes predictable conventions that make projects easier to navigate, maintain, and hand over between developers.
+- **Integrated Infrastructure** — Brings together application lifecycle management, HTTP server integration, configuration, structured logging, Redis, and database connectivity.
+- **Flexible Data Access** — Supports both Native SQL and ORM, allowing developers to choose the appropriate abstraction for each use case.
+- **Explicit and Predictable Behavior** — Validates configuration and query-related constraints where applicable, helping detect problems early instead of silently guessing developer intent.
+- **Developer Control** — Keeps application and business logic in regular Go code. Developers can still use the standard library and other packages whenever GOREST's abstractions are not suitable.
 
-It provides a common application foundation and a set of conventions for recurring backend infrastructure, while keeping application and business logic under the developer's control.
-
-The objective is not to replace Go or hide its ecosystem.
-
-**GOREST provides structure around Go, not a replacement for Go.**
+GOREST provides the foundation, not a replacement for Go. Its purpose is to reduce repetitive infrastructure work while leaving implementation decisions and business requirements under the developer's control.
 
 ---
 
@@ -141,63 +137,40 @@ The specific components used depend on the module you need.
 
 ---
 
-## 📁 Features
+## 🛠️ Features
 
-### 1. Application Lifecycle & Engine
-- **Application Lifecycle** — Provides a structured lifecycle for application initialization and startup.
+### 1. Application Lifecycle & Initialization
+
+- **Centralized Bootstrapping** — Coordinates application initialization and startup.
 - **Thread-Safe Initialization** — Protects critical initialization paths from concurrent execution.
-- **Database Timezone Configuration** — Passes the configured timezone to database drivers that support it without changing the process-wide timezone.
 - **Startup Timeout** — Uses a startup context timeout to prevent initialization from waiting indefinitely on slow external dependencies.
+- **Database Timezone Configuration** — Passes the configured timezone to database drivers that support it without changing the process-wide timezone.
 
 ### 2. Integrated Infrastructure
-- **Centralized Bootstrapping** — Provides a consistent initialization process for application infrastructure.
-- **HTTP Server Integration** — Supports integrating HTTP servers and routing into the application lifecycle.
-- **Redis Integration** — Provides Redis connectivity for caching, sessions, and key-value operations.
-- **Database Integration** — Provides centralized database configuration and connection management.
+
+- **HTTP Server & Routing** — Integrates HTTP server and route registration into the application lifecycle.
 - **Structured Logging** — Provides a common logging foundation across application components.
-- **Multi-Database Support** — Supports both SQL and NoSQL database environments through modular database adapters.
+- **Redis Integration** — Supports Redis connectivity for caching, sessions, and key-value operations.
+- **Multi-Database Support** — Provides modular adapters for Oracle, SQL Server, PostgreSQL, MySQL, SQLite, MongoDB, and ScyllaDB.
 
-### 3. Migrations & Seeders
-- **Database Migrations** — Provides controlled schema migration workflows.
+### 3. Database Migrations & Seeders
+
+- **Database Migrations** — Supports controlled schema migration workflows.
 - **Database Seeders** — Supports inserting initial or development data through application-managed seeders.
-- **Driver-Specific Migrations** — Allows migration workflows to follow the capabilities and requirements of the target database.
+- **Driver-Specific Migrations** — Accommodates the capabilities and requirements of individual database drivers.
 
-### 4. Data Access
-GOREST provides two complementary approaches to database access:
+### 4. Data Access & ORM
 
-#### Native SQL
-For cases where developers need direct control over SQL and database-specific behavior.
-
-#### ORM
-For structured data access involving models, relationships, query building, preloading, pagination, filtering, ordering, and parameter binding.
-
-The ORM also provides validation intended to make query behavior more explicit and predictable.
-
-The ORM is designed with explicit validation and predictable behavior rather than silently guessing application relationships or query intent.
-
-#### ORM Reliability Features
-- **Explicit Relationship Configuration** — Relationships can require explicit metadata so relationship configuration errors can be detected rather than silently inferred.
-- **Pluralization Support** — Supports common and irregular pluralization rules when mapping models to database tables.
-- **Exact Column Matching** — Uses exact column and alias matching when validating selected columns.
-- **SQL-Aware Parameter Parsing** — Handles placeholders while accounting for SQL string literals, comments, and PostgreSQL dollar-quoted sections.
+- **Native SQL** — Allows direct SQL execution and database-specific query behavior.
+- **Query Builder & ORM** — Supports model mapping, query construction, filtering, ordering, pagination, and parameter binding.
+- **Relationship Preloading** — Supports configured relationships and preloading.
+- **Explicit Relationship Configuration** — Validates relationship metadata where applicable instead of relying on silent inference.
+- **Pluralization Support** — Handles common and irregular pluralization rules when mapping models to tables.
+- **Exact Column Matching** — Validates selected columns and aliases through exact matching.
+- **SQL-Aware Parameter Parsing** — Accounts for SQL string literals, comments, and PostgreSQL dollar-quoted sections when parsing placeholders.
 - **Strict Parameter Binding** — Validates placeholder and argument alignment before query execution.
 
 ---
-
-## Application Philosophy
-GOREST follows a few simple principles:
-
-<ol>
-  <li>Keep application structure predictable.</li>
-  <li>Fail early when configuration or query intent is invalid.</li>
-  <li>Prefer explicit behavior over silent guessing.</li>
-  <li>Provide abstraction without taking control away from developers.</li>
-  <li>Allow Native SQL when abstraction is not appropriate.</li>
-  <li>Keep recurring infrastructure concerns consistent across applications.</li>
-  <li>Use Go as the foundation rather than hiding Go behind another programming model.</li>
-</ol>
-
-GOREST is designed to provide the foundation.
 
 ## ⚙️ Installation & Getting Started
 
@@ -224,36 +197,32 @@ go get github.com/elsyahtech/gorest
 
 ### 2. Create `main.go`
 
-Once you have installed Gorest, create a `main.go` file at the root of your project. 
-
-Here is what the default `main.go` looks like:
+The simplest way to start a GOREST application is to use its built-in defaults. You do not need to register the logger or HTTP server manually.
 
 ```go
 package main
 
-import (
-    "github.com/elsyahtech/gorest"
-)
+import "github.com/elsyahtech/gorest"
 
 func main() {
-	app := gorest.New()
-	app.Start()
+    app := gorest.New()
+    app.Start()
 }
 ```
 
 ### 3. Run the application
+
 ```bash
 go run main.go
 ```
 
-Then open:
-```bash
-http://127.0.0.1:3000
-```
-
-Your application is now running.
+Open `http://127.0.0.1:3000` in your browser.
 
 <img src="./docs/home-page.png" alt="Gorest Home Page" width="600">
+
+GOREST initializes the logger and HTTP server with their default configurations. SQLite is the default database driver, so no external database server is required for the basic setup.
+
+**This quick start uses defaults.** You only need to configure individual subsystems when your application requires different settings.
 
 ---
 
@@ -300,26 +269,67 @@ app := gorest.New(gorest.Config{
 
 ---
 
-### 2. Subsystem & Database Plug-and-Play (app.Use(...))
-Gorest uses a clean middleware-like registration pattern via app.Use(...):
+### 2. Custom Subsystem Configuration (`app.Use`)
+
+Use `app.Use(...)` when you need to register or customize subsystem configurations. It accepts supported configuration values or pointers, including `log.Config`, `database.Config`, `redis.Config`, and `server.Config`.
+
+The logger and HTTP server are already initialized by `gorest.New()`. Register them again only when you want to apply explicit subsystem configurations.
+
+#### Configure the database
+
+The following example explicitly registers the default database configuration. SQLite remains the selected driver unless you change it.
+
+```go
+package main
+
+import (
+    "github.com/elsyahtech/gorest"
+    "github.com/elsyahtech/gorest/database"
+)
+
+func main() {
+    app := gorest.New()
+
+    dbConfig := database.ConfigDefault
+    dbConfig.Driver = database.SQLITE
+
+    app.Use(database.Run(dbConfig))
+
+    app.Start()
+}
+```
+
+`database.Run(config)` applies database configuration defaults and returns the normalized configuration. It does not establish the database connection by itself; `app.Use(...)` registers the returned configuration with the application.
+
+When starting from `database.ConfigDefault`, the database is enabled by default. If you instead construct a partial `database.Config` from scratch, set `Enabled: true` explicitly when you want `app.Use(...)` to initialize it.
+
+#### Configure Redis only when needed
+
+Redis is optional and disabled by default. To enable it, set `Enabled: true` and ensure the Redis service is reachable.
+
+```go
+redisConfig := redis.ConfigDefault
+redisConfig.Enabled = true
+
+app.Use(redis.Run(redisConfig))
+```
+
+Add the `github.com/elsyahtech/gorest/redis` import to use this example. Configure the host, credentials, and TLS settings as required by your environment.
+
+#### Customize logging or the HTTP server
+
+You can pass explicit configurations when you need to change their settings:
 
 ```go
 app.Use(
     log.Run(log.ConfigDefault),
-    redis.Run(redis.ConfigDefault),
     server.Run(server.ConfigDefault),
-    database.Run(database.ConfigDefault),
 )
 ```
 
-- **Logger & Server:** Enabled by default (log.ConfigDefault, server.ConfigDefault) to instantly spin up routing and structured logging.
-- **Server constructor defaults:** Both `server.Run(...)` and `server.New(...)` apply defaults for omitted settings. In particular, nil middleware config fields use GOREST's default CORS, Recover, Request ID, Compress, Helmet, and Limiter configurations; nil does not disable middleware.
-- **Redis and Database Drivers:** Easily switch your database backend by changing the Driver constant (database.Oracle, SQL Server, MYSQL, PostgreSQL, SQLite, MongoDB, ScyllaDB.). **Default Database:** GOREST uses **SQLite** as its default database driver. No external database server is required to run the default application.
-- **Database configuration lifecycle:** `database.Run(config)` applies database defaults and returns the normalized config; it does not open a connection. Pass that returned config to `app.Use(...)` to initialize the database. `app.Use(database.Config{...})` does not call `database.Run` for you. When starting from a partial config literal, set `Enabled: true` explicitly or copy `database.ConfigDefault` first; otherwise the zero-value `Enabled` leaves the database disabled.
-- **Controlled Migrations & Seeders:** Set `Migration: true` and/or `Seeder: true` on the database config before passing it through `database.Run(...)` to run those tasks during startup.
-- **Application environments:** `development`, `testing`, and `production` are the conventional values, but custom labels such as `staging` and `uat` are accepted. Production TLS warnings also apply to custom environment names; only `development` and `testing` are treated as non-production-like.
+This example reapplies the default logger and server settings; it is not required for a basic application. To customize them, modify the corresponding configuration values before passing them to `app.Use(...)`.
 
-See [configuration detail](./docs/configuration.md)
+For configuration fields, environment-specific settings, database drivers, migrations, and seeders, see the [Configuration Guide](./docs/configuration.md).
 
 ---
 
