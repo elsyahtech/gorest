@@ -164,6 +164,9 @@ func migrationExec(ctx context.Context, database *Database, config *Config, log 
 		if err := insertMigrationState(ctx, database, config, driver, stateKey, checksum, "running"); err != nil {
 			return "Ensure the database migration state store accepts new execution records.", err
 		}
+		if err := migrationIntegrationPause(stateKey); err != nil {
+			return "Integration migration pause failed before executing the migration file.", err
+		}
 
 		message, err = dataMigrationExec(ctx, driver, database, config, execType, fileItem, tableName, columnName)
 		if err != nil {

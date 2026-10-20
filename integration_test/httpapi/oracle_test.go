@@ -87,8 +87,11 @@ func TestOracleHTTPCRUDAndParameterBinding(t *testing.T) {
 	t.Setenv("GOREST_IT_ORACLE_LIB_DIR", libDir)
 	t.Setenv("GOREST_IT_REQUIRED", "1")
 	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.ORACLE, container)
 
-	app := internaltest.OpenApp(t, database.ORACLE)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.ORACLE)
+	app := internaltest.OpenAppWithConfig(t, database.ORACLE, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	t.Logf("Oracle image: %s", image)
 	t.Logf("Oracle Instant Client configured: true")
 	logOracleVersion(t, app.Database())

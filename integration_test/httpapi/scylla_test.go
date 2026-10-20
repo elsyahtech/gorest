@@ -88,8 +88,11 @@ func TestScyllaHTTPCRUDAndParameterBinding(t *testing.T) {
 	t.Setenv("GOREST_IT_SCYLLA_NAME", scyllaKeyspace)
 	t.Setenv("GOREST_IT_REQUIRED", "1")
 	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.SCYLLA, container)
 
-	app := internaltest.OpenApp(t, database.SCYLLA)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.SCYLLA)
+	app := internaltest.OpenAppWithConfig(t, database.SCYLLA, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	t.Logf("ScyllaDB image: %s", image)
 	logScyllaVersion(t, app.Database())
 

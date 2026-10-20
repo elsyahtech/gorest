@@ -101,8 +101,11 @@ func TestSQLServerHTTPCRUDAndParameterBinding(t *testing.T) {
 	t.Setenv("GOREST_IT_SQLSERVER_TRUST_SERVER_CERTIFICATE", "true")
 	t.Setenv("GOREST_IT_REQUIRED", "1")
 	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.SQLSERVER, container)
 
-	app := internaltest.OpenApp(t, database.SQLSERVER)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.SQLSERVER)
+	app := internaltest.OpenAppWithConfig(t, database.SQLSERVER, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	t.Logf("SQL Server image: %s", image)
 	logSQLServerVersion(t, app.Database())
 

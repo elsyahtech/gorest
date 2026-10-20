@@ -80,8 +80,11 @@ func TestMySQLHTTPCRUDAndParameterBinding(t *testing.T) {
 	t.Setenv("GOREST_IT_MYSQL_TLS", database.TLSDisabled)
 	t.Setenv("GOREST_IT_REQUIRED", "1")
 	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.MYSQL, container)
 
-	app := internaltest.OpenApp(t, database.MYSQL)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.MYSQL)
+	app := internaltest.OpenAppWithConfig(t, database.MYSQL, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	t.Logf("MySQL image: %s", image)
 	logMySQLVersion(t, app.Database())
 
