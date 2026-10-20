@@ -15,7 +15,9 @@ import (
 
 func TestSQLiteHTTPCRUDAndParameterBinding(t *testing.T) {
 	t.Chdir(t.TempDir()) // Keep example application logs and SQLite files out of the repository.
-	app := internaltest.OpenApp(t, database.SQLITE)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.SQLITE)
+	app := internaltest.OpenAppWithConfig(t, database.SQLITE, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	logSQLiteVersion(t, app.Database())
 
 	table := fmt.Sprintf("gorest_e2e_users_%d", time.Now().UnixNano())
@@ -27,6 +29,7 @@ func TestSQLiteHTTPCRUDAndParameterBinding(t *testing.T) {
 		"DROP TABLE IF EXISTS "+table,
 	)
 	internaltest.SQLParallelTransactions(t, database.SQLITE)
+	runMigrationProcessScenarios(t, database.SQLITE, nil)
 }
 
 func logSQLiteVersion(t *testing.T, db *gorest.DBSession) {

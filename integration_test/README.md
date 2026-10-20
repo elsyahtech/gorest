@@ -26,8 +26,33 @@ rejection (`409`), Update, GET verification, Delete, and not-found (`404`).
 After those checks, every runner also sends 12 Create, 12 GET, and 12 Delete
 requests concurrently, then verifies that no test rows remain. MongoDB and
 ScyllaDB use driver-specific schemas and assertions described in their rows
-below. These are GOREST examples, not tests of a consuming application's
-routes, business logic, or authorization.
+below. Each seven-driver runner also writes a temporary migration and seeder
+fixture in that driver's supported format, runs them through
+`app.RunDatabaseStartupTasks()`, verifies the seeded record, then runs the
+startup tasks again and verifies that the record remains singular. This checks
+file discovery/execution, history and state recording, and successful rerun
+behavior against the configured database. The scenario also sends two
+simultaneous claims for the same database startup lock, expects one winner and
+one conflict, verifies that startup rejects the remaining lock, then removes
+that simulated stale lock and verifies startup can run again. Each driver test
+also starts independent OS migration-runner processes against a two-file
+fixture. The first process pauses after file one is applied and file two is
+marked `running`; a second process must be rejected by the lock. A separate
+child process is killed at that point, then the test verifies persisted state
+and lock, confirms startup remains blocked, performs operator recovery, and
+reruns successfully. For the six container-backed drivers, another scenario
+force-stops the database container with zero-second stop grace while a
+migration process holds the startup lock between files, restarts that same
+container, checks that state and lock persisted, then verifies recovery and
+rerun. PostgreSQL, MySQL, and SQL Server also run a deliberately slow
+migration statement, query the database's activity view until that statement
+is confirmed active, kill the migration process, then verify the unfinished
+state and operator recovery path. Oracle, MongoDB, and ScyllaDB currently use
+the forced server-restart-at-file-boundary scenario; they do not claim an
+in-flight statement interruption test. SQLite has no separate database
+server; its killed-process recovery scenario covers the embedded database
+case. These are GOREST integration checks, not tests of a consuming
+application's routes, business logic, or authorization.
 
 The five SQL HTTP runners also start eight independent SQL transactions at the
 same time, insert and commit one row per transaction, then verify all eight
@@ -37,13 +62,13 @@ expose the same transaction scenario as `TestORMParallelTransactions`.
 
 | Driver | Command | Default service | Notes |
 | --- | --- | --- | --- |
-| PostgreSQL | `make integration-test-postgres-e2e` | PostgreSQL container | Shared SQL HTTP scenario |
+| PostgreSQL | `make integration-test-postgres-e2e` | PostgreSQL container | Shared SQL HTTP, migration, and seeder scenarios |
 | Oracle | `make integration-test-oracle-e2e` | Oracle Database Free container | Host must have Oracle Instant Client; image startup can take several minutes |
 | SQL Server | `GOREST_IT_SQLSERVER_ACCEPT_EULA=Y make integration-test-sqlserver-e2e` | SQL Server 2022 container | Explicit license opt-in; validated on x86-64 Linux Docker hosts |
-| MySQL | `make integration-test-mysql-e2e` | `mysql:8.4` | Shared SQL HTTP scenario |
+| MySQL | `make integration-test-mysql-e2e` | `mysql:8.4` | Shared SQL HTTP, migration, and seeder scenarios |
 | SQLite | `make integration-test-sqlite-e2e` | Temporary SQLite database | No container or external service |
-| MongoDB | `make integration-test-mongo-e2e` | `mongo:7.0` | Creates a unique email index; maps GOREST primary key to MongoDB `_id` |
-| ScyllaDB | `make integration-test-scylla-e2e` | `scylladb/scylla:2025.1` | Single-node developer-mode test; checks full primary-key conflict, not email uniqueness |
+| MongoDB | `make integration-test-mongo-e2e` | `mongo:7.0` | Uses JSON migration/seeder files; maps seed `_id` to MongoDB's primary key |
+| ScyllaDB | `make integration-test-scylla-e2e` | `scylladb/scylla:2025.1` | Single-node developer-mode test; uses CQL migration/seeder files |
 
 Run one driver at a time. There is not currently a single all-driver matrix
 command. Docker images are downloaded on first use. Image overrides are
@@ -72,6 +97,26 @@ database server version when available. Credentials and Oracle client paths
 are not included by the runner. Reports are ignored by Git; retain both files
 when attaching evidence to a review or audit. A report only proves the run
 described by its recorded environment and scenarios.
+
+The migration/seeder scenario verifies successful execution and repeat-run
+behavior. Its process test starts two independent runners against a two-file
+fixture, pauses the first after file one is applied and file two is marked
+`running`, and confirms the second process is rejected by the lock. It then
+kills a child runner at that point, checks persisted history/state and the
+retained lock, verifies startup remains blocked, performs manual state/lock
+recovery, and confirms a rerun completes. The synchronization hook is compiled
+only with the `integration` build tag. These scenarios prove process-level
+coordination and recovery at a migration-file boundary. The PostgreSQL,
+MySQL, and SQL Server scenarios additionally kill the migration process while
+the database reports its test statement as active. Other drivers currently
+lack a deterministic in-flight operation probe in this suite, so their restart
+scenario remains at the file boundary. None of these scenarios simulate host
+power loss or storage corruption, or make multiple migration files atomic as a
+batch. They also do not prove production deployment ordering.
+Migration scripts are not guaranteed to be atomic across drivers; inspect the
+database before retrying a failed script. See the
+[migration and seeder guide](../docs/guide.md#4-database-migration--seeder)
+for locking, execution-state, recovery, and deployment guidance.
 
 ## Integration suite map
 

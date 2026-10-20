@@ -85,8 +85,11 @@ func TestMongoHTTPCRUDAndParameterBinding(t *testing.T) {
 	t.Setenv("GOREST_IT_MONGO_TLS", "false")
 	t.Setenv("GOREST_IT_REQUIRED", "1")
 	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.MONGO, container)
 
-	app := internaltest.OpenApp(t, database.MONGO)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.MONGO)
+	app := internaltest.OpenAppWithConfig(t, database.MONGO, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	t.Logf("MongoDB image: %s", image)
 	logMongoVersion(t, app.Database())
 

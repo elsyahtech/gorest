@@ -58,8 +58,11 @@ func TestPostgresHandlerCRUDAndParameterBinding(t *testing.T) {
 	t.Setenv("GOREST_IT_POSTGRES_TLS", "disable")
 	t.Setenv("GOREST_IT_REQUIRED", "1")
 	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.POSTGRES, container)
 
-	app := internaltest.OpenApp(t, database.POSTGRES)
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.POSTGRES)
+	app := internaltest.OpenAppWithConfig(t, database.POSTGRES, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
 	t.Logf("PostgreSQL image: %s", postgresImage)
 	logPostgresVersion(t, app.Database())
 
