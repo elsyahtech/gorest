@@ -40,16 +40,19 @@ func (app *App) Timezone() string { return app.config.Timezone }
 // IsDebug is a getter that reports whether debug mode is enabled in the config.
 func (app *App) IsDebug() bool { return app.config.Debug }
 
-// Database returns a sterile, thread-safe DBSession instance.
-//
-// Gorest strictly enforce encapsulation here. Handlers are never allowed to touch
-// raw database drivers (*sql.DB, *mongo.Client, *scylla) directly to prevent state corruption,
-// connection leaks, or accidental nil-pointer panics.
-//
-// Instead, DBSession acts as a controlled gateway, providing safe entry points
-// (like From) to initialize query builders while keeping the underlying connection
-// strictly guarded within the App lifecycle.
+// Database returns a new DBSession wrapper around the application's registered
+// database services. The wrapper does not create a new connection pool.
+// Common query methods validate inputs and return errors; RawQuery methods are
+// explicit escape hatches that expose native driver handles and place query
+// construction, resource cleanup, and driver-specific behavior on the caller.
+// BeginTx returns a separate transaction-bound session. Keep related operations
+// and transaction finalization in a deliberate order; concurrent Commit/Rollback
+// calls are mutually guarded, but transaction ordering remains the caller's job.
 func (app *App) Database() *DBSession {
+	if app == nil {
+		return &DBSession{}
+	}
+
 	return &DBSession{
 		database: app.database,
 		config:   app.config.database,
@@ -81,14 +84,14 @@ func (app *App) NewContext(timeout time.Duration) (context.Context, context.Canc
 // do not concatenate those values into query. Placeholders generally cannot bind identifiers
 // such as table/column names or sort directions, which must come from fixed application choices
 // or an explicit allowlist. This method does not sanitize SQL text assembled by the caller.
-// Returns 501 Not Implemented if the database service is not running, otherwise the result,
+// Returns 503 Service Unavailable if the database service is not running, otherwise the result,
 // message, and status code from the underlying database.
 func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -112,7 +115,7 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -127,13 +130,13 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 // MongoCollection returns a handle to the named MongoDB collection in the configured database.
 // It does not contact the server or create the collection; it only prepares the handle for operations
 // such as InsertOne, Find, UpdateOne, and DeleteOne.
-// Returns 400 Bad Request if collectionName is empty, and 501 Not Implemented if the MongoDB service is not running.
+// Returns 400 Bad Request if collectionName is empty, and 503 Service Unavailable if MongoDB is not running.
 func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -153,7 +156,7 @@ func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -168,7 +171,7 @@ func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -187,7 +190,7 @@ func (dbSession *DBSession) MongoCreateCollection(
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -206,7 +209,7 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -226,7 +229,7 @@ func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -247,7 +250,7 @@ func (dbSession *DBSession) MapScanCAS(ctx context.Context, query string, args .
 		return false, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
@@ -358,16 +361,21 @@ func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMo
 	if dbSession == nil || dbSession.config == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
 				"and the application must be running MONGO",
-			http.StatusNotImplemented, errors.New("database service is not running")
+			http.StatusServiceUnavailable, errors.New("database service is not running")
+	}
+	if ctx == nil || fn == nil {
+		return "Provide a non-nil context and MongoDB query callback.", http.StatusBadRequest,
+			errors.New("rawQueryMongo: context or callback is nil")
 	}
 
 	if dbSession.database.Mongo == nil {
 		return "Ensure that your application running use the MONGO",
-			http.StatusNotImplemented, fmt.Errorf("mongo database is not running. Your application is currently running on %s", dbSession.config.Driver)
+			http.StatusServiceUnavailable, fmt.Errorf("mongo database is not running. Your application is currently running on %s", dbSession.config.Driver)
 	}
 
 	if err := fn(ctx, dbSession.database.Mongo); err != nil {
-		return "", http.StatusInternalServerError, fmt.Errorf("%w", err)
+		return "Check the MongoDB operation, collection permissions, and document/query values.",
+			http.StatusInternalServerError, fmt.Errorf("rawQueryMongo: %w", err)
 	}
 
 	return "", http.StatusOK, nil
@@ -385,17 +393,21 @@ func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderS
 	if dbSession == nil || dbSession.config == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
 				"and the application must be running SCYLLA",
-			http.StatusNotImplemented, errors.New("database service is not running")
+			http.StatusServiceUnavailable, errors.New("database service is not running")
+	}
+	if ctx == nil || fn == nil {
+		return "Provide a non-nil context and ScyllaDB query callback.", http.StatusBadRequest,
+			errors.New("rawQueryScylla: context or callback is nil")
 	}
 
 	if dbSession.database.Scylla == nil {
 		return "Ensure that your application running use the SCYLLA",
-			http.StatusNotImplemented, fmt.Errorf("scylla database is not running. Your application is currently running on %s", dbSession.config.Driver)
+			http.StatusServiceUnavailable, fmt.Errorf("scylla database is not running. Your application is currently running on %s", dbSession.config.Driver)
 	}
 
 	if err := fn(ctx, dbSession.database.Scylla); err != nil {
-		return "Ensure that your application running use the SCYLLA",
-			http.StatusInternalServerError, fmt.Errorf("scylla database is not running. Your application is currently running on %s", dbSession.config.Driver)
+		return "Check the CQL statement, table schema, permissions, and ScyllaDB connectivity.",
+			http.StatusInternalServerError, fmt.Errorf("rawQueryScylla: %w", err)
 	}
 
 	return "", http.StatusOK, nil
@@ -405,7 +417,7 @@ func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderS
 // Use the returned session for all statements that belong to the transaction,
 // then finish with Commit or Rollback. The configured database timeout is applied
 // to the transaction context.
-// Returns 409 Conflict if a transaction is already active, and 500 Internal Server Error if it cannot be started.
+// Returns 409 Conflict if this session is already transaction-bound, and 500 Internal Server Error if a transaction cannot be started.
 func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	return dbSession.BeginTxContext(context.Background(), opts...)
 }
@@ -414,18 +426,20 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 // bound to it. The configured database timeout caps the transaction lifetime,
 // while cancellation or an earlier deadline from ctx is also respected.
 // Commit or Rollback cancels the derived context and releases its resources.
+// Returns 400 for a nil context, 409 if the session is already transaction-bound,
+// 503 if the database service is unavailable, and 500 if the driver cannot start it.
 func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
 
 	if dbSession.config == nil {
 		return nil, "Ensure that the database configuration is available.",
-			http.StatusBadRequest,
+			http.StatusServiceUnavailable,
 			errors.New("database configuration is not running")
 	}
 
@@ -463,14 +477,18 @@ func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxO
 }
 
 // Rollback aborts the active transaction, discarding all changes made since BeginTx.
-// Returns 400 Bad Request if there is no active transaction, and 500 Internal Server Error if the rollback fails.
+// Returns 400 Bad Request if there is no active transaction or it has already been finalized, and 500 Internal Server Error if rollback fails.
 func (dbSession *DBSession) Rollback() (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
+	}
+	if dbSession.config == nil {
+		return "Ensure that the database configuration is available.", http.StatusServiceUnavailable,
+			errors.New("rollback: database configuration is not available")
 	}
 
 	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
@@ -482,14 +500,15 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 			http.StatusBadRequest,
 			errors.New("rollback: no active transaction to rollback")
 	}
+	if !dbSession.txDone.CompareAndSwap(false, true) {
+		return "The transaction has already been committed or rolled back.", http.StatusBadRequest,
+			errors.New("rollback: transaction is already finished")
+	}
 
 	err := dbSession.database.Tx.Rollback()
 
-	dbSession.database.Tx = nil
-
 	if dbSession.txCancel != nil {
 		dbSession.txCancel()
-		dbSession.txCancel = nil
 	}
 
 	if err != nil {
@@ -502,15 +521,19 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 }
 
 // Commit saves all changes made in the active transaction.
-// Returns 400 Bad Request if there is no active transaction, and 500 Internal Server Error if the commit fails.
+// Returns 400 Bad Request if there is no active transaction or it has already been finalized, and 500 Internal Server Error if commit fails.
 // After Commit, the transaction is finished and Rollback has nothing left to undo.
 func (dbSession *DBSession) Commit() (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 				"To use ORM, the application must use one of the following databases: " +
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
+	}
+	if dbSession.config == nil {
+		return "Ensure that the database configuration is available.", http.StatusServiceUnavailable,
+			errors.New("commit: database configuration is not available")
 	}
 
 	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
@@ -522,14 +545,15 @@ func (dbSession *DBSession) Commit() (string, int, error) {
 			http.StatusBadRequest,
 			errors.New("commit: no active transaction to commit")
 	}
+	if !dbSession.txDone.CompareAndSwap(false, true) {
+		return "The transaction has already been committed or rolled back.", http.StatusBadRequest,
+			errors.New("commit: transaction is already finished")
+	}
 
 	err := dbSession.database.Tx.Commit()
 
-	dbSession.database.Tx = nil
-
 	if dbSession.txCancel != nil {
 		dbSession.txCancel()
-		dbSession.txCancel = nil
 	}
 
 	if err != nil {
@@ -615,17 +639,21 @@ func (app *App) Close() (string, int, error) {
 // Chain methods such as Where, Select, Join, OrderBy, Limit, and Offset to build the query,
 // then finish with an operation such as Create, Update, Delete, or Find.
 // If the transaction is active in this session, the query runs inside it.
-// The program exits (log.Fatalf) if the database service is not running, so make sure
-// database.Run(...) is registered with app.Use(...) before calling Table.
+// If the database service is unavailable, the returned ORM contains an error
+// and the corresponding HTTP status instead of terminating the process.
 func (dbSession *DBSession) Table(table string) *orm.ORM {
 	if dbSession == nil || dbSession.database == nil || dbSession.config == nil {
 		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
 			"To use ORM, the application must use one of the following databases: " +
 			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
 
-		golog.Fatalf("Gorest detected ORM Query in your application, but database is not running. Message: %s", message)
-
-		return nil
+		return &orm.ORM{
+			Error:          errors.New("table: database service is not initialized"),
+			Message:        message,
+			HTTPCode:       http.StatusServiceUnavailable,
+			Database:       nil,
+			DatabaseConfig: nil,
+		}
 	}
 
 	return &orm.ORM{
@@ -673,18 +701,18 @@ func (app *App) GetLogConfig() log.Config {
 	return *app.config.log
 }
 
-// Log is
+// Log returns the configured application logger. If the app or logger is not
+// initialized, it reports the condition through the standard logger and returns
+// a no-op logger so logging misuse does not terminate the process.
 func (app *App) Log(field map[string]any, args ...bool) *zap.Logger {
 	if app == nil {
-		golog.Fatalf("gorest is not running")
-
-		return nil
+		golog.Print("gorest: cannot write application log because the app is nil")
+		return zap.NewNop()
 	}
 
 	if app.log == nil {
-		golog.Fatalf("error: logger is not running")
-
-		return nil
+		golog.Print("gorest: cannot write application log because the logger is not configured")
+		return zap.NewNop()
 	}
 
 	return app.log.Log(field, args...)
@@ -714,7 +742,7 @@ func (redisSession *RedisSession) QueryRedis() (*redis.Client, string, int, erro
 	if redisSession == nil || redisSession.redis == nil {
 		return nil, "Ensure that you have run redis.Run(redis.Config{...}) in your app. " +
 				"To use QueryRedis, Redis must be enabled and initialized with app.Use(...).",
-			http.StatusNotImplemented,
+			http.StatusServiceUnavailable,
 			errors.New("redis has not been run in your app")
 	}
 

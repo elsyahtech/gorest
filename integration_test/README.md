@@ -4,6 +4,11 @@ This directory contains three kinds of integration checks. They exercise
 GOREST against real services, but they do not replace tests for an application's
 own schema, handlers, authorization rules, or deployment configuration.
 
+For a manual CRUD walkthrough that connects to a database you configure, use
+the [`main.go` sample in the ORM tutorial](../docs/guide/orm-tutorial.md#2-run-one-manual-crud-flow).
+Use the automated suites below when you want repeatable assertions and a
+recorded run report.
+
 | Test layer | Build tag / command | What it runs | External setup |
 | --- | --- | --- | --- |
 | Driver integration suites | `integration`; `go test -tags=integration ./integration_test/<driver> -count=1 -v` | ORM and database API scenarios against a configured service; SQLite uses a temporary file | A service and `GOREST_IT_*` settings for remote drivers; Redis tests are a separate package |

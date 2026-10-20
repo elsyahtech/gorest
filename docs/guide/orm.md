@@ -41,6 +41,8 @@ SQL transactions are started from a `DBSession`. `BeginTx()` returns a new sessi
 
 `BeginTx()` uses the timeout configured in `database.Config.Timeout` without requiring each handler to create another timeout context. To also bind the transaction to the current request's cancellation and deadline, call `BeginTxContext(ctx)`; the earlier of the request deadline and configured database timeout applies. The transaction context remains active until `Commit()` or `Rollback()`, and cancellation before then causes the SQL transaction to be rolled back by `database/sql`.
 
+Use a transaction-bound `DBSession` for one unit of work and finalize it once. Concurrent calls to `Commit()` and `Rollback()` on the same session are guarded so only one can finalize it; the other receives HTTP 400. This guard does not order concurrent queries or make sharing one transaction session across goroutines a safe business workflow. Keep each transaction's statements and finalization in one deliberate control flow. Independent requests should call `app.Database()` and start their own transaction sessions; they share the configured connection pool, not a mutable transaction pointer.
+
 ```go
 // The surrounding handler imports "fmt" and gorest; the verification test below also uses "net/http" and "testing".
 

@@ -33,13 +33,15 @@ The logger rotates the configured file by size and enforces the configured backu
 ### 2. HTTP Server Configuration (`server.Run(...)`)
 For the HTTP layer, Gorest integrates **Fiber** as its core HTTP engine under the hood, bringing blazing-fast performance, low memory footprint, and an expressive routing API to your application lifecycle.
 
-By default, the server runs smoothly out-of-the-box with sensible defaults. However, you can deeply customize the server engine, address, port, and security/performance middleware using `server.Config`:
+The default server configuration provides initial timeout and middleware settings. Review them for your application's traffic, security policy, and deployment. You can configure the server engine, address, port, and middleware using `server.Config`:
 
 When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the GOREST core defaults; GOREST preserves its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout. When `server.New()` receives a `Core` with zero `ReadTimeout` or `WriteTimeout`, it preserves the values and logs a warning; it does not reject startup. Configure finite positive timeouts unless the unlimited behavior is intentional and documented for the application. On `SIGINT` or `SIGTERM`, `app.Start()` gracefully shuts down Fiber before closing Redis, database, and logger resources, waiting up to 30 seconds for active requests. A timeout is reported and remaining services are then closed; `app.Close()` uses the same shutdown sequence. Unit coverage that constructs a server directly verifies `app.Close()` waits for in-flight requests and stops the listener, while a separate helper-process integration test exercises `app.Start()` plus `SIGTERM`. These tests model local behavior and cannot guarantee identical signal delivery, traffic, dependency behavior, or termination timing in every application's deployment; verify shutdown with the application's actual process supervisor/container and real handlers.
 
 `ReadTimeout` applies to reading the full request, including its body, so it bounds how long a slow client can take to send a request. `BodyLimit` limits request size, but does not limit how slowly those bytes can arrive; it is not a substitute for a finite `ReadTimeout`. GOREST's server tests include a local TCP test that sends an incomplete request body and verifies Fiber returns `408 Request Timeout` when a finite read timeout expires. This verifies the configured server behavior in the test environment, not behavior through every reverse proxy, load balancer, network, or production deployment.
 
 Both `server.Run(...)` and `server.New(...)` apply GOREST defaults to omitted sections. This includes all six middleware configurations: CORS, Recover, Request ID, Compress, Helmet, and Limiter. Therefore, `server.New(&server.Config{})` installs the default middleware just like `server.New(nil)`; a nil middleware field means “use the GOREST default,” not “disable it.” `server.New(...)` currently has no nil-based middleware opt-out.
+
+These middleware provide HTTP behavior and configurable controls, not a complete application security policy. CORS controls browser cross-origin access; it does not authenticate callers or authorize API operations. Recover handles panics in the request pipeline, Request ID supports request correlation, Compress changes response encoding, Helmet adds configured response headers, and Limiter applies a request limit. Review and tune their settings for the application and deployment. Define authentication and per-resource authorization in application code or an explicitly integrated identity layer; configure TLS, trusted proxies, secrets, network access, and suitable middleware policies for the serving environment. The presence of middleware or default configuration is not proof that an endpoint or deployment is secure.
 
 ```go
 server.Run(server.Config{
@@ -77,10 +79,10 @@ server.Run(server.Config{
         Level: compress.LevelBestSpeed,
     },
 
-    // Security headers middleware (Helmet) to protect against common web vulnerabilities
+    // Security headers middleware (Helmet); review its policy for your application.
     Helmet: &helmet.Config{},
 
-    // Rate limiting middleware to restrict excessive requests within a time window
+    // Rate limiting middleware; tune its limits and scope for your traffic and deployment.
     Limiter: &limiter.Config{
         Max:        100,
         Expiration: 1 * time.Minute,
@@ -91,15 +93,15 @@ server.Run(server.Config{
 HTTP Server Parameter Breakdown:
 - **Host & Port:** Defines where your application listens for incoming traffic (default is 127.0.0.1:3000).
 - **Core:** Direct access to underlying fiber.Config settings for advanced performance tuning.
-- **Cors:** Controls cross-domain resource sharing policies easily.
-- **Recover:** Essential safety net that catches unexpected panics during requests to keep your server alive.
-- **Requestid:** Injects unique trace IDs for effortless request logging and distributed tracing.
-- **Compress:** Reduces network bandwidth by compressing HTTP response payloads.
-- **Helmet:** Automatically sets secure HTTP headers to defend your web app against common web vectors.
-- **Limiter:** Built-in rate limiting to protect your endpoints from DDoS or abuse.
+- **Cors:** Sets browser cross-origin sharing behavior. It is not authentication or authorization.
+- **Recover:** Handles panics in the request pipeline; it does not replace application error handling or monitoring.
+- **Requestid:** Adds a request identifier for correlation. It does not establish caller identity.
+- **Compress:** Compresses HTTP responses to reduce payload size; it is a performance feature.
+- **Helmet:** Adds configured HTTP response headers as one defense-in-depth measure. Review the policy for your application and clients.
+- **Limiter:** Applies configured request limits. Tune the policy and use suitable edge or shared controls for the deployment; it is not, by itself, DDoS protection.
 
 ### 3. Redis Configuration (`redis.Run(...)`)
-For caching, session management, and high-speed key-value operations, Gorest provides a robust Redis integration. It supports standard authentication, database index selection, connection pooling fine-tuning, and full **TLS/mTLS encryption** for secure enterprise environments.
+For caching, session management, and key-value operations, Gorest provides Redis integration with authentication, database selection, connection-pool settings, and TLS/mTLS configuration options. Confirm the effective TLS and certificate settings against the Redis server and deployment environment.
 
 You can configure Redis by passing `redis.Config`:
 
@@ -113,7 +115,7 @@ redis.Run(redis.Config{
     Database: 0,  // Redis database index number (usually 0 to 15)
 
     // Security & TLS
-    TLS:         false,           // Set to true in production for secure encrypted connections
+    TLS:         false,           // Enable when required by the Redis endpoint; verify TLS in the target environment
     SSLCAPath:   "",              // Path to CA certificate file for TLS verification
     SSLCertPath: "",              // Path to client certificate file for mutual TLS (mTLS)
     SSLKeyPath:  "",              // Path to client certificate private key file for mTLS
@@ -135,9 +137,9 @@ redis.Run(redis.Config{
 ```
 
 Redis Parameter Breakdown:
-- **Connection & Credentials** (Host, Port, Username, Password, Database): Directs the client to your Redis server instance with support for ACL usernames and isolated database indexes.
-- **Security & TLS** (TLS, SSLCAPath, SSLCertPath, SSLKeyPath): Enables encrypted transport layers and mutual TLS authentication for secure cloud/cluster deployments.
-- **Timeouts & Lifetimes** (Timeout, PoolTimeout, ConnMaxLifetime, ConnMaxIdleTime): Prevents hanging threads, socket leaks, and stale connections by managing strict duration limits.
+- **Connection & Credentials** (Host, Port, Username, Password, Database): Configures the Redis endpoint and credentials, including ACL usernames and database indexes. Load secrets from a deployment secret store or environment configuration; do not commit them.
+- **Security & TLS** (TLS, SSLCAPath, SSLCertPath, SSLKeyPath): Configures TLS and optional mutual TLS where supported by the endpoint. Verify certificate validation and the effective connection settings in the target environment.
+- **Timeouts & Lifetimes** (Timeout, PoolTimeout, ConnMaxLifetime, ConnMaxIdleTime): Bounds connection and operation waits and controls connection reuse. Choose values for the service latency and workload; these settings do not replace monitoring or outage handling.
 - **Pool & Buffer Optimization** (PoolSize, MinIdleConns, MaxActiveConns, MaxRetries, ReadBufferSize, WriteBufferSize): Fine-tunes concurrency throughput. Note on PoolSize: When deploying inside Docker or Kubernetes, ensure your CPU container limits are set properly so Go's runtime.GOMAXPROCS doesn't misread the host's total core count!
 
 When `Enabled` is true, `app.Use(redis.Run(config))` initializes Redis and verifies connectivity with `PING`; an initialization error is logged and aborts startup. When Redis is disabled or not registered, `app.Redis().QueryRedis()` returns an explicit unavailable-service error instead of a nil client. `app.Close()` closes an initialized Redis client during application shutdown.
@@ -217,7 +219,7 @@ app.Use(database.Run(database.Config{
 
 Database Parameter Breakdown:
 - **Driver & Target** (Driver, Host, Port, Name): Specifies the database engine and connection routing. Note that for Oracle, Name acts as the service name instead of the SID.
-- **Credentials** (Username, Password): Secure authentication fields. Always load production secrets via environment variables.
-- **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls database socket limits and prevents memory leaks. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid.
-- **Security** & TLS (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Encrypts connections depending on driver specifications. Special note: For Oracle, SSLCAPath repurposes as the Oracle Wallet directory path (TNS_ADMIN) when TLS is set to "enable".
+- **Credentials** (Username, Password): Supplies driver connection credentials. Load production secrets from a deployment secret store or environment configuration; do not commit them.
+- **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls connection pool limits and lifetimes. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid. Tune these values for the database limits and application concurrency.
+- **TLS configuration** (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Requests driver-specific encrypted connections and certificate behavior. Support and semantics vary by driver; verify the negotiated connection and certificate validation in the target environment. For Oracle, `SSLCAPath` is used as the Oracle Wallet directory path (`TNS_ADMIN`) when TLS is set to `"enable"`.
 - **Migrations & Seeders** (Migration, Seeder, directories, QueryLogging): Automates database bootstrapping and gives developers direct visibility into query generation during development.

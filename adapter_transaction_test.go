@@ -3,6 +3,8 @@ package gorest
 import (
 	"context"
 	"database/sql"
+	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,5 +153,136 @@ func TestRawQuerySQLWithTxUsesTransaction(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("found %d rows after rollback, want 0", count)
+	}
+}
+
+func TestTransactionFinalizationIsRaceSafe(t *testing.T) {
+	dbSession := newSQLiteDBSession(t, time.Second)
+	txSession, _, _, err := dbSession.BeginTx()
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+
+	start := make(chan struct{})
+	statuses := make(chan int, 2)
+	var workers sync.WaitGroup
+	workers.Add(2)
+
+	go func() {
+		defer workers.Done()
+		<-start
+		_, status, _ := txSession.Commit()
+		statuses <- status
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		_, status, _ := txSession.Rollback()
+		statuses <- status
+	}()
+
+	close(start)
+	workers.Wait()
+	close(statuses)
+
+	var succeeded, rejected int
+	for status := range statuses {
+		switch status {
+		case http.StatusOK:
+			succeeded++
+		case http.StatusBadRequest:
+			rejected++
+		default:
+			t.Fatalf("transaction finalization returned HTTP %d, want 200 or 400", status)
+		}
+	}
+	if succeeded != 1 || rejected != 1 {
+		t.Fatalf("transaction finalization results: succeeded=%d rejected=%d, want one of each", succeeded, rejected)
+	}
+}
+
+func TestFinishedTransactionSessionDoesNotFallBackToPool(t *testing.T) {
+	dbSession := newSQLiteDBSession(t, time.Second)
+	if _, err := dbSession.database.SQL.Exec("CREATE TABLE finished_tx_test (value TEXT)"); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+
+	txSession, _, _, err := dbSession.BeginTx()
+	if err != nil {
+		t.Fatalf("begin transaction: %v", err)
+	}
+	if _, _, err := txSession.Commit(); err != nil {
+		t.Fatalf("commit transaction: %v", err)
+	}
+
+	if _, _, _, err := txSession.ExecSQL(context.Background(), "INSERT INTO finished_tx_test (value) VALUES (?)", "must-not-be-autocommitted"); err == nil {
+		t.Fatal("query through a finished transaction session unexpectedly succeeded")
+	}
+
+	var count int
+	if err := dbSession.database.SQL.QueryRow("SELECT count(*) FROM finished_tx_test").Scan(&count); err != nil {
+		t.Fatalf("count rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("finished transaction session wrote %d rows through the pool", count)
+	}
+}
+
+func TestTransactionLifecycleMethodsRejectMissingConfig(t *testing.T) {
+	for _, operation := range []struct {
+		name string
+		call func(*DBSession) (string, int, error)
+	}{
+		{name: "commit", call: (*DBSession).Commit},
+		{name: "rollback", call: (*DBSession).Rollback},
+	} {
+		t.Run(operation.name, func(t *testing.T) {
+			dbSession := newSQLiteDBSession(t, time.Second)
+			dbSession.config = nil
+			_, status, err := operation.call(dbSession)
+			if err == nil || status != http.StatusServiceUnavailable {
+				t.Fatalf("result = HTTP %d, error %v; want HTTP 503 and error", status, err)
+			}
+		})
+	}
+}
+
+func TestTableWithoutDatabaseReturnsORMError(t *testing.T) {
+	query := (&DBSession{}).Table("users").Find(&[]struct{}{})
+	if query.Error == nil || query.HTTPCode != http.StatusServiceUnavailable {
+		t.Fatalf("Table().Find() result = HTTP %d, error %v; want HTTP 503 and error", query.HTTPCode, query.Error)
+	}
+}
+
+func TestNilAppDatabaseReturnsUnavailableSession(t *testing.T) {
+	query := (*App)(nil).Database().Table("users").Find(&struct{}{})
+	if query.Error == nil || query.HTTPCode != http.StatusServiceUnavailable {
+		t.Fatalf("nil App Database().Table().Find() = HTTP %d, error %v; want HTTP 503 and error", query.HTTPCode, query.Error)
+	}
+}
+
+func TestLogWithoutConfiguredAppDoesNotTerminateProcess(t *testing.T) {
+	logger := (*App)(nil).Log(nil)
+	if logger == nil {
+		t.Fatal("Log() returned a nil logger")
+	}
+	logger.Info("safe no-op logger")
+}
+
+func TestRawMongoAndScyllaRejectNilCallbacks(t *testing.T) {
+	dbSession := &DBSession{
+		database: &database.Database{},
+		config:   &database.Config{Driver: database.MONGO},
+	}
+	if _, status, err := dbSession.RawQueryMongo(context.Background(), nil); err == nil || status != http.StatusBadRequest {
+		t.Fatalf("RawQueryMongo(nil) = HTTP %d, error %v; want HTTP 400 and error", status, err)
+	}
+
+	scyllaSession := &DBSession{
+		database: &database.Database{},
+		config:   &database.Config{Driver: database.SCYLLA},
+	}
+	if _, status, err := scyllaSession.RawQueryScylla(context.Background(), nil); err == nil || status != http.StatusBadRequest {
+		t.Fatalf("RawQueryScylla(nil) = HTTP %d, error %v; want HTTP 400 and error", status, err)
 	}
 }

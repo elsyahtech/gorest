@@ -27,6 +27,7 @@ func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, a
 				"and the application must use one of the following databases: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -36,6 +37,7 @@ func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, a
 		message, code, err := setError(
 			"Ensure your application runs using one of the following databases: ORACLE, SQLSERVER, MYSQL, POSTGRES, or SQLITE.",
 			fmt.Errorf("sql database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -97,6 +99,7 @@ func (db *Database) QuerySQL(ctx context.Context, config *Config, query string, 
 				"and the application must use one of the following databases: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES or SQLITE.",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -106,6 +109,7 @@ func (db *Database) QuerySQL(ctx context.Context, config *Config, query string, 
 		message, code, err := setError(
 			"Ensure your application runs using one of the following databases: ORACLE, SQLSERVER, MYSQL, POSTGRES, or SQLITE.",
 			fmt.Errorf("sql database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -171,6 +175,7 @@ func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...
 				"and the application must use one of the following databases: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES or SQLITE.",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -190,6 +195,7 @@ func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...
 		message, code, err := setError(
 			"Ensure your application runs using one of the following databases: ORACLE, SQLSERVER, MYSQL, POSTGRES, or SQLITE.",
 			fmt.Errorf("sql database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -237,6 +243,7 @@ func (db *Database) Collection(config *Config, collectionName string) (*mongo.Co
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running MONGO",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -246,6 +253,7 @@ func (db *Database) Collection(config *Config, collectionName string) (*mongo.Co
 		message, code, err := setError(
 			"Ensure that your application running use the MONGO",
 			fmt.Errorf("mongo database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -278,6 +286,7 @@ func (db *Database) CreateCollection(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running MONGO",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err
@@ -287,6 +296,7 @@ func (db *Database) CreateCollection(
 		message, code, err := setError(
 			"Ensure that your application running use the MONGO",
 			fmt.Errorf("mongo database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err
@@ -337,6 +347,7 @@ func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, a
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err
@@ -346,6 +357,7 @@ func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, a
 		message, code, err := setError(
 			"Ensure that your application running use the SCYLLA",
 			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err
@@ -386,11 +398,12 @@ func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, a
 }
 
 func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, args ...any) (*gocql.Iter, string, int, error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -400,6 +413,7 @@ func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, 
 		message, code, err := setError(
 			"Ensure that your application running use the SCYLLA",
 			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return nil, message, code, err
@@ -434,6 +448,7 @@ func (db *Database) MapScanCAS(ctx context.Context, config *Config, query string
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return false, message, code, err
@@ -443,6 +458,7 @@ func (db *Database) MapScanCAS(ctx context.Context, config *Config, query string
 		message, code, err := setError(
 			"Ensure that your application running use the SCYLLA",
 			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return false, message, code, err
@@ -486,11 +502,12 @@ func (db *Database) MapScanCAS(ctx context.Context, config *Config, query string
 }
 
 func (db *Database) ExecBatchCQL(ctx context.Context, config *Config, queries []string, batchArgs [][]any) (string, int, error) {
-	if db == nil {
+	if db == nil || config == nil {
 		message, code, err := setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err
@@ -500,6 +517,7 @@ func (db *Database) ExecBatchCQL(ctx context.Context, config *Config, queries []
 		message, code, err := setError(
 			"Ensure that your application running use the SCYLLA",
 			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err
@@ -563,6 +581,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 				"The application must use one of the following databases: "+
 				"MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA",
 			errors.New("database service is not running"),
+			http.StatusServiceUnavailable,
 		)
 
 		return message, code, err

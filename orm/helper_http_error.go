@@ -25,7 +25,9 @@ func withHTTPCode(err error, code int, driver ...string) error {
 	var coded interface{ HTTPStatusCode() int }
 
 	if errors.As(err, &coded) {
-		return err
+		if coded.HTTPStatusCode() == code {
+			return err
+		}
 	}
 
 	return &httpCodeError{code: code, err: err}

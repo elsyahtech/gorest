@@ -66,6 +66,8 @@ ScyllaDB does not provide a general transaction spanning arbitrary operations. I
 
 Use `QuerySQL()` for result sets and `ExecSQL()` for statements that do not return rows. These methods return the driver result or rows plus a troubleshooting message, HTTP status code, and error.
 
+Native adapters return HTTP 503 when the requested database service is not initialized, and HTTP 400 for invalid adapter inputs such as a nil context or empty query. SQL `ExecSQL()` maps a recognized duplicate-key violation to HTTP 409. Other driver errors retain the native adapter's general troubleshooting message and HTTP 500 unless that adapter recognizes a more specific condition. The ORM has a separate driver-aware error classifier for ORM operations; its error contract and reference links are documented in the [ORM error contract](orm.md#shared-database-error-contract). When using native APIs, inspect and classify driver errors at the call site before choosing a public response. In either path, `httpCode` is a suggested response status, not a complete application authorization or error-exposure policy.
+
 ### SQL safety boundary
 
 Native SQL is an intentional flexibility feature, not evidence of a SQL injection in Gorest. `QuerySQL()` and `ExecSQL()` pass query text and arguments to the configured database driver; they do not make arbitrary SQL text assembled by the application safe. The application remains responsible for how it constructs that text.

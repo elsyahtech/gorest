@@ -17,8 +17,8 @@ Read the full logger technical breakdown: [Logger Technical Guide](./guide/logge
 
 ## 2. Server & Router Guide
 
-* **Overview:** Built on top of the lightning-fast Fiber HTTP engine, Gorest provides an intuitive, robust routing and middleware ecosystem.
-* **Key Benefits:** Blazing-fast request context handling, clean modular route grouping, built-in security middlewares (OAuth, CORS, Recovery), and seamless ecosystem integration.
+* **Overview:** Built on Fiber, GOREST provides HTTP routing, middleware configuration, and server lifecycle integration.
+* **Key Benefits:** Fast request handling, clean modular route grouping, and configurable HTTP middleware for CORS, panic recovery, request IDs, response compression, security headers, and rate limiting. These are infrastructure controls; applications still define authentication, authorization, and endpoint-specific access rules.
 * **Sample Output Preview:**
 
 <img src="./bootable-screen.png" alt="Bootable Preview" width="600">
@@ -28,7 +28,7 @@ Read the full Server & Router technical breakdown: [Router Technical Guide](./gu
 ---
 
 ## 3. Database, ORM & Querying Guide
-* **Overview:** The crown jewel of Gorest. A multi-driver data persistence layer featuring auto-migrations, smart seed protection, and a custom reflection-powered ORM.
+* **Overview:** A multi-driver data persistence layer with driver-specific migration and seeder workflows, execution history, and a reflection-powered ORM.
 * **Key Benefits:** Supports 7 database drivers (MySQL, PostgreSQL, SQL Server, Oracle, SQLite, MongoDB, ScyllaDB) with ORM features such as custom `gorest` tags and `Preload()`, plus native query APIs. The best fit depends on the operation; the Querying Guide compares their tradeoffs and explains when each may be appropriate.
 * **Sample Output Preview:**
 
@@ -61,10 +61,7 @@ If a migration or seeder returns an error, Gorest logs the failure and aborts ap
 
 When `app.Start()` receives `SIGINT` or `SIGTERM`, GOREST initiates graceful Fiber shutdown and waits for active requests to finish before closing Redis, database, and logger resources. The graceful wait is bounded by 30 seconds; if it expires, shutdown reports an error and proceeds with closing the remaining services. Calling `app.Close()` directly follows the same server-before-dependencies order. Applications do not need to reach into GOREST's server or service instances to perform this shutdown sequence.
 
-> 🛡️ **Smart Engine Protection (No Overwrite Worries):**
-> You don't need to worry about accidentally wiping your production or development data if you leave migration or seeder flags enabled (`true`) by accident:
-> * **For Migrations:** Gorest is smart enough to check table existence. If a table does not exist, it will automatically generate it. If the table already exists, Gorest safely ignores it.
-> * **For Seeders:** Similarly, if a table has already been seeded previously, Gorest will automatically ignore subsequent seeding attempts even if the seeder flag remains active. Your existing data is 100% safe from being overwritten!
+> **Migration and seeder execution history:** When enabled, GOREST skips files whose filenames are already recorded in the corresponding history store. It does not infer that a migration is safe to skip because a target table or collection exists, and it does not compare file contents. History tracking is not a guarantee against data loss or partial execution: a script may change data before failing, and rollback/atomicity behavior depends on the driver and script. Review migration and seeder files, test them against an isolated staging database, and take appropriate backups before enabling them in a production deployment.
 
 ---
 

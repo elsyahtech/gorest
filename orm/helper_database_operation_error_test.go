@@ -101,3 +101,10 @@ func TestMissingSchemaColumnUsesInternalServerErrorClassification(t *testing.T) 
 		t.Fatalf("unexpected troubleshooting message: %q", orm.Message)
 	}
 }
+
+func TestORMOperationWithoutDatabaseReturnsServiceUnavailable(t *testing.T) {
+	query := (&ORM{}).Create(&struct{}{})
+	if query.Error == nil || query.HTTPCode != http.StatusServiceUnavailable {
+		t.Fatalf("Create() without database = HTTP %d, error %v; want HTTP 503 and error", query.HTTPCode, query.Error)
+	}
+}
