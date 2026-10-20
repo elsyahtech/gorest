@@ -21,7 +21,7 @@ func TestMongoServerVersion(t *testing.T) {
 	defer cancel()
 
 	var version string
-	err := app.Database().RawQueryMongo(ctx, func(ctx context.Context, client *mongo.Client) error {
+	_, _, err := app.Database().RawQueryMongo(ctx, func(ctx context.Context, client *mongo.Client) error {
 		var result struct {
 			Version string `bson:"version"`
 		}
@@ -142,7 +142,7 @@ func TestMongoCanceledContextIsPropagated(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := app.Database().RawQueryMongo(ctx, func(ctx context.Context, client *mongo.Client) error {
+	_, _, err := app.Database().RawQueryMongo(ctx, func(ctx context.Context, client *mongo.Client) error {
 		return client.Ping(ctx, nil)
 	})
 	if err == nil {

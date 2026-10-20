@@ -72,7 +72,8 @@ described by its recorded environment and scenarios.
 
 The configured driver packages use the `integration` build tag. They connect
 to real services and create uniquely named temporary tables or collections.
-The SQL driver packages share common CRUD/bound-value, transaction rollback,
+The SQL driver packages share common CRUD/bound-value, restricted-`Where()`
+grammar rejection, transaction rollback,
 pagination/grouping, and extended-coverage helpers where those scenarios are
 implemented for that driver. MongoDB and ScyllaDB use separate NoSQL scenarios.
 
@@ -117,7 +118,12 @@ server. NoSQL `BeginTx`/`Commit`/`Rollback` behavior is not evidence of SQL-like
 transaction atomicity.
 
 The managed HTTP scenarios demonstrate parameter binding for the specific
-search value used by the test. They do not prove that arbitrary dynamic table,
+search value used by the test. The configured ORM driver suites also exercise
+special characters (`'`, `?`, `--`, and `/* ... */`) as bound values and
+verify that `Where()` rejects SQL literals/comments in the condition text with
+HTTP 400 across all seven drivers. The rejection assertion runs at the ORM
+validation boundary; it does not send the invalid condition to the database.
+These checks do not prove that arbitrary dynamic table,
 column, sort, or clause expressions are safe, and they do not test application
 authorization, secret management, or a full TLS configuration matrix. The
 concurrent HTTP check is bounded to 12 simultaneous requests per operation;
