@@ -354,16 +354,23 @@ type QueryBuilderMongo func(ctx context.Context, client *mongo.Client) error
 // RawQueryMongo runs fn with the underlying *mongo.Client, as an escape hatch when the handler
 // needs direct raw MongoDB operations.
 // Prefer the built-in helpers (MongoCollection, DecodeMongoCursor, etc.) when possible.
-func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) error {
-	if dbSession == nil || dbSession.database == nil {
-		return errors.New("database service is not running")
+func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) (string, int, error) {
+	if dbSession == nil || dbSession.config == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
+				"and the application must be running MONGO",
+			http.StatusNotImplemented, errors.New("database service is not running")
+	}
+
+	if dbSession.database.Mongo == nil {
+		return "Ensure that your application running use the MONGO",
+			http.StatusNotImplemented, fmt.Errorf("mongo database is not running. Your application is currently running on %s", dbSession.config.Driver)
 	}
 
 	if err := fn(ctx, dbSession.database.Mongo); err != nil {
-		return fmt.Errorf("%w", err)
+		return "", http.StatusInternalServerError, fmt.Errorf("%w", err)
 	}
 
-	return nil
+	return "", http.StatusOK, nil
 }
 
 // QueryBuilderScylla is a function that receives the ScyllaDB session and runs queries on it directly,
@@ -374,16 +381,24 @@ type QueryBuilderScylla func(ctx context.Context, session *gocql.Session) error
 // RawQueryScylla runs fn with the underlying *gocql.Session, as an escape hatch for cases
 // where the built-in helpers are not enough.
 // Prefer ExecCQL, QueryCQL, and ScanCQL when possible.
-func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) error {
-	if dbSession == nil || dbSession.database == nil {
-		return errors.New("database service is not running")
+func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) (string, int, error) {
+	if dbSession == nil || dbSession.config == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
+				"and the application must be running SCYLLA",
+			http.StatusNotImplemented, errors.New("database service is not running")
+	}
+
+	if dbSession.database.Scylla == nil {
+		return "Ensure that your application running use the SCYLLA",
+			http.StatusNotImplemented, fmt.Errorf("scylla database is not running. Your application is currently running on %s", dbSession.config.Driver)
 	}
 
 	if err := fn(ctx, dbSession.database.Scylla); err != nil {
-		return fmt.Errorf("%w", err)
+		return "Ensure that your application running use the SCYLLA",
+			http.StatusInternalServerError, fmt.Errorf("scylla database is not running. Your application is currently running on %s", dbSession.config.Driver)
 	}
 
-	return nil
+	return "", http.StatusOK, nil
 }
 
 // BeginTx starts a SQL transaction and returns a new DBSession bound to it.

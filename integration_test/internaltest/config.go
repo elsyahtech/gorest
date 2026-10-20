@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -266,6 +267,72 @@ func SQLTransactionRollback(t *testing.T, driver string) {
 	}
 	if query.HTTPCode != 404 {
 		t.Fatalf("Find() after rollback returned HTTP %d, want 404 Not Found: %v", query.HTTPCode, query.Error)
+	}
+}
+
+func SQLParallelTransactions(t *testing.T, driver string) {
+	t.Helper()
+	app := OpenApp(t, driver)
+	table := uniqueIdentifier(t, "g_ptx_")
+	createSQLTable(t, app, driver, table,
+		"id "+sqlIntegerType(driver)+" NOT NULL PRIMARY KEY, name "+sqlTextType(driver)+" NOT NULL, score "+sqlIntegerType(driver)+" NOT NULL")
+
+	const transactionCount = 8
+	baseID := time.Now().UnixNano()
+	db := app.Database()
+	start := make(chan struct{})
+	errs := make(chan error, transactionCount)
+	var workers sync.WaitGroup
+	workers.Add(transactionCount)
+	for i := 0; i < transactionCount; i++ {
+		i := i
+		go func() {
+			defer workers.Done()
+			<-start
+
+			tx, message, code, err := db.BeginTx()
+			if err != nil {
+				errs <- fmt.Errorf("begin transaction %d (HTTP %d, %s): %w", i, code, message, err)
+				return
+			}
+			record := sqlRecord{ID: baseID + int64(i), Name: fmt.Sprintf("parallel-tx-%02d", i), Score: int64(i)}
+			if query := tx.Table(table).Create(&record); query.Error != nil {
+				_, _, rollbackErr := tx.Rollback()
+				if rollbackErr != nil {
+					errs <- fmt.Errorf("create transaction %d failed: %v; rollback failed: %w", i, query.Error, rollbackErr)
+					return
+				}
+				errs <- fmt.Errorf("create transaction %d (HTTP %d, %s): %w", i, query.HTTPCode, query.Message, query.Error)
+				return
+			}
+			if message, code, err := tx.Commit(); err != nil {
+				errs <- fmt.Errorf("commit transaction %d (HTTP %d, %s): %w", i, code, message, err)
+				return
+			}
+			errs <- nil
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	var committed []sqlRecord
+	query := db.Table(table).Find(&committed)
+	RequireNoORMError(t, query)
+	if len(committed) != transactionCount {
+		t.Fatalf("parallel transactions committed %d rows, want %d: %#v", len(committed), transactionCount, committed)
+	}
+	for _, record := range committed {
+		workerID := record.ID - baseID
+		if workerID < 0 || workerID >= transactionCount ||
+			record.Name != fmt.Sprintf("parallel-tx-%02d", workerID) || record.Score != workerID {
+			t.Errorf("unexpected row from parallel transaction: %#v", record)
+		}
 	}
 }
 

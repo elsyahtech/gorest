@@ -186,16 +186,6 @@ func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...
 		return nil, message, code, err
 	}
 
-	if config == nil {
-		message, code, err := setError(
-			"Ensure the database configuration is available.",
-			errors.New("database configuration is not running"),
-			http.StatusBadRequest,
-		)
-
-		return nil, message, code, err
-	}
-
 	if db.SQL == nil {
 		message, code, err := setError(
 			"Ensure your application runs using one of the following databases: ORACLE, SQLSERVER, MYSQL, POSTGRES, or SQLITE.",

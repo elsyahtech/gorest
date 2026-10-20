@@ -17,6 +17,10 @@ func TestORMTransactionRollback(t *testing.T) {
 	internaltest.SQLTransactionRollback(t, database.SQLITE)
 }
 
+func TestORMParallelTransactions(t *testing.T) {
+	internaltest.SQLParallelTransactions(t, database.SQLITE)
+}
+
 func TestORMPaginationAndGrouping(t *testing.T) {
 	internaltest.SQLPaginationAndGrouping(t, database.SQLITE)
 }
