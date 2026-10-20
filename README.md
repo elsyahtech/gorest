@@ -360,6 +360,3 @@ If you need help, have questions, or want to report an issue, you can reach out 
 
 ### Contributing
 Contributions are always welcome! If you'd like to contribute to GOREST, please check out our [Contribution Guidelines](./CONTRIBUTING.md) to get started.
-
-# Partner
-Hello elmansyah, thanks a lot. See you on top.
