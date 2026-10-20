@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -167,12 +168,13 @@ func SQLCRUD(t *testing.T, driver string) {
 
 	var loaded sqlRecord
 	query := app.Database().Table(table).
-		Where("id = ? AND name <> '?' /* ? */ -- ?\n", id).
+		Where("id = ? AND name = ?", id, name).
 		Find(&loaded)
 	RequireNoORMError(t, query)
 	if loaded.ID != id || loaded.Name != name || loaded.Score != 10 {
 		t.Fatalf("Find() returned %#v, want ID=%d Name=%q Score=10", loaded, id, name)
 	}
+	RequireWhereGrammarRejected(t, app.Database().Table(table).Where("id = ? AND name <> '?' /* ? */ -- ?\n", id))
 
 	upserted := sqlRecord{ID: id, Name: "upserted", Score: 15}
 	RequireNoORMError(t, app.Database().Table(table).Upsert("id").Create(&upserted))
@@ -413,7 +415,7 @@ func NoSQLCRUD(t *testing.T, driver string) {
 		}
 	})
 
-	record := documentRecord{ID: id, Name: "quote' ; -- payload", Score: 10}
+	record := documentRecord{ID: id, Name: "quote' ? /* marker */ ; -- payload", Score: 10}
 	RequireNoORMError(t, app.Database().Table(collection).Create(&record))
 
 	var loaded documentRecord
@@ -423,6 +425,7 @@ func NoSQLCRUD(t *testing.T, driver string) {
 	if loaded.ID != id || loaded.Name != record.Name || loaded.Score != 10 {
 		t.Fatalf("Find() returned %#v, want inserted document", loaded)
 	}
+	RequireWhereGrammarRejected(t, app.Database().Table(collection).Where("name <> '?' /* ? */ -- ?\n"))
 
 	upserted := documentRecord{ID: id, Name: "upserted", Score: 15}
 	RequireNoORMError(t, app.Database().Table(collection).Upsert("_id").Create(&upserted))
@@ -478,14 +481,18 @@ func ScyllaCRUD(t *testing.T) {
 		}
 	})
 
-	record := scyllaRecord{ID: id, Name: "integration", Score: 10}
+	record := scyllaRecord{ID: id, Name: "quote' ? /* marker */ ; -- payload", Score: 10}
 	RequireNoORMError(t, app.Database().Table(table).Create(&record))
 
 	var loaded scyllaRecord
-	RequireNoORMError(t, app.Database().Table(table).Where("id = ?", id).Find(&loaded))
+	RequireNoORMError(t, app.Database().Table(table).
+		Where("name = ?", record.Name).
+		AllowFiltering().
+		Find(&loaded))
 	if loaded.ID != id || loaded.Name != record.Name || loaded.Score != record.Score {
 		t.Fatalf("Find() returned %#v, want inserted Scylla row", loaded)
 	}
+	RequireWhereGrammarRejected(t, app.Database().Table(table).Where("name <> '?' /* ? */ -- ?\n"))
 
 	record.Name = "updated"
 	record.Score = 20
@@ -502,6 +509,13 @@ func ScyllaCRUD(t *testing.T) {
 	deleteQuery := app.Database().Table(table).Where("id = ?", id).Find(&deleted)
 	if deleteQuery.Error == nil || deleteQuery.HTTPCode != 404 {
 		t.Fatalf("Find() after Delete() returned HTTP %d, want 404 Not Found: %v", deleteQuery.HTTPCode, deleteQuery.Error)
+	}
+}
+
+func RequireWhereGrammarRejected(t *testing.T, query *orm.ORM) {
+	t.Helper()
+	if query.Error == nil || query.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("Where() accepted unsupported literal/comment syntax: error=%v HTTP=%d", query.Error, query.HTTPCode)
 	}
 }
 

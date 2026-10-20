@@ -36,6 +36,33 @@ Go gives developers a simple language, strong performance, and the freedom to ch
 
 GOREST provides an opinionated foundation for these recurring concerns, helping teams reduce repetitive infrastructure work and keep applications consistent as they grow.
 
+GOREST provides ORM and native database APIs for seven drivers. Its unit and
+integration tests cover database operations, parameter binding, HTTP CRUD, and
+selected concurrency scenarios. The [ORM guide](docs/guide/orm.md),
+[querying guide](docs/guide/querying.md), and
+[integration test guide](integration_test/README.md) explain the tested
+scenarios, driver-specific limitations, and how to run the checks.
+Transaction, connection, migration, and query behavior varies by database
+engine; check the [driver feature matrix](docs/guide/orm.md#7-driver-feature-matrix)
+and run the [integration tests](integration_test/README.md) for the database
+and version you plan to use.
+For a quick evaluation, run the [automated integration suite](integration_test/README.md) or the [manual CRUD sample](docs/guide/orm-tutorial.md#2-run-one-manual-crud-flow) against your database.
+
+**Security:** GOREST configures HTTP middleware for CORS, panic recovery,
+request IDs, compression, security headers, and rate limiting. These are
+building blocks, not a complete security policy or an independent security
+audit. Applications must define caller authentication and resource-level
+authorization. Teams must also review middleware settings and configure
+transport security, trusted network boundaries, and secrets for their
+deployment. Database and Redis TLS support varies by driver and must be
+verified in the target environment. See the
+[server configuration guide](docs/configuration.md#2-http-server-configuration-serverrun).
+
+**Production readiness:** The tests provide evidence only for their documented
+scenarios; they do not certify an application or deployment as production
+ready. Validate your own schema, handlers, authorization rules, workload,
+failure behavior, and deployment configuration with representative tests.
+
 ### What GOREST Provides
 
 - **Consistent Application Structure** — Establishes predictable conventions that make projects easier to navigate, maintain, and hand over between developers.

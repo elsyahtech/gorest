@@ -19,7 +19,7 @@ func TestScyllaServerVersion(t *testing.T) {
 	defer cancel()
 
 	var version string
-	err := app.Database().RawQueryScylla(ctx, func(ctx context.Context, session *gocql.Session) error {
+	_, _, err := app.Database().RawQueryScylla(ctx, func(ctx context.Context, session *gocql.Session) error {
 		return session.Query("SELECT release_version FROM system.local").WithContext(ctx).Scan(&version)
 	})
 	if err != nil {
@@ -90,7 +90,7 @@ func TestScyllaCanceledContextIsPropagated(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := app.Database().RawQueryScylla(ctx, func(ctx context.Context, session *gocql.Session) error {
+	_, _, err := app.Database().RawQueryScylla(ctx, func(ctx context.Context, session *gocql.Session) error {
 		var version string
 		return session.Query("SELECT release_version FROM system.local").WithContext(ctx).Scan(&version)
 	})

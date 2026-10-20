@@ -3,7 +3,6 @@ package orm
 import (
 	"errors"
 	"fmt"
-	golog "log"
 	"net/http"
 
 	"github.com/elsyahtech/gorest/database"
@@ -19,11 +18,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 			"To use ORM, the application must use one of the following databases: " +
 			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
 
-		golog.Fatalf("Database is not running. Message: %s", message)
-
-		orm.Message = message
-		orm.HTTPCode = http.StatusNotImplemented
-		orm.Error = fmt.Errorf("%s: database is not running", opName)
+		orm.setError(message, fmt.Errorf("%s: database service is not initialized", opName), http.StatusServiceUnavailable)
 
 		return orm
 	}
@@ -46,7 +41,11 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	case database.SCYLLA:
 		orm.Error = scyllaFn(data)
 	default:
-		orm.Error = fmt.Errorf("unsupported database driver: %s", driver)
+		orm.setError(
+			"Use one of the supported database drivers: ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO, or SCYLLA.",
+			fmt.Errorf("%s: unsupported database driver %q", opName, driver),
+			http.StatusNotImplemented,
+		)
 	}
 
 	if orm.Error != nil {

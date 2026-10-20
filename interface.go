@@ -3,6 +3,7 @@ package gorest
 import (
 	"context"
 	"database/sql"
+	"sync/atomic"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/log"
@@ -33,6 +34,7 @@ type DBSession struct {
 	config   *database.Config
 	Tx       *sql.Tx
 	txCancel context.CancelFunc
+	txDone   atomic.Bool
 }
 
 type RedisSession struct {
