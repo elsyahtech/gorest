@@ -211,8 +211,8 @@ app.Use(database.Run(database.Config{
     // Migrations & Seeders Automation
     MigrationDirectory: "migrations", // Relative to DatabaseDirectory; driver subdirectory is appended
     SeederDirectory:    "seeders",    // Relative to DatabaseDirectory; driver subdirectory is appended
-    Migration:          true,         // Auto-run migrations on startup (Dev: true, Prod: false recommended)
-    Seeder:             true,         // Auto-run seeders on startup (Dev: true, Prod: false recommended)
+    Migration:          true,         // Auto-run migrations on startup (Prod: run once in a deployment job)
+    Seeder:             true,         // Auto-run seeders on startup (Prod: run once in a deployment job)
     QueryLogging:        false,        // Enable query execution logging/debugging (Slow, dev-only)
 }))
 ```

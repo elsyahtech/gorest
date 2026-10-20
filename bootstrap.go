@@ -60,6 +60,19 @@ func (app *App) runMigration() error {
 	return runMigrationStartup(migration, seeder)
 }
 
+// RunDatabaseStartupTasks synchronously runs the configured migrations and
+// seeders without starting the HTTP server. It is intended for a single
+// deployment job that runs before application replicas are started.
+func (app *App) RunDatabaseStartupTasks() error {
+	if app == nil {
+		return errors.New("run database startup tasks: app is nil")
+	}
+	if app.config.database == nil || app.database == nil {
+		return errors.New("run database startup tasks: database is not initialized; register an enabled database config with app.Use")
+	}
+	return app.runMigration()
+}
+
 func runMigrationStartup(migration, seeder func() error) error {
 	if migration != nil {
 		if err := migration(); err != nil {
