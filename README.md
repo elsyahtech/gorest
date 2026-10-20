@@ -186,6 +186,8 @@ The specific components used depend on the module you need.
 - **Database Seeders** — Supports inserting initial or development data through application-managed seeders.
 - **Driver-Specific Migrations** — Accommodates the capabilities and requirements of individual database drivers.
 
+For production, run migrations and seeders once through a dedicated deployment job before starting application replicas; see the [migration and seeder guide](docs/guide.md#4-database-migration--seeder) for execution, coordination, and recovery details.
+
 ### 4. Data Access & ORM
 
 - **Native SQL** — Allows direct SQL execution and database-specific query behavior.
@@ -384,7 +386,7 @@ Read the full configuration breakdown: [Configuration Documentation](./docs/conf
 Read the full guide: [Guide Documentation](./docs/guide.md)
 
 # 🔧 Troubleshoot
-Read the full troubleshoot guide: [Troubleshoot Documentation](./docs/guide.md)
+For common symptoms, error categories, diagnostic steps, and driver-specific references, see the [Troubleshooting Guide](./docs/troubleshoot.md).
 
 # 🎧 Support
 

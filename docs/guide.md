@@ -53,6 +53,21 @@ app.Use(database.Run(dbConfig))
 
 `database.Run(...)` normalizes and returns the database config; it does not connect to the database by itself. `app.Use(...)` receives that normalized config and initializes the connection. If you pass a partial `database.Config` directly to `app.Use(...)`, defaults are not applied. In particular, set `Enabled: true` for a partial config literal, or start from `database.ConfigDefault` as shown above.
 
+For a dedicated deployment job that runs configured migrations and seeders without starting HTTP, call `app.RunDatabaseStartupTasks()` after `app.Use(...)`, then close the app. Run this job once before starting or updating application replicas. Keep `Migration` and `Seeder` disabled in the replicas themselves.
+
+```go
+app := gorest.New(gorest.Config{AppName: "database setup"})
+app.Use(database.Run(dbConfig))
+
+if err := app.RunDatabaseStartupTasks(); err != nil {
+	_, _, _ = app.Close()
+	log.Fatal(err)
+}
+if message, _, err := app.Close(); err != nil {
+	log.Fatalf("cleanup failed: %s: %v", message, err)
+}
+```
+
 ### Startup behavior when migration or seeding fails
 
 When enabled, Gorest runs database startup tasks synchronously before starting the HTTP server. Migration runs before seeding when both are enabled. The `Migration` and `Seeder` flags are independent, so seeding can be enabled without running migrations.
@@ -61,7 +76,9 @@ If a migration or seeder returns an error, Gorest logs the failure and aborts ap
 
 When `app.Start()` receives `SIGINT` or `SIGTERM`, GOREST initiates graceful Fiber shutdown and waits for active requests to finish before closing Redis, database, and logger resources. The graceful wait is bounded by 30 seconds; if it expires, shutdown reports an error and proceeds with closing the remaining services. Calling `app.Close()` directly follows the same server-before-dependencies order. Applications do not need to reach into GOREST's server or service instances to perform this shutdown sequence.
 
-> **Migration and seeder execution history:** When enabled, GOREST skips files whose filenames are already recorded in the corresponding history store. It does not infer that a migration is safe to skip because a target table or collection exists, and it does not compare file contents. History tracking is not a guarantee against data loss or partial execution: a script may change data before failing, and rollback/atomicity behavior depends on the driver and script. Review migration and seeder files, test them against an isolated staging database, and take appropriate backups before enabling them in a production deployment.
+> **Migration and seeder coordination:** GOREST uses a database-backed `gorest_migration_lock` record to prevent two current-version GOREST startup runners from executing migrations or seeders concurrently. The lock is intentionally not time-limited. A failed run or unclean shutdown leaves the lock in place, and the `gorest_migration_state` store records each file's content hash and `running`/`applied` status. GOREST blocks a retry when it finds a failed or unfinished state. For recovery, stop all runners, inspect the affected schema/data, the `gorest_migration_state` entry (`migration:<filename>` or `seeder:<filename>`), and the existing execution history. Reconcile the state based on what actually completed, then manually remove the `database_startup` lock record using the database's native tools. Do not delete state or lock records before inspecting the database. Older GOREST versions do not use this lock and must not run migrations at the same time.
+>
+> **Migration and seeder history:** The existing history store records filenames; GOREST does not infer that a file is safe to skip because a table or collection exists. Applied files are immutable: add a new file instead of editing one. For files recorded by older GOREST versions, the first upgraded run backfills a hash from the file currently present; edits made before that upgrade cannot be detected. The lock and state records prevent concurrent execution and automatic retry after a failure, but do not make schema changes atomic. A script may have changed the database before failing, and rollback behavior depends on the driver and script. Test against an isolated staging database, take appropriate backups, and use backward-compatible expand-and-contract changes when application versions overlap during deployment.
 
 ---
 

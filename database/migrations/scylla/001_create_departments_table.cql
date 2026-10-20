@@ -6,5 +6,7 @@ CREATE TABLE IF NOT EXISTS departments (
     created_at timestamp,
     updated_at timestamp,
     deleted_at timestamp,
-    PRIMARY KEY ((name), created_at, id)
-) WITH CLUSTERING ORDER BY (created_at DESC, id ASC);
+    PRIMARY KEY (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_departments_name ON departments (name);
