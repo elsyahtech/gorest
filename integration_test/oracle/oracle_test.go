@@ -47,6 +47,10 @@ func TestORMTransactionRollback(t *testing.T) {
 	internaltest.SQLTransactionRollback(t, database.ORACLE)
 }
 
+func TestORMParallelTransactions(t *testing.T) {
+	internaltest.SQLParallelTransactions(t, database.ORACLE)
+}
+
 func TestORMPaginationAndGrouping(t *testing.T) {
 	internaltest.SQLPaginationAndGrouping(t, database.ORACLE)
 }

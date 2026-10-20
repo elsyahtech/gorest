@@ -29,7 +29,7 @@ func New(ctx context.Context, config *Config, timezone string) (*Database, strin
 	if database == nil {
 		message := "ensure the database configuration is set up correctly and " +
 			"the application must use one of the following databases: " +
-			"MySQL, PostgreSQL, SQL Server, SQLite, MongoDB, and Scylla. " +
+			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO, SCYLLA. " +
 			"Gorest does not currently support any database types other than these."
 
 		return nil, message, errors.New("gorest error configuring database")
