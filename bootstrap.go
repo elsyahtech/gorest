@@ -132,7 +132,7 @@ func (app *App) startServer() {
 			app.config.AppName,
 			app.config.Version,
 			app.config.Timezone,
-			ConfigDefault.Environment,
+			app.config.Environment,
 			modulesRunning,
 			app.services.routers,
 		)
