@@ -258,7 +258,7 @@ GOREST initializes the logger and HTTP server with their default configurations.
 ### Looking for a Complete Application Using Gorest?
 The minimal setup above is all you need to get GOREST running. If you want to explore a more complete application with practical implementation examples, check out the official starter project:
 
-👉 **[Golang REST API Starter](https://github.com/elsyahtech/golang-rest-api-starter)**
+👉 **[GOREST API Starter](https://github.com/elsyahtech/gorest-api-starter)**
 
 The starter provides practical examples of CRUD operations, database transactions, migrations, and native database queries to help you understand how to build an application with GOREST.
 
