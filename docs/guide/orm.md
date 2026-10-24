@@ -596,12 +596,12 @@ if query.Error != nil {
 }
 ```
 
-The word “upsert” does not mean that every driver updates the same fields. By default, SQL updates the inserted columns except the conflict columns and primary key. MongoDB updates document fields other than the conflict key and `_id`. ScyllaDB's regular `INSERT` writes the supplied columns for the full primary key. In all cases, fields included in the payload are values: an empty string, `false`, or `0` can replace an existing value.
+The word “upsert” does not mean that every driver updates the same fields. By default, SQL updates the inserted columns except the conflict columns and primary key. MongoDB updates document fields other than the conflict key, fields tagged `primary_key`, and `_id`; those key fields are set only when a new document is inserted. ScyllaDB's regular `INSERT` writes the supplied columns for the full primary key. In all cases, fields included in the payload are values: an empty string, `false`, or `0` can replace an existing value.
 
 | Scenario | Behavior to expect |
 |---|---|
 | No conflict on the target | A new record/document is inserted. |
-| Conflict on the target | The existing record is updated using the driver-specific update-column rules above. The primary key is not updated by SQL's default update set; MongoDB's separate custom `id` field can be updated if it is not the conflict key. |
+| Conflict on the target | The existing record is updated using the driver-specific update-column rules above. The primary key is not updated by SQL's default update set or by MongoDB upsert; MongoDB's separate custom primary-key fields are insert-only too. |
 | Conflict target is not a tagged model field or is omitted from the insert | SQL/MongoDB validate that the target is a tagged field included in the write; ScyllaDB requires the full primary key. A zero-valued SQL primary key is omitted from the insert, so it cannot serve as the conflict column in that call. A missing Scylla primary-key value may instead be rejected by CQL. |
 | Non-primary-key conflict value is empty | ORM does not universally reject it. Add `required` if the value must be non-empty, and retain the database's unique/not-null constraints. A zero-valued SQL primary key is a separate case: it is omitted from the insert. |
 | A different unique key conflicts | Behavior depends on the driver; see the notes below. |
@@ -611,7 +611,7 @@ For example, suppose the database has `ID=user-123`, `Email=admin@example.com`, 
 | Driver path | Existing record | Incoming payload | Result on email conflict |
 |---|---|---|---|
 | SQL default update set | `ID=user-123`, `Email=admin@example.com`, `Password=old-hash`, `IsActive=true` | `ID=user-999`, same email, `Password=""`, `IsActive=false`, `DepartmentID=dept-02` | SQL keeps `ID=user-123`; included non-key fields such as `Password`, `IsActive`, and `DepartmentID` are updated from the payload. |
-| MongoDB default update set with a custom `id` field | `_id=mongo-1`, `ID=user-123`, `Email=admin@example.com`, `Password=old-hash`, `IsActive=true` | `ID=user-999`, same email, `Password=""`, `IsActive=false`, `DepartmentID=dept-02` | MongoDB keeps `_id=mongo-1`, but the custom `id` field and other non-conflict fields can be updated from the payload. |
+| MongoDB default update set with a custom `id` field | `_id=mongo-1`, `ID=user-123`, `Email=admin@example.com`, `Password=old-hash`, `IsActive=true` | `ID=user-999`, same email, `Password=""`, `IsActive=false`, `DepartmentID=dept-02` | MongoDB keeps `_id=mongo-1` and the custom `id` field tagged `primary_key`; other non-conflict, non-primary-key fields can be updated from the payload. |
 
 For ScyllaDB, `email` is not a valid conflict target unless it is the table's full primary key. A Scylla `INSERT` upserts on the full primary key and writes the columns included in that statement; see the Scylla notes below.
 
@@ -621,7 +621,7 @@ upsert.UpsertUpdateCols = []string{"department_id", "is_active"}
 query := upsert.Create(&user)
 ```
 
-This field list is set on the ORM before the terminal `Create()` call. ScyllaDB interprets an explicit update-column list as a CQL `UPDATE`; a new row then receives the primary key and listed columns only. For other cases, `Select()` limits the non-primary-key model columns written; for SQL, those columns also determine the default upsert update set. Primary-key fields are kept for matching/insertion when non-zero. Be careful: omitting a required field from `Select()` may make the insert invalid or prevent a database default from being used as expected.
+This field list is set on the ORM before the terminal `Create()` call. ScyllaDB interprets an explicit update-column list as a CQL `UPDATE`; a new row then receives the primary key and listed columns only. For other cases, `Select()` limits the non-primary-key model columns written; for SQL, those columns also determine the default upsert update set. Primary-key fields are kept for matching/insertion when non-zero. MongoDB rejects a primary-key field in `UpsertUpdateCols`; primary keys cannot be changed on a matched document. Be careful: omitting a required field from `Select()` may make the insert invalid or prevent a database default from being used as expected.
 
 SQL drivers provide dialect-specific conflict handling. PostgreSQL and SQLite target the specified conflict columns; SQL Server and Oracle match rows using that target in `MERGE`. MySQL's `ON DUPLICATE KEY UPDATE` is different: any primary-key or unique-key collision can trigger its update path, even if it is a unique key other than the column named in `Upsert("email")`. Do not assume a MySQL upsert only reacts to the named column.
 

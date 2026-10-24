@@ -31,12 +31,20 @@ func (orm *ORM) createMongo(data any) error {
 		return orm.setError("Ensure the request contains at least one record.", errors.New("create: data list cannot be empty"), http.StatusBadRequest)
 	}
 
+	var primaryKeyCols []string
+	if orm.IsUpsert {
+		primaryKeyCols, err = orm.mongoPrimaryKeyColumns(data)
+		if err != nil {
+			return err
+		}
+	}
+
 	// 4. Set context timeout if configured
 	execCtx, cancel := orm.newContext()
 	defer cancel()
 
 	// 5. Execute InsertOne or InsertMany based on payload count
-	if err := orm.execCreateMongo(execCtx, rowsVal, tableName); err != nil {
+	if err := orm.execCreateMongo(execCtx, rowsVal, tableName, primaryKeyCols); err != nil {
 		return orm.Error
 	}
 

@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableName string) error {
+func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableName string, primaryKeyCols []string) error {
 	collection, message, httpCode, err := orm.Database.Collection(orm.DatabaseConfig, tableName)
 	if err != nil {
 		return orm.setDatabaseOperationError("Create", err)
@@ -20,7 +20,7 @@ func (orm *ORM) execCreateMongo(execCtx context.Context, rowsVal []any, tableNam
 	orm.HTTPCode = httpCode
 
 	if orm.IsUpsert {
-		if err := orm.execCreateMongoUpsert(execCtx, rowsVal, collection); err != nil {
+		if err := orm.execCreateMongoUpsert(execCtx, rowsVal, collection, primaryKeyCols); err != nil {
 			return orm.Error
 		}
 	} else {
@@ -97,8 +97,8 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 	return nil
 }
 
-func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *mongo.Collection) error {
-	ops, err := orm.buildMongoUpsertOps(rowsVal)
+func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *mongo.Collection, primaryKeyCols []string) error {
+	ops, err := orm.buildMongoUpsertOps(rowsVal, primaryKeyCols)
 	if err != nil {
 		return orm.Error
 	}
