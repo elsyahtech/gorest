@@ -59,6 +59,36 @@ func (app *App) Database() *DBSession {
 	}
 }
 
+// GetDBConfig is a getter for the database configuration used by the application,
+// as set with app.Use(database.Run(...)).
+func (app *App) GetDBConfig() database.Config {
+	if app == nil || app.config.database == nil {
+		return database.Config{}
+	}
+
+	return *app.config.database
+}
+
+// GetServerConfig is a getter for the server configuration used by the application,
+// as set with app.Use(server.Run(...)).
+func (app *App) GetServerConfig() server.Config {
+	if app == nil || app.config.server == nil {
+		return server.Config{}
+	}
+
+	return *app.config.server
+}
+
+// GetLogConfig is a getter for the logger configuration used by the application,
+// as set with app.Use(log.Run(...)).
+func (app *App) GetLogConfig() log.Config {
+	if app == nil || app.config.log == nil {
+		return log.Config{}
+	}
+
+	return *app.config.log
+}
+
 // NewContext creates a context for an operation, derived from the application context
 // (or context.Background() if none is set).
 // If timeout is greater than zero and the context has no deadline yet, the returned context
@@ -693,12 +723,6 @@ func (dbSession *DBSession) Table(table string) *orm.ORM {
 		IsDistinct:         false,
 		IsReturn:           false,
 	}
-}
-
-// GetLogConfig is a getter for the logger configuration used by the application,
-// as set with app.Use(log.Run(...)).
-func (app *App) GetLogConfig() log.Config {
-	return *app.config.log
 }
 
 // Log returns the configured application logger. If the app or logger is not
