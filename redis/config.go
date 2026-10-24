@@ -77,11 +77,10 @@ type Config struct {
 	// Default: false
 	TLS bool
 
-	// Enabled determines whether the Redis connection is active and running.
-	// Set to true to enable Redis integration, or false to disable it.
-	// Example: true
+	// Disable controls whether app.Use initializes the Redis connection.
+	// The default false value enables Redis initialization.
 	// Default: false
-	Enabled bool
+	Disable bool
 
 	// Database is the Redis database index number (usually 0 to 15).
 	// Default: 0
@@ -159,7 +158,7 @@ var ConfigDefault = Config{
 	TLS: DefaultRedisTLS,
 
 	// Default: false
-	Enabled: RedisDisabled,
+	Disable: RedisDisabled,
 
 	// Default: 0
 	Database: DefaultRedisDatabase,

@@ -215,7 +215,6 @@ func integrationConfig(t *testing.T) gorestredis.Config {
 	config.Port = environmentValue("GOREST_IT_REDIS_PORT", config.Port)
 	config.Username = os.Getenv("GOREST_IT_REDIS_USERNAME")
 	config.Password = os.Getenv("GOREST_IT_REDIS_PASSWORD")
-	config.Enabled = true
 	config.Timeout = 300 * time.Millisecond
 	config.PoolSize = 4
 	config.MinIdleConns = 1

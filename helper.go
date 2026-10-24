@@ -7,7 +7,7 @@ import (
 )
 
 func productionDatabaseTLSWarning(cfg *database.Config) (string, bool) {
-	if cfg == nil || !cfg.Enabled {
+	if cfg == nil || cfg.Disable {
 		return "", false
 	}
 

@@ -107,6 +107,8 @@ You can configure Redis by passing `redis.Config`:
 
 ```go
 redis.Run(redis.Config{
+    Disable: false, // false (default) initializes Redis when registered with app.Use; true skips it
+
     // Connection Target & Auth
     Host:     "127.0.0.1",
     Port:     "6379",
@@ -142,7 +144,7 @@ Redis Parameter Breakdown:
 - **Timeouts & Lifetimes** (Timeout, PoolTimeout, ConnMaxLifetime, ConnMaxIdleTime): Bounds connection and operation waits and controls connection reuse. Choose values for the service latency and workload; these settings do not replace monitoring or outage handling.
 - **Pool & Buffer Optimization** (PoolSize, MinIdleConns, MaxActiveConns, MaxRetries, ReadBufferSize, WriteBufferSize): Fine-tunes concurrency throughput. Note on PoolSize: When deploying inside Docker or Kubernetes, ensure your CPU container limits are set properly so Go's runtime.GOMAXPROCS doesn't misread the host's total core count!
 
-When `Enabled` is true, `app.Use(redis.Run(config))` initializes Redis and verifies connectivity with `PING`; an initialization error is logged and aborts startup. When Redis is disabled or not registered, `app.Redis().QueryRedis()` returns an explicit unavailable-service error instead of a nil client. `app.Close()` closes an initialized Redis client during application shutdown.
+`redis.Config.Disable` controls whether Redis is registered and initialized by `app.Use(...)`. Its default is `false`, so Redis is enabled unless you explicitly set `Disable: true`. When enabled, GOREST verifies connectivity with `PING`; an initialization error is logged and aborts startup. When Redis is disabled or not registered, `app.Redis().QueryRedis()` returns an explicit unavailable-service error instead of a nil client. `app.Close()` closes an initialized Redis client during application shutdown.
 
 `QueryRedis()` exposes the underlying go-redis client with command context deadlines enabled. Pass a request or operation context to every command; use `RedisSession.NewContext(parent)` to derive a context capped by the configured Redis `Timeout`, then cancel it when the operation finishes:
 
@@ -168,7 +170,7 @@ Gorest provides modular database adapters supporting both SQL and NoSQL environm
 
 `database.ConfigDefault` selects SQLite as the default lightweight database driver. `app.New()` does not automatically register or open a database; register one with `app.Use(...)` as shown below. To use another engine, change the driver and its connection settings:
 
-`database.Run(config)` applies database defaults and returns a normalized `database.Config`; it does not establish a connection. Pass its result to `app.Use(...)` to register and initialize the database. `app.Use(...)` does not call `database.Run(...)` automatically. When building a partial config literal, set `Enabled: true` explicitly or copy `database.ConfigDefault` and modify it; otherwise `Enabled` remains its Go zero value (`false`) and `app.Use(...)` skips database initialization.
+`database.Run(config)` applies database defaults and returns a normalized `database.Config`; it does not establish a connection. Pass its result to `app.Use(...)` to register and initialize the database. `app.Use(...)` does not call `database.Run(...)` automatically. The `Disable` field defaults to `false`, so the database is enabled unless you explicitly set `Disable: true`. A partial config literal also has `Disable: false` by Go's zero-value rule; use `database.ConfigDefault` when you want the other configured defaults as well.
 
 GOREST accepts custom `Environment` labels such as `staging`, `uat`, or `preview`; `development`, `testing`, and `production` are conventions, not an allowlist. The TLS warning policy treats every non-empty environment other than `development` and `testing` as production-like, so custom deployment environments do not silently bypass the production database TLS warning.
 
@@ -180,7 +182,7 @@ Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-f
 
 ```go
 app.Use(database.Run(database.Config{
-    Enabled: true,
+    Disable: false, // false (default) initializes the database; true skips it
     // Driver Selection & Target
     Driver: database.MYSQL, // Supported: MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA
     Host:   "127.0.0.1",

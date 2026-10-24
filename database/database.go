@@ -11,8 +11,6 @@ import (
 )
 
 func Run(cfg Config) Config {
-	cfg.Enabled = true
-
 	return configDefault(cfg)
 }
 
