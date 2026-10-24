@@ -51,7 +51,7 @@ dbConfig.Seeder = true    // Set to true to auto-run seeders on boot
 app.Use(database.Run(dbConfig))
 ```
 
-`database.Run(...)` normalizes and returns the database config; it does not connect to the database by itself. `app.Use(...)` receives that normalized config and initializes the connection. If you pass a partial `database.Config` directly to `app.Use(...)`, defaults are not applied. In particular, set `Enabled: true` for a partial config literal, or start from `database.ConfigDefault` as shown above.
+`database.Run(...)` normalizes and returns the database config; it does not connect to the database by itself. `app.Use(...)` receives that normalized config and initializes the connection. The `Disable` field defaults to `false`, so registration initializes the database unless you explicitly set `Disable: true`. A partial config literal also has `Disable: false` by Go's zero-value rule; start from `database.ConfigDefault` if you want the other configured defaults.
 
 For a dedicated deployment job that runs configured migrations and seeders without starting HTTP, call `app.RunDatabaseStartupTasks()` after `app.Use(...)`, then close the app. Run this job once before starting or updating application replicas. Keep `Migration` and `Seeder` disabled in the replicas themselves.
 

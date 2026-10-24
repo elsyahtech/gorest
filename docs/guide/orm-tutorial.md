@@ -84,7 +84,7 @@ func run() error {
 	}
 
 	dbConfig := database.ConfigDefault
-	dbConfig.Enabled = true
+	dbConfig.Disable = false
 	dbConfig.Driver = driver
 	if value := os.Getenv("GOREST_DB_NAME"); value != "" {
 		dbConfig.Name = value

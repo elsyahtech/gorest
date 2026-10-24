@@ -330,15 +330,14 @@ func main() {
 
 `database.Run(config)` applies database configuration defaults and returns the normalized configuration. It does not establish the database connection by itself; `app.Use(...)` registers the returned configuration with the application.
 
-When starting from `database.ConfigDefault`, the database is enabled by default. If you instead construct a partial `database.Config` from scratch, set `Enabled: true` explicitly when you want `app.Use(...)` to initialize it.
+The database `Disable` field defaults to `false`, so `app.Use(...)` initializes it unless you set `Disable: true`. A partial `database.Config` literal also has `Disable: false` by Go's zero-value rule; use `database.ConfigDefault` when you want the other configured defaults.
 
 #### Configure Redis only when needed
 
-Redis is optional and disabled by default. To enable it, set `Enabled: true` and ensure the Redis service is reachable.
+Redis is optional. Its `Disable` field defaults to `false`, so `app.Use(...)` initializes it unless you set `Disable: true`. Ensure the Redis service is reachable.
 
 ```go
 redisConfig := redis.ConfigDefault
-redisConfig.Enabled = true
 
 app.Use(redis.Run(redisConfig))
 ```

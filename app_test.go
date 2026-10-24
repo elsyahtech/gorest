@@ -26,14 +26,14 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "sqlite does not use transport tls",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.SQLITE,
 			},
 		},
 		{
 			name: "mysql tls missing ca setting",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.MYSQL,
 				TLS:     database.TLSTrue,
 			},
@@ -43,7 +43,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "mysql tls preferred can fall back to plaintext",
 			config: &database.Config{
-				Enabled:   true,
+				Disable:   false,
 				Driver:    database.MYSQL,
 				TLS:       "preferred",
 				SSLCAPath: "/etc/ssl/db-ca.pem",
@@ -54,7 +54,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "mysql custom tls profile cannot be inspected",
 			config: &database.Config{
-				Enabled:   true,
+				Disable:   false,
 				Driver:    database.MYSQL,
 				TLS:       "private-ca-profile",
 				SSLCAPath: "/etc/ssl/db-ca.pem",
@@ -65,7 +65,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "mysql tls configured",
 			config: &database.Config{
-				Enabled:   true,
+				Disable:   false,
 				Driver:    database.MYSQL,
 				TLS:       database.TLSTrue,
 				SSLCAPath: "/etc/ssl/db-ca.pem",
@@ -74,7 +74,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "postgres plaintext",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.POSTGRES,
 				TLS:     database.TLSDisabled,
 			},
@@ -84,7 +84,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "postgres encrypted without identity verification",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.POSTGRES,
 				TLS:     "require",
 			},
@@ -94,7 +94,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "postgres ca verified without hostname verification",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.POSTGRES,
 				TLS:     "verify-ca",
 			},
@@ -104,7 +104,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "postgres prefer can fall back to plaintext",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.POSTGRES,
 				TLS:     "prefer",
 			},
@@ -114,7 +114,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "postgres verified tls",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.POSTGRES,
 				TLS:     database.TLSVerifyFull,
 			},
@@ -122,7 +122,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "sql server trusts any certificate",
 			config: &database.Config{
-				Enabled:                true,
+				Disable:                false,
 				Driver:                 database.SQLSERVER,
 				TLS:                    database.TLSMandatory,
 				TrustServerCertificate: true,
@@ -133,7 +133,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "sql server verified tls",
 			config: &database.Config{
-				Enabled:                true,
+				Disable:                false,
 				Driver:                 database.SQLSERVER,
 				TLS:                    database.TLSMandatory,
 				TrustServerCertificate: false,
@@ -142,7 +142,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "oracle missing wallet",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.ORACLE,
 				TLS:     database.TLSEnabled,
 			},
@@ -152,7 +152,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "oracle tcps with wallet",
 			config: &database.Config{
-				Enabled:   true,
+				Disable:   false,
 				Driver:    database.ORACLE,
 				TLS:       database.TLSEnabled,
 				SSLCAPath: "/etc/oracle/wallet",
@@ -161,7 +161,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "mongo tls disabled",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.MONGO,
 				TLS:     database.TLSFalse,
 			},
@@ -171,7 +171,7 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "scylla tls unsupported by config field",
 			config: &database.Config{
-				Enabled: true,
+				Disable: false,
 				Driver:  database.SCYLLA,
 				TLS:     database.TLSEnabled,
 			},

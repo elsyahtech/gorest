@@ -44,7 +44,7 @@ func (app *App) Use(args ...any) *App {
 				app.config.redis = argPtr
 			}
 
-			if app.config.redis.Enabled {
+			if !app.config.redis.Disable {
 				app.registerService("Redis")
 
 				app.redisInit()
@@ -63,7 +63,7 @@ func (app *App) Use(args ...any) *App {
 				app.config.database = argPtr
 			}
 
-			if app.config.database.Enabled {
+			if !app.config.database.Disable {
 				msg := fmt.Sprintf("Database (%s)", database.NormalizeDatabaseDriver(app.config.database.Driver))
 
 				app.registerService(msg)

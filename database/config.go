@@ -166,10 +166,9 @@ type Config struct {
 	// Default: false
 	Seeder bool
 
-	// Enabled determines whether app.Use initializes the database.
-	// A partial Config's zero value is false; set it to true to enable the
-	// database. ConfigDefault enables the database.
-	Enabled bool
+	// Disable controls whether app.Use initializes the database.
+	// The default false value enables database initialization.
+	Disable bool
 
 	// Maximum number of open connections to database.
 	// Zero uses the configured default of 50 connections.
@@ -295,7 +294,7 @@ var ConfigDefault = Config{
 
 	// Whether to auto-run database integration on application startup.
 	// Default: false
-	Enabled: DatabaseEnabled,
+	Disable: DatabaseDisabled,
 
 	// Maximum number of open connections to database.
 	// Zero uses the configured default of 50 connections.
