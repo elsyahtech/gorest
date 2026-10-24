@@ -84,6 +84,37 @@ func TestMongoCoverage(t *testing.T) {
 		t.Fatalf("alternate-key Upsert result = %#v, want original _id with updated name", loaded)
 	}
 
+	type applicationDocument struct {
+		ID    string `gorest:"id, primary_key"`
+		Email string `gorest:"email"`
+		Name  string `gorest:"name"`
+	}
+	initialApplicationDoc := applicationDocument{
+		ID:    "application-id-first",
+		Email: "application-id@example.test",
+		Name:  "before",
+	}
+	internaltest.RequireNoORMError(t, app.Database().Table(collectionName).Create(&initialApplicationDoc))
+
+	updatedApplicationDoc := applicationDocument{
+		ID:    "application-id-second",
+		Email: initialApplicationDoc.Email,
+		Name:  "after",
+	}
+	internaltest.RequireNoORMError(t, app.Database().Table(collectionName).Upsert("email").Create(&updatedApplicationDoc))
+
+	var loadedApplicationDoc applicationDocument
+	internaltest.RequireNoORMError(t, app.Database().Table(collectionName).
+		Where("email = ?", initialApplicationDoc.Email).
+		Find(&loadedApplicationDoc))
+	if loadedApplicationDoc.ID != initialApplicationDoc.ID || loadedApplicationDoc.Name != "after" {
+		t.Fatalf(
+			"alternate-key Upsert result = %#v, want original application id %q with updated name",
+			loadedApplicationDoc,
+			initialApplicationDoc.ID,
+		)
+	}
+
 	if query := app.Database().Table(collectionName).Upsert("email = ? AND name = ?", initial.Email).
 		Create(&document{ID: "third", Email: initial.Email, Name: "invalid"}); query.Error == nil {
 		t.Fatal("Upsert() with a placeholder/argument mismatch unexpectedly succeeded")

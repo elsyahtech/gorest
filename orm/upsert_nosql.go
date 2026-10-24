@@ -93,7 +93,7 @@ func translateUpsertClausesToMongo(clauses []string, args []any) ([]bson.M, erro
 }
 
 // buildMongoUpsertOps constructs the filter and update for each document (mapping columns to values ​​from createMongo).
-func (orm *ORM) buildMongoUpsertOps(rowsVal []any) ([]mongoUpsertOp, error) {
+func (orm *ORM) buildMongoUpsertOps(rowsVal []any, primaryKeyCols []string) ([]mongoUpsertOp, error) {
 	conds, err := translateUpsertClausesToMongo(orm.UpsertClauses, orm.UpsertArgs)
 	if err != nil {
 		const message = "Use Upsert(\"field\") or simple conditions such as Upsert(\"email = ? AND deleted_at IS NULL\", value) on MongoDB."
@@ -109,7 +109,7 @@ func (orm *ORM) buildMongoUpsertOps(rowsVal []any) ([]mongoUpsertOp, error) {
 			return nil, orm.setError("unexpected document type for upsert", errors.New("create: upsert document is not a map"))
 		}
 
-		op, err := orm.buildMongoUpsertOp(doc, conds)
+		op, err := orm.buildMongoUpsertOp(doc, conds, primaryKeyCols)
 		if err != nil {
 			return nil, err
 		}
@@ -120,7 +120,7 @@ func (orm *ORM) buildMongoUpsertOps(rowsVal []any) ([]mongoUpsertOp, error) {
 	return ops, nil
 }
 
-func (orm *ORM) buildMongoUpsertOp(doc map[string]any, conds []bson.M) (mongoUpsertOp, error) {
+func (orm *ORM) buildMongoUpsertOp(doc map[string]any, conds []bson.M, primaryKeyCols []string) (mongoUpsertOp, error) {
 	notFound := func(col string) error {
 		message := fmt.Sprintf("Upsert column %q was not found in the struct tags (or it was filtered out by Select()).", col)
 
@@ -134,17 +134,23 @@ func (orm *ORM) buildMongoUpsertOp(doc map[string]any, conds []bson.M) (mongoUps
 	}
 
 	conflictSet, filter := buildConflictSetInbuildMongoUpsertOp(conflictKeys, doc, conds)
+	primaryKeySet := make(map[string]struct{}, len(primaryKeyCols))
+	for _, col := range primaryKeyCols {
+		if key, ok := lookupDocKey(doc, col); ok {
+			primaryKeySet[key] = struct{}{}
+		}
+	}
 
 	// 2. Columns to be updated (optional, from Insert Update Cos)
 	explicit := len(orm.UpsertUpdateCols) > 0
 
-	updateSet, err := orm.updateColumnsInBuildMongoUpsertOp(doc, notFound)
+	updateSet, err := orm.updateColumnsInBuildMongoUpsertOp(doc, notFound, primaryKeySet)
 	if err != nil {
-		return mongoUpsertOp{}, orm.setError("_id cannot be updated in MongoDB.", errors.New("create: upsert update column _id"))
+		return mongoUpsertOp{}, orm.Error
 	}
 
 	// 3. Separate $set (used during matching) and $setOnInsert (only when a new document is created)
-	setDoc, setOnInsert, docID := setDocInbuildMongoUpsertOp(doc, conflictSet, updateSet, explicit)
+	setDoc, setOnInsert, docID := setDocInbuildMongoUpsertOp(doc, conflictSet, primaryKeySet, updateSet, explicit)
 
 	update := bson.M{}
 
@@ -215,7 +221,11 @@ func buildConflictSetInbuildMongoUpsertOp(conflictKeys []string, doc map[string]
 	return conflictSet, filter
 }
 
-func (orm *ORM) updateColumnsInBuildMongoUpsertOp(doc map[string]any, notFound func(col string) error) (map[string]struct{}, error) {
+func (orm *ORM) updateColumnsInBuildMongoUpsertOp(
+	doc map[string]any,
+	notFound func(col string) error,
+	primaryKeySet map[string]struct{},
+) (map[string]struct{}, error) {
 	updateSet := make(map[string]struct{}, len(orm.UpsertUpdateCols))
 
 	for _, col := range orm.UpsertUpdateCols {
@@ -230,6 +240,13 @@ func (orm *ORM) updateColumnsInBuildMongoUpsertOp(doc map[string]any, notFound f
 			return nil, orm.setError("_id cannot be updated in MongoDB.", errors.New("create: upsert update column _id"))
 		}
 
+		if _, isPrimaryKey := primaryKeySet[key]; isPrimaryKey {
+			return nil, orm.setError(
+				fmt.Sprintf("primary key column %q cannot be updated in MongoDB.", col),
+				fmt.Errorf("create: upsert update column %q is a primary key", col),
+			)
+		}
+
 		updateSet[key] = struct{}{}
 	}
 
@@ -240,6 +257,7 @@ func (orm *ORM) updateColumnsInBuildMongoUpsertOp(doc map[string]any, notFound f
 func setDocInbuildMongoUpsertOp(
 	doc map[string]any,
 	conflictSet map[string]struct{},
+	primaryKeySet map[string]struct{},
 	updateSet map[string]struct{},
 	explicit bool,
 ) (setDoc bson.M, setOnInsert bson.M, docID any) {
@@ -260,6 +278,12 @@ func setDocInbuildMongoUpsertOp(
 			continue
 		}
 
+		if _, isPrimaryKey := primaryKeySet[key]; isPrimaryKey {
+			setOnInsert[key] = val
+
+			continue
+		}
+
 		if _, isUpdate := updateSet[key]; explicit && !isUpdate {
 			setOnInsert[key] = val
 
@@ -274,6 +298,63 @@ func setDocInbuildMongoUpsertOp(
 	}
 
 	return setDoc, setOnInsert, docID
+}
+
+func (orm *ORM) mongoPrimaryKeyColumns(data any) ([]string, error) {
+	value, err := orm.extractReflectionValue(data, "Create")
+	if err != nil {
+		return nil, err
+	}
+
+	val := *value
+	if val.Kind() == reflect.Slice {
+		if val.Len() == 0 {
+			return nil, nil
+		}
+		val = val.Index(0)
+	}
+
+	for val.Kind() == reflect.Pointer || val.Kind() == reflect.Interface {
+		if val.IsNil() {
+			return nil, nil
+		}
+		val = val.Elem()
+	}
+
+	if val.Kind() != reflect.Struct {
+		return nil, nil
+	}
+
+	var selectedCols []string
+	for _, col := range orm.SelectedCols {
+		for _, part := range strings.Split(col, ",") {
+			if trimmed := strings.TrimSpace(part); trimmed != "" {
+				selectedCols = append(selectedCols, trimmed)
+			}
+		}
+	}
+
+	typ := val.Type()
+	var columns []string
+	for idx := 0; idx < typ.NumField(); idx++ {
+		field := typ.Field(idx)
+		isPrimaryKey := false
+		for _, option := range strings.Split(field.Tag.Get("gorest"), ",")[1:] {
+			if strings.EqualFold(strings.TrimSpace(option), "primary_key") {
+				isPrimaryKey = true
+				break
+			}
+		}
+		if !isPrimaryKey {
+			continue
+		}
+
+		if col, ok := findColumnNameNormalizeStructInputMongo(typ, idx, selectedCols); ok {
+			columns = append(columns, col)
+		}
+	}
+
+	return columns, nil
 }
 
 func lookupDocKey(doc map[string]any, name string) (string, bool) {
