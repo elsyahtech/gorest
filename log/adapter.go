@@ -11,7 +11,7 @@ import (
 
 func (log *Log) Close() (string, int, error) {
 	if log == nil || log.logger == nil {
-		return "Ensure the logger is properly initialized and running in your application.",
+		return "Ensure the logger is running in your application.",
 			http.StatusBadRequest,
 			errors.New("logger is empty")
 	}

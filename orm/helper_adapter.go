@@ -14,11 +14,9 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	}
 
 	if orm.Database == nil || orm.DatabaseConfig == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ORM, the application must use one of the following databases: " +
-			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+		const message = "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation."
 
-		orm.setError(message, fmt.Errorf("%s: database service is not initialized", opName), http.StatusServiceUnavailable) //nolint:errcheck,revive
+		orm.setError(message, fmt.Errorf("%s: database service is not running", opName), http.StatusServiceUnavailable) //nolint:errcheck,revive
 
 		return orm
 	}

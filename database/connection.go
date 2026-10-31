@@ -76,7 +76,7 @@ func mongoConnection(ctx context.Context, cfg *Config, driver string) (*mongo.Cl
 	if cfg == nil {
 		const message = "ensure the app configuration is set up correctly"
 
-		return nil, message, fmt.Errorf("%s connection error: app configuration is uninitialized", driver)
+		return nil, message, fmt.Errorf("%s connection error: app configuration is missing", driver)
 	}
 	if (cfg.SSLCertPath == "") != (cfg.SSLKeyPath == "") {
 		const message = "configure both MongoDB client certificate and key for mTLS"
@@ -122,7 +122,7 @@ func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error
 	if cfg == nil {
 		const message = "ensure the app configuration is set up correctly"
 
-		return nil, message, fmt.Errorf("%s connection error: app configuration is uninitialized", driver)
+		return nil, message, fmt.Errorf("%s connection error: app configuration is missing", driver)
 	}
 	if cfg.TLS != "" && cfg.TLS != TLSDisabled && cfg.TLS != TLSEnabled {
 		const message = `ScyllaDB TLS mode must be "enable" or "disable"`
@@ -209,7 +209,7 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 	if cfg == nil {
 		const message = "ensure the app configuration is set up correctly and config is not nil"
 
-		return nil, message, fmt.Errorf("%s connection error: app configuration is uninitialized/nil", driver)
+		return nil, message, fmt.Errorf("%s connection error: app configuration is missing or nil", driver)
 	}
 
 	if driver == SQLITE {

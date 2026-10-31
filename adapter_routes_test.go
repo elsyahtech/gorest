@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/filter"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/server"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestAppRouteRegistrationMethods(t *testing.T) {
@@ -81,6 +83,108 @@ func TestAppRouteRegistrationMethods(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("group status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	middlewareRan := false
+	group.Get(
+		"/protected",
+		func(ctx *server.Context) error {
+			middlewareRan = true
+			return ctx.Next()
+		},
+		func(ctx *server.Context) error {
+			if !middlewareRan {
+				return ctx.SendStatus(http.StatusInternalServerError)
+			}
+			return ctx.SendString("protected")
+		},
+	)
+	response, err = httpServer.SRV.Test(httptest.NewRequest(http.MethodGet, "/group/protected", nil))
+	if err != nil {
+		t.Fatalf("protected group request failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("protected group status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read protected group response: %v", err)
+	}
+	if string(body) != "protected" {
+		t.Fatalf("protected group body = %q, want %q", body, "protected")
+	}
+}
+
+func TestGroupRouteRunsJWTAuthenticationMiddleware(t *testing.T) {
+	key := "test-signing-key"
+	filterConfig := filter.ConfigDefault
+	filterConfig.SignatureKey = &key
+
+	app := New(Config{AppName: "route-auth-test"})
+	app.Use(filterConfig)
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close GOREST app: %v", err)
+		}
+	})
+
+	jwtFilter := app.Filter()
+	if jwtFilter == nil {
+		t.Fatal("app.Filter() = nil, want initialized JWT filter")
+	}
+
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"issue_at":   time.Now().Unix(),
+		"token_id":   "user-123",
+		"issuer":     jwtFilter.Config.Issuer,
+		"token_type": "access",
+		"expires_at": time.Now().Add(time.Minute).Unix(),
+	}).SignedString([]byte(key))
+	if err != nil {
+		t.Fatalf("sign test access token: %v", err)
+	}
+
+	handlerCalls := 0
+	group := app.Group("/orm-queries")
+	group.Get("/users/select-all", jwtFilter.Authentication(), func(ctx *server.Context) error {
+		handlerCalls++
+		detail, ok := ctx.Locals("tokenJWT").(filter.TokenDetail)
+		if !ok || detail.TokenID != "user-123" || detail.TokenType != "access" {
+			return ctx.SendStatus(http.StatusInternalServerError)
+		}
+		return ctx.SendString("authenticated")
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/orm-queries/users/select-all", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := app.server.SRV.Test(request)
+	if err != nil {
+		t.Fatalf("send authenticated request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("authenticated request status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read authenticated response: %v", err)
+	}
+	if string(body) != "authenticated" {
+		t.Fatalf("authenticated response body = %q, want %q", body, "authenticated")
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/orm-queries/users/select-all", nil)
+	response, err = app.server.SRV.Test(request)
+	if err != nil {
+		t.Fatalf("send unauthenticated request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated request status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+	}
+	if handlerCalls != 1 {
+		t.Fatalf("protected handler calls = %d, want 1", handlerCalls)
 	}
 }
 

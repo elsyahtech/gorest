@@ -38,7 +38,7 @@ tested.
 
 **How to Diagnose:** Read startup and server logs, inspect the effective
 `server.Config`, confirm the host and port, and check whether startup tasks or
-dependency initialization report an error.
+dependency startup reports an error.
 
 **Solution:** Correct the relevant configuration or service availability.
 For local development, confirm the configured listener address and port, then
@@ -87,9 +87,9 @@ the matching method and full path.
 
 ## Database and query errors
 
-### Database initialization fails
+### Database startup fails
 
-**Problem:** Startup reports a database connection or initialization error.
+**Problem:** Startup reports a database connection or configuration error.
 
 **Possible Cause:** Driver name, service/database name, address, credentials,
 TLS configuration, client-library setup, network access, or service readiness
@@ -107,6 +107,27 @@ when possible.
 **Related Documentation:** [Database configuration](configuration.md),
 [database and framework guides](testing-result.md),
 [Oracle configuration](testing-result/testing-result-oracle.md).
+
+### Database startup tasks fail
+
+**Problem:** `app.Start()` fails while running migrations or seeders, or
+`app.RunDatabaseStartupTasks()` returns that the database service is not
+running.
+
+**Possible Cause:** Startup tasks are enabled but no enabled database service
+has been registered with the application.
+
+**How to Diagnose:** Check the database configuration's `Disable`,
+`Migration`, and `Seeder` fields, and confirm the configured database startup
+error is resolved.
+
+**Solution:** Register an enabled database configuration with
+`app.Use(database.Run(config))` before `app.Start()` or
+`app.RunDatabaseStartupTasks()`. `database.Run(...)` normalizes configuration;
+`app.Use(...)` starts the database service.
+
+**Related Documentation:** [Database configuration](configuration.md),
+[application guide](guide.md).
 
 ### ORM returns `400`, `404`, `409`, `503`, `504`, or `500`
 
@@ -193,9 +214,9 @@ does not depend on multi-operation atomicity.
 
 ## Redis and authentication
 
-### Redis initialization or commands fail
+### Redis startup or commands fail
 
-**Problem:** Application startup cannot initialize Redis, or Redis commands
+**Problem:** Application startup cannot run Redis, or Redis commands
 time out or fail.
 
 **Possible Cause:** Redis may be unreachable, credentials or TLS settings may
@@ -216,16 +237,19 @@ required dependency and how the application behaves when it is unavailable.
 
 ### JWT filter is unavailable or rejects a request
 
-**Problem:** `app.Filter()` is unavailable, or authentication middleware
-rejects a request.
+**Problem:** JWT filter setup aborts application startup, or authentication
+middleware rejects a request.
 
-**Possible Cause:** The filter is optional and is not initialized without a
-non-empty signing key. A request may also have an expired/invalid token, an
-unexpected issuer or signing method, or a token in the wrong header/cookie.
+**Possible Cause:** JWT is optional and remains disabled unless the application
+registers a filter configuration. Explicit filter configuration with a missing
+key, unsupported signing method, or invalid token duration aborts startup.
+Authentication can also reject an expired/invalid token, an unexpected issuer
+or signing method, or a token in the wrong header/cookie.
 
-**How to Diagnose:** Confirm the filter configuration is registered with a
-non-empty secret, then check whether the request uses the `Authorization`
-header, `access` cookie, or `refresh` cookie without logging token values.
+**How to Diagnose:** Confirm filter configuration is registered before route
+setup and that `app.Filter()` is called only after the filter is running. For request
+failures, check whether the request uses the `Authorization` header, `access`
+cookie, or `refresh` cookie without logging token values.
 
 **Solution:** Load a strong signing key from protected configuration, use the
 configured token transport, and check expiration and issuer settings. Add

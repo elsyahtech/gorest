@@ -15,7 +15,7 @@ func (orm *ORM) validateDBInstance(data any, targetDriver string, opName string)
 	}
 
 	if orm.Database == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app."
+		const message = "Register the database config with app.Use(database.Run(...))."
 
 		return "", orm.setError(message, fmt.Errorf("%s: database service is not running", opName))
 	}
@@ -23,7 +23,7 @@ func (orm *ORM) validateDBInstance(data any, targetDriver string, opName string)
 	switch targetDriver {
 	case database.SQLSERVER, database.MYSQL, database.POSTGRES, database.SQLITE, database.ORACLE:
 		if orm.Database.SQL == nil {
-			const message = "Ensure the application running must use one of the following databases: " +
+			const message = "Configure app.Use(database.Run(...)) with one of the following SQL drivers: " +
 				"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE."
 
 			return "", orm.setError(message, fmt.Errorf("%s: current the app running in database [%s]", opName, targetDriver))

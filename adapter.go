@@ -63,7 +63,7 @@ func (app *App) Database() *DBSession {
 // Ping verifies database availability from the application-facing session.
 func (session *DBSession) Ping(ctx context.Context) (string, error) {
 	if session == nil || session.database == nil {
-		return "ensure the database module is initialized", errors.New("database service is not running")
+		return "Register the database config with app.Use(database.Run(...)).", errors.New("database service is not running")
 	}
 	return session.database.Ping(ctx, session.config)
 }
@@ -127,9 +127,7 @@ func (app *App) NewContext(timeout time.Duration) (context.Context, context.Canc
 // message, and status code from the underlying database.
 func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...any) (sql.Result, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return nil, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -151,9 +149,7 @@ func (dbSession *DBSession) ExecSQL(ctx context.Context, query string, args ...a
 // after iterating, otherwise the connection is not released back to the pool.
 func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...any) (*sql.Rows, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return nil, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -172,9 +168,7 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 // Returns 400 Bad Request if collectionName is empty, and 503 Service Unavailable if MongoDB is not running.
 func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return nil, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -192,9 +186,7 @@ func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Colle
 // Returns 400 Bad Request if the cursor or dest is invalid, and 500 Internal Server Error if decoding fails.
 func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo.Cursor, dest any) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -207,9 +199,7 @@ func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo
 // Field names follow the `bson` struct tags, so make sure they match your collection schema.
 func (dbSession *DBSession) EncodeMongoCollection(dest any) (bson.M, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return nil, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -226,9 +216,7 @@ func (dbSession *DBSession) MongoCreateCollection(
 	opts ...options.Lister[options.CreateCollectionOptions],
 ) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -245,9 +233,7 @@ func (dbSession *DBSession) MongoCreateCollection(
 // Use placeholders (?) for args; never build the query from user input.
 func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...any) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -266,7 +252,7 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 // ExecBatchCQL executes multiple CQL statements with their corresponding arguments.
 func (dbSession *DBSession) ExecBatchCQL(ctx context.Context, queries []string, batchArgs [][]any) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+		return "Register the database config with app.Use(database.Run(...)). " +
 				"To use ScyllaDB, the application must be configured with the SCYLLA driver",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
@@ -282,9 +268,7 @@ func (dbSession *DBSession) ExecBatchCQL(ctx context.Context, queries []string, 
 
 func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return nil, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -303,9 +287,7 @@ func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...
 // (for example 404 for IF EXISTS, 409 for IF NOT EXISTS).
 func (dbSession *DBSession) MapScanCAS(ctx context.Context, query string, args ...any) (bool, string, int, error) {
 	if dbSession == nil || dbSession.database == nil || dbSession.config == nil {
-		return false, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
+		return false, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
 	}
@@ -480,8 +462,8 @@ func (adapter scyllaRawQueryAdapter) run(ctx context.Context, db *database.Datab
 
 func runRawQuery(ctx context.Context, session *DBSession, adapter rawQueryAdapter) (string, int, error) {
 	if session == nil || session.config == nil || session.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
-				"and the application must be running " + adapter.driverName(),
+		return "Register the database config with app.Use(database.Run(...)) and select the " +
+				adapter.driverName() + " driver.",
 			http.StatusServiceUnavailable, errors.New("database service is not running")
 	}
 
@@ -491,7 +473,7 @@ func runRawQuery(ctx context.Context, session *DBSession, adapter rawQueryAdapte
 	}
 
 	if !adapter.adapterIsAvailable(session.database) {
-		return "Ensure that your application running use the " + adapter.driverName(),
+		return "Configure app.Use(database.Run(...)) with the " + adapter.driverName(),
 			http.StatusServiceUnavailable, fmt.Errorf(
 				"%s database is not running. Your application is currently running on %s",
 				adapter.databaseName(), session.config.Driver,
@@ -522,9 +504,7 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 // 503 if the database service is unavailable, and 500 if the driver cannot start it.
 func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ORM, the application must use one of the following databases: " +
-			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+		const message = "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation."
 
 		return nil, message, http.StatusServiceUnavailable, errors.New("database service is not running")
 	}
@@ -532,7 +512,7 @@ func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxO
 	if dbSession.config == nil {
 		const message = "Ensure that the database configuration is available."
 
-		return nil, message, http.StatusServiceUnavailable, errors.New("database configuration is not running")
+		return nil, message, http.StatusServiceUnavailable, errors.New("database configuration is missing")
 	}
 
 	if ctx == nil {
@@ -604,9 +584,7 @@ type structFinalizeTransaction struct {
 
 func (dbSession *DBSession) finalizeTransaction(req *structFinalizeTransaction) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ORM, the application must use one of the following databases: " +
-			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+		const message = "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation."
 
 		return message, http.StatusServiceUnavailable, errors.New("database service is not running")
 	}
@@ -647,7 +625,7 @@ func (dbSession *DBSession) finalizeTransaction(req *structFinalizeTransaction) 
 // Close shuts down all application services.
 func (app *App) Close() (string, int, error) {
 	if app == nil {
-		const message = "Application is not initialized"
+		const message = "Application is not running"
 
 		return message, http.StatusBadRequest, errors.New("close: app is nil")
 	}
@@ -730,12 +708,10 @@ func (app *App) Close() (string, int, error) {
 // and the corresponding HTTP status instead of terminating the process.
 func (dbSession *DBSession) Table(table string) *orm.ORM {
 	if dbSession == nil || dbSession.database == nil || dbSession.config == nil {
-		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-			"To use ORM, the application must use one of the following databases: " +
-			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+		const message = "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation."
 
 		return &orm.ORM{
-			Error:          errors.New("table: database service is not initialized"),
+			Error:          errors.New("table: database service is not running"),
 			Message:        message,
 			HTTPCode:       http.StatusServiceUnavailable,
 			Database:       nil,
@@ -783,7 +759,7 @@ func (dbSession *DBSession) Table(table string) *orm.ORM {
 }
 
 // Log returns the configured application logger. If the app or logger is not
-// initialized, it reports the condition through the standard logger and returns
+// running, it reports the condition through the standard logger and returns
 // a no-op logger so logging misuse does not terminate the process.
 func (app *App) Log(field map[string]any, args ...bool) *zap.Logger {
 	if app == nil {
@@ -822,13 +798,12 @@ func (app *App) Redis() *RedisSession {
 
 // QueryRedis returns the Redis client for Redis commands. Pass a context to every
 // command; RedisSession.NewContext can apply the configured operation timeout.
-// It returns an error if Redis is not enabled, was not registered, or failed to initialize.
+// It returns an error if Redis is disabled, not registered, or failed to start.
 func (redisSession *RedisSession) QueryRedis() (*redis.Client, string, int, error) {
 	if redisSession == nil || redisSession.redis == nil {
-		const message = "Ensure that you have run redis.Run(redis.Config{...}) in your app. " +
-			"To use QueryRedis, Redis must be enabled and initialized with app.Use(...)."
+		const message = "Register the Redis config with app.Use(redis.Run(...)) and ensure it is enabled."
 
-		return nil, message, http.StatusServiceUnavailable, errors.New("redis has not been run in your app")
+		return nil, message, http.StatusServiceUnavailable, errors.New("Redis service is not running")
 	}
 
 	client, message, httpCode, err := redisSession.redis.Redis()
@@ -867,61 +842,61 @@ func (redisSession *RedisSession) NewContext(ctxParam context.Context) (context.
 
 // Get registers a route for GET methods that requests a representation
 // of the specified resource. Requests using GET should only retrieve data.
-func (app *App) Get(path string, handler server.HandlerFunc) {
-	app.server.Get(path, handler)
+func (app *App) Get(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Get(path, handler, handlers...)
 }
 
 // Head registers a route for HEAD methods that asks for a response identical
 // to that of a GET request, but without the response body.
-func (app *App) Head(path string, handler server.HandlerFunc) {
-	app.server.Head(path, handler)
+func (app *App) Head(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Head(path, handler, handlers...)
 }
 
 // Post registers a route for POST methods that is used to submit an entity to the
 // specified resource, often causing a change in state or side effects on the server.
-func (app *App) Post(path string, handler server.HandlerFunc) {
-	app.server.Post(path, handler)
+func (app *App) Post(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Post(path, handler, handlers...)
 }
 
 // Put registers a route for PUT methods that replaces all current representations
 // of the target resource with the request payload.
-func (app *App) Put(path string, handler server.HandlerFunc) {
-	app.server.Put(path, handler)
+func (app *App) Put(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Put(path, handler, handlers...)
 }
 
 // Delete registers a route for DELETE methods that deletes the specified resource.
-func (app *App) Delete(path string, handler server.HandlerFunc) {
-	app.server.Delete(path, handler)
+func (app *App) Delete(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Delete(path, handler, handlers...)
 }
 
 // Connect registers a route for CONNECT methods that establishes a tunnel to the
 // server identified by the target resource.
-func (app *App) Connect(path string, handler server.HandlerFunc) {
-	app.server.Connect(path, handler)
+func (app *App) Connect(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Connect(path, handler, handlers...)
 }
 
 // Options registers a route for OPTIONS methods that is used to describe the
 // communication options for the target resource.
-func (app *App) Options(path string, handler server.HandlerFunc) {
-	app.server.Options(path, handler)
+func (app *App) Options(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Options(path, handler, handlers...)
 }
 
 // Trace registers a route for TRACE methods that performs a message loop-back
 // test along the path to the target resource.
-func (app *App) Trace(path string, handler server.HandlerFunc) {
-	app.server.Trace(path, handler)
+func (app *App) Trace(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Trace(path, handler, handlers...)
 }
 
 // Patch registers a route for PATCH methods that is used to apply partial
 // modifications to a resource.
-func (app *App) Patch(path string, handler server.HandlerFunc) {
-	app.server.Patch(path, handler)
+func (app *App) Patch(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Patch(path, handler, handlers...)
 }
 
 // Query registers a route for QUERY methods that performs a safe, idempotent
 // query with a request body.
-func (app *App) Query(path string, handler server.HandlerFunc) {
-	app.server.Query(path, handler)
+func (app *App) Query(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.Query(path, handler, handlers...)
 }
 
 // Add allows you to specify multiple HTTP methods to register a route.
@@ -931,8 +906,8 @@ func (app *App) Add(methods []string, path string, handler server.HandlerFunc, h
 }
 
 // All will register the handler on all HTTP methods.
-func (app *App) All(path string, handler server.HandlerFunc) {
-	app.server.All(path, handler)
+func (app *App) All(path string, handler server.HandlerFunc, handlers ...server.HandlerFunc) {
+	app.server.All(path, handler, handlers...)
 }
 
 // Group is used for Routes with common prefix to define a new sub-router with optional middleware.
@@ -943,9 +918,14 @@ func (app *App) Group(prefix string, handlers ...server.HandlerFunc) *server.Ser
 	return app.server.Group(prefix, handlers...)
 }
 
+// Filter returns the running JWT filter and aborts startup if JWT is disabled.
 func (app *App) Filter() *filter.Filter {
 	if app == nil {
 		return nil
+	}
+
+	if app.filter == nil {
+		app.abortStartup(errors.New("JWT filter is not running; register filter.Run(...) with app.Use(...) and provide a non-empty signature key before use"))
 	}
 
 	return app.filter

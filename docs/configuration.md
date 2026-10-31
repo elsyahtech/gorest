@@ -195,6 +195,13 @@ Gorest registers framework-managed endpoints for monitoring:
 - `GET /health/ready` — database readiness; returns HTTP 503 until the database responds.
 - `GET /metrics` — bounded runtime metrics such as goroutines, heap allocation, and GC cycles. This is suitable for export into the application's monitoring pipeline, but it is not a replacement for Prometheus/OpenTelemetry instrumentation.
 
+The readiness endpoint uses stable JSON values: `status: "not_ready"` means the
+application is not ready, and a `database` or `redis` value of
+`"not_initialized"` means that service has no running client. Diagnostic errors
+describe unavailable services as “not running”; these wordings refer to the
+same unavailable state, while the readiness JSON values are kept for API
+compatibility.
+
 Database secrets can be loaded without placing them in source code using `database.ConfigFromEnv("GOREST_DB")`. Supported variables are `GOREST_DB_DRIVER`, `HOST`, `PORT`, `NAME`, `USERNAME`, `PASSWORD`, `TLS`, `SSL_CA`, `SSL_CERT`, and `SSL_KEY`. The password remains in the child-process environment only where required and is never logged by Gorest.
 
 ```go

@@ -19,7 +19,7 @@ func Run(cfg Config) Config {
 
 func New(ctx context.Context, config *Config) (*Redis, string, error) {
 	if config == nil {
-		const message = "provide an enabled Redis configuration before initializing the Redis client"
+		const message = "provide an enabled Redis configuration before running the Redis client"
 
 		return nil, message, errors.New("redis config is nil")
 	}
@@ -27,13 +27,13 @@ func New(ctx context.Context, config *Config) (*Redis, string, error) {
 	if ctx == nil {
 		const message = "provide a non-nil context with an appropriate startup timeout"
 
-		return nil, message, errors.New("redis initialization context is nil")
+		return nil, message, errors.New("redis startup context is nil")
 	}
 
 	if ctx.Err() != nil {
-		const message = "provide a valid startup context before initializing Redis"
+		const message = "provide a valid startup context before running Redis"
 
-		return nil, message, fmt.Errorf("redis initialization context is canceled or expired: %w", ctx.Err())
+		return nil, message, fmt.Errorf("redis startup context is canceled or expired: %w", ctx.Err())
 	}
 
 	opts := &redis.Options{
@@ -73,7 +73,7 @@ func New(ctx context.Context, config *Config) (*Redis, string, error) {
 	client := redis.NewClient(opts)
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		const message = "ensure redis service/daemon is running and ensure network connectivity to the server is stable"
+		const message = "Ensure the Redis service is running and reachable with the configured connection settings."
 
 		pingErr := fmt.Errorf("try ping to redis host: %w", err)
 

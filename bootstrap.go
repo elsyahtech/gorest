@@ -25,7 +25,7 @@ func (app *App) runMigration() error {
 	}
 
 	if app.database == nil {
-		return errors.New("run database startup tasks: database is not initialized")
+		return errors.New("run database startup tasks: database service is not running")
 	}
 
 	logger := app.Log(nil)
@@ -69,7 +69,7 @@ func (app *App) RunDatabaseStartupTasks() error {
 	}
 
 	if app.config.database == nil || app.database == nil {
-		return errors.New("run database startup tasks: database is not initialized; register an enabled database config with app.Use")
+		return errors.New("run database startup tasks: database service is not running; register an enabled database config with app.Use(database.Run(...))")
 	}
 
 	return app.runMigration()
@@ -97,7 +97,7 @@ func (app *App) startServer() error {
 	app.Log(nil, true).Info("starting server")
 
 	if app.config.server == nil || app.server == nil {
-		return errors.New("failed to start server: server is not initialized")
+		return errors.New("failed to start server: server is not running")
 	}
 
 	publicRoutes := RegisterDefaultRoutes
@@ -119,7 +119,7 @@ func (app *App) startServer() error {
 		app.modules,
 	)
 	if err != nil {
-		return fmt.Errorf("starting server failed: %s: %w", message, err)
+		return fmt.Errorf("failed to start server: %s: %w", message, err)
 	}
 
 	return nil

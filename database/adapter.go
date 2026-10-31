@@ -23,8 +23,7 @@ type TransactionFunc func(ctx context.Context, tx *sql.Tx) error
 func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, args ...any) (sql.Result, string, int, error) {
 	if db == nil || config == nil {
 		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
-				"and the application must use one of the following databases: "+
+			"Register the database config with app.Use(database.Run(...)) and select one of the following drivers: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
@@ -97,8 +96,7 @@ func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, a
 func (db *Database) QuerySQL(ctx context.Context, config *Config, query string, args ...any) (*sql.Rows, string, int, error) {
 	if db == nil || config == nil {
 		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
-				"and the application must use one of the following databases: "+
+			"Register the database config with app.Use(database.Run(...)) and select one of the following drivers: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES or SQLITE.",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
@@ -173,8 +171,7 @@ func (db *Database) BeginTx(config *Config, opts ...*sql.TxOptions) (*Database, 
 func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...*sql.TxOptions) (*Database, string, int, error) {
 	if db == nil || config == nil {
 		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your application, "+
-				"and the application must use one of the following databases: "+
+			"Register the database config with app.Use(database.Run(...)) and select one of the following drivers: "+
 				"ORACLE, SQLSERVER, MYSQL, POSTGRES or SQLITE.",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
@@ -242,8 +239,7 @@ func (db *Database) BeginTxContext(ctx context.Context, config *Config, opts ...
 func (db *Database) Collection(config *Config, collectionName string) (*mongo.Collection, string, int, error) {
 	if db == nil || config == nil {
 		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
-				"and the application must be running MONGO",
+			"Register the database config with app.Use(database.Run(...)) and select the MONGO driver.",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
 		)
@@ -253,7 +249,7 @@ func (db *Database) Collection(config *Config, collectionName string) (*mongo.Co
 
 	if db.Mongo == nil {
 		message, code, err := setError(
-			"Ensure that your application running use the MONGO",
+			"Configure app.Use(database.Run(...)) with the MONGO driver.",
 			fmt.Errorf("mongo database is not running. Your application is currently running on %s", config.Driver),
 			http.StatusServiceUnavailable,
 		)
@@ -285,8 +281,7 @@ func (db *Database) CreateCollection(
 ) (string, int, error) {
 	if db == nil || config == nil {
 		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
-				"and the application must be running MONGO",
+			"Register the database config with app.Use(database.Run(...)) and select the MONGO driver.",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
 		)
@@ -296,7 +291,7 @@ func (db *Database) CreateCollection(
 
 	if db.Mongo == nil {
 		message, code, err := setError(
-			"Ensure that your application running use the MONGO",
+			"Configure app.Use(database.Run(...)) with the MONGO driver.",
 			fmt.Errorf("mongo database is not running. Your application is currently running on %s", config.Driver),
 			http.StatusServiceUnavailable,
 		)
@@ -348,8 +343,7 @@ func (db *Database) CreateCollection(
 func (db *Database) validateScyllaAdapter(ctx context.Context, config *Config) (string, int, error) {
 	if db == nil || config == nil {
 		return setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
-				"and the application must be running SCYLLA",
+			"Register the database config with app.Use(database.Run(...)) and select the SCYLLA driver.",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
 		)
@@ -357,7 +351,7 @@ func (db *Database) validateScyllaAdapter(ctx context.Context, config *Config) (
 
 	if db.Scylla == nil {
 		return setError(
-			"Ensure that your application running use the SCYLLA",
+			"Configure app.Use(database.Run(...)) with the SCYLLA driver.",
 			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
 			http.StatusServiceUnavailable,
 		)
@@ -504,12 +498,12 @@ func (db *Database) Ping(ctx context.Context, cfg *Config) (string, error) {
 		return "provide a valid database health-check context", errors.New("database health-check context is nil")
 	}
 	if db == nil || cfg == nil {
-		return "ensure the database module is initialized", errors.New("database service is not running")
+		return "Register the database config with app.Use(database.Run(...)).", errors.New("database service is not running")
 	}
 
 	if cfg.Driver == MONGO {
 		if db.Mongo == nil {
-			return "ensure MongoDB is initialized", errors.New("MongoDB service is not running")
+			return "Register the database config with app.Use(database.Run(...)) and select the MONGO driver.", errors.New("MongoDB service is not running")
 		}
 		if err := db.Mongo.Ping(ctx, nil); err != nil {
 			return "verify MongoDB connectivity, credentials, TLS, and server availability", err
@@ -518,7 +512,7 @@ func (db *Database) Ping(ctx context.Context, cfg *Config) (string, error) {
 	}
 	if cfg.Driver == SCYLLA {
 		if db.Scylla == nil {
-			return "ensure ScyllaDB is initialized", errors.New("ScyllaDB service is not running")
+			return "Register the database config with app.Use(database.Run(...)) and select the SCYLLA driver.", errors.New("ScyllaDB service is not running")
 		}
 		if err := db.Scylla.Query("SELECT now() FROM system.local").WithContext(ctx).Exec(); err != nil {
 			return "verify ScyllaDB connectivity, credentials, TLS, and server availability", err
@@ -526,7 +520,7 @@ func (db *Database) Ping(ctx context.Context, cfg *Config) (string, error) {
 		return "database healthy", nil
 	}
 	if db.SQL == nil {
-		return "ensure the SQL database is initialized", errors.New("SQL database service is not running")
+		return "Register the database config with app.Use(database.Run(...)) and select a SQL driver.", errors.New("SQL database service is not running")
 	}
 	if err := db.SQL.PingContext(ctx); err != nil {
 		return "verify database connectivity, credentials, TLS, pool availability, and server health", err
@@ -538,7 +532,7 @@ func (db *Database) Ping(ctx context.Context, cfg *Config) (string, error) {
 func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error) {
 	if db == nil || cfg == nil {
 		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app. "+
+			"Register the database config with app.Use(database.Run(...)). "+
 				"The application must use one of the following databases: "+
 				"MYSQL, POSTGRES, SQLSERVER, ORACLE, SQLITE, MONGO, SCYLLA",
 			errors.New("database service is not running"),
@@ -568,7 +562,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 	switch activeDriver {
 	case MYSQL, POSTGRES, SQLITE, SQLSERVER, ORACLE:
 		if db.SQL == nil {
-			messages = append(messages, "Ensure that you have run database.Run(database.Config{...}) in your app. "+
+			messages = append(messages, "Register the database config with app.Use(database.Run(...)). "+
 				"The application must use one of the following databases: "+
 				"MYSQL, POSTGRES, SQLSERVER, ORACLE, or SQLITE.")
 
@@ -581,8 +575,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 		}
 	case MONGO:
 		if db.Mongo == nil {
-			messages = append(messages, "Ensure that you have run database.Run(database.Config{...}) in your app. "+
-				"The application must use MONGO")
+			messages = append(messages, "Register the database config with app.Use(database.Run(...)) and select the MONGO driver.")
 
 			errs = append(errs, errors.New("close MongoDB connection: Mongo database service is not running"))
 		} else if err := db.Mongo.Disconnect(ctx); err != nil {
@@ -593,8 +586,7 @@ func (db *Database) Close(ctx context.Context, cfg *Config) (string, int, error)
 		}
 	case SCYLLA:
 		if db.Scylla == nil {
-			messages = append(messages, "Ensure that you have run database.Run(database.Config{...}) in your app. "+
-				"The application must use SCYLLA")
+			messages = append(messages, "Register the database config with app.Use(database.Run(...)) and select the SCYLLA driver.")
 
 			errs = append(errs, errors.New("close Scylla connection: scylla database service is not running"))
 		} else {

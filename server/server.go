@@ -73,7 +73,7 @@ func (server *Server) ExpectListen() {
 // Listen starts Fiber and tracks its readiness and completion for shutdown.
 func (server *Server) Listen(address string, config fiber.ListenConfig) error {
 	if server == nil || server.SRV == nil {
-		return errors.New("listen: server is not initialized")
+		return errors.New("listen: server is not running")
 	}
 
 	server.ExpectListen()
@@ -94,7 +94,7 @@ func (server *Server) markListenDone() {
 // WaitForListening waits until the server listener is ready or exits.
 func (server *Server) WaitForListening(ctx context.Context) error {
 	if server == nil || server.SRV == nil {
-		return errors.New("wait for server listener: server is not initialized")
+		return errors.New("wait for server listener: server is not running")
 	}
 
 	if ctx == nil {
@@ -179,13 +179,13 @@ func StartServer(
 	routes ...any,
 ) (string, error) {
 	if server == nil || config == nil {
-		return "ensure that you have run server.Run(server.Config{...}) in your application",
+		return "Register the server config with app.Use(server.Run(...)).",
 			errors.New("startServer: server is not running")
 	}
 
 	if log == nil {
-		return "ensure that you have run log.Run(log.Config{...}) in your application",
-			errors.New("startServer: log is not running")
+		return "Ensure the logger is running before starting the server.",
+			errors.New("startServer: logger is not running")
 	}
 
 	defer server.markListenDone()

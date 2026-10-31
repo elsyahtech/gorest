@@ -36,5 +36,5 @@ func New(config *Config) (*jwt.Token, string, error) {
 		return nil, message, errors.New("unsupported JWT signing method")
 	}
 
-	return jwt.New(method), "JWT initialized successfully", nil
+	return jwt.New(method), "JWT signing method is ready", nil
 }

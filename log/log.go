@@ -34,7 +34,7 @@ func New(config *Config, appName string) (*Log, string, error) {
 	logDir := config.LogDir
 
 	if err := os.MkdirAll(logDir, 0o700); err != nil {
-		message := fmt.Sprintf("Log Initialize: ensure %s directory can be created and is writable", logDir)
+		message := fmt.Sprintf("logger setup: ensure %s directory can be created and is writable", logDir)
 
 		return nil, message, fmt.Errorf("create log directory: %w", err)
 	}
@@ -46,7 +46,7 @@ func New(config *Config, appName string) (*Log, string, error) {
 		MaxAge:     config.MaxAge,
 	}
 	if _, err := writer.Write(nil); err != nil {
-		const message = "Log Initialize: ensure log file can be created and writable"
+		const message = "logger setup: ensure log file can be created and writable"
 
 		if err = writer.Close(); err != nil {
 			fmt.Printf("log: %v\n", log)
