@@ -143,9 +143,6 @@ func (app *App) initializeConfiguredFilter(config *filter.Config) {
 	}
 
 	app.filterInit(&filterConfig)
-	if app.filter == nil {
-		app.abortStartup(errors.New("failed to run JWT filter; check its signing method and token durations"))
-	}
 }
 
 //nolint:unparam
