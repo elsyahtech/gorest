@@ -84,6 +84,7 @@ func configDefault(config ...Config) Config {
 	cfg.log = ConfigDefault.log
 	cfg.redis = ConfigDefault.redis
 	cfg.database = ConfigDefault.database
+	cfg.filter = ConfigDefault.filter
 
 	if cfg.AppName == "" {
 		cfg.AppName = ConfigDefault.AppName
