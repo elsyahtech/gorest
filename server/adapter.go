@@ -2,6 +2,8 @@ package server
 
 import (
 	golog "log"
+
+	"github.com/gofiber/fiber/v3"
 )
 
 // Get registers a route for GET methods that requests a representation
@@ -145,9 +147,9 @@ func wrapHandlers(handlers ...HandlerFunc) []any {
 	return fiberHandlers
 }
 
-func wrapHandler(handler HandlerFunc) func(Context) error {
+func wrapHandler(handler HandlerFunc) func(fiber.Ctx) error {
 	current := handler
-	return func(ctx Context) error {
-		return current(&Context{Ctx: ctx.Ctx})
+	return func(ctx fiber.Ctx) error {
+		return current(&Context{Ctx: ctx})
 	}
 }
