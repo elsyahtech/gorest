@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
+
+const gorestModulePath = "github.com/elsyahtech/gorest"
 
 //nolint:revive
 func printStartupBanner(
@@ -54,7 +57,7 @@ func printStartupBanner(
 	fmt.Println()
 	fmt.Println("╔═════════════════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  GOREST                                                                     ║")
-	fmt.Println("║  v1.0.0                                                                     ║")
+	fmt.Printf("║  %-73s║\n", gorestVersion())
 	fmt.Println("╠═════════════════════════════════════════════════════════════════════════════╣")
 	fmt.Printf("║  App Name ...................... %-28s               ║\n", strings.ToUpper(appName))
 	fmt.Printf("║  App Version ................... %-28s               ║\n", version)
@@ -77,6 +80,45 @@ func printStartupBanner(
 
 	fmt.Println("╚═════════════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
+}
+
+func gorestVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "development (untagged)"
+	}
+
+	return gorestVersionFromBuildInfo(info)
+}
+
+func gorestVersionFromBuildInfo(info *debug.BuildInfo) string {
+	if info == nil {
+		return "development (untagged)"
+	}
+
+	if info.Main.Path == gorestModulePath {
+		return releaseVersion(info.Main.Version)
+	}
+
+	for _, dependency := range info.Deps {
+		if dependency.Path == gorestModulePath {
+			if dependency.Replace != nil {
+				return releaseVersion(dependency.Replace.Version)
+			}
+
+			return releaseVersion(dependency.Version)
+		}
+	}
+
+	return "development (untagged)"
+}
+
+func releaseVersion(version string) string {
+	if version == "" || version == "(devel)" {
+		return "development (untagged)"
+	}
+
+	return version
 }
 
 func getRegisteredEndpoints(server *Server) []string {
