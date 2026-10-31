@@ -11,9 +11,9 @@ import (
 
 func (redis *Redis) Redis() (*redis.Client, string, int, error) {
 	if redis == nil || redis.client == nil {
-		message := "ensure that you have run redis.Run(redis.Config{...} in your app"
+		message := "Register the Redis config with app.Use(redis.Run(...))."
 
-		return nil, message, http.StatusNotImplemented, errors.New("redis has not been run in your app")
+		return nil, message, http.StatusNotImplemented, errors.New("redis service is not running")
 	}
 
 	return redis.client, "", http.StatusOK, nil
@@ -32,7 +32,7 @@ func (redis *Redis) Ping(ctx context.Context) error {
 
 func (redis *Redis) Close() (string, error) {
 	if redis == nil || redis.client == nil {
-		return "ensure that you have run redis.Run(redis.Config{...}) in your app", errors.New("redis has not been run in your app")
+		return "Register the Redis config with app.Use(redis.Run(...)).", errors.New("redis service is not running")
 	}
 
 	if err := redis.client.Close(); err != nil {

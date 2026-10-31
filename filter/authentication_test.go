@@ -102,26 +102,66 @@ func TestAuthenticationRejectsRefreshTokenAsAccessToken(t *testing.T) {
 	}
 }
 
-func TestGetClientIPDoesNotTrustForwardedHeaderByDefault(t *testing.T) {
+func TestGetClientIPUsesForwardedHeaderAndFallsBackForInvalidHeader(t *testing.T) {
 	app := fiber.New()
 	app.Get("/ip", func(ctx fiber.Ctx) error {
 		return ctx.SendString(GetClientIP(server.Context{Ctx: ctx}))
 	})
+	app.Get("/direct-ip", func(ctx fiber.Ctx) error {
+		return ctx.SendString(ctx.IP())
+	})
 
-	request := httptest.NewRequest(http.MethodGet, "/ip", nil)
-	request.Header.Set("X-Forwarded-For", "203.0.113.42")
-	response, err := app.Test(request)
-	if err != nil {
-		t.Fatalf("send request: %v", err)
-	}
-	defer response.Body.Close()
+	for _, test := range []struct {
+		name        string
+		forwarded   string
+		want        string
+		wantForward bool
+	}{
+		{
+			name:        "first address in forwarding chain",
+			forwarded:   " 203.0.113.42 , 198.51.100.10",
+			want:        "203.0.113.42",
+			wantForward: true,
+		},
+		{
+			name:      "invalid forwarding address falls back to connection IP",
+			forwarded: "not-an-ip, 198.51.100.10",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/ip", nil)
+			request.Header.Set("X-Forwarded-For", test.forwarded)
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatalf("send request: %v", err)
+			}
+			defer response.Body.Close()
 
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read client IP: %v", err)
-	}
-	if string(body) == "203.0.113.42" {
-		t.Fatal("GetClientIP trusted X-Forwarded-For without proxy configuration")
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatalf("read client IP: %v", err)
+			}
+			if test.wantForward {
+				if got := string(body); got != test.want {
+					t.Fatalf("GetClientIP() = %q, want first forwarded IP %q", got, test.want)
+				}
+				return
+			}
+
+			directRequest := httptest.NewRequest(http.MethodGet, "/direct-ip", nil)
+			directResponse, err := app.Test(directRequest)
+			if err != nil {
+				t.Fatalf("send direct IP request: %v", err)
+			}
+			defer directResponse.Body.Close()
+			directIP, err := io.ReadAll(directResponse.Body)
+			if err != nil {
+				t.Fatalf("read direct connection IP: %v", err)
+			}
+			if got := string(body); got != string(directIP) {
+				t.Fatalf("GetClientIP() = %q, want connection IP %q", got, directIP)
+			}
+		})
 	}
 }
 

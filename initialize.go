@@ -13,7 +13,7 @@ import (
 
 func (app *App) logInit() {
 	if app == nil {
-		golog.Fatalf("failed to run logger: gorest is not running. message: Ensure the gorest is running in your app.")
+		golog.Fatalf("failed to run logger: application is nil")
 	}
 
 	app.registerService("Logger")
@@ -27,16 +27,14 @@ func (app *App) logInit() {
 }
 
 func (app *App) redisInit() {
-	app.Log(nil, true).Info("initializing redis")
+	app.Log(nil, true).Info("starting Redis")
 
 	if app.log == nil {
-		golog.Fatalf("failed initializing redis: logger is not running. " +
-			"message: Ensure the logger is running before initializing the redis, or run redis.Run(redis.Config{...}) in your app")
+		golog.Fatalf("failed to run Redis: logger is not running")
 	}
 
 	if app.config.redis == nil {
-		app.Log(nil, true).Info("redis is not run by the client. Redis is ignored. " +
-			"If you want to enable Redis, you can run redis.Run(redis.Config{...}) in your app")
+		app.Log(nil, true).Info("Redis is disabled. To enable it, register its config with app.Use(redis.Run(...)).")
 
 		return
 	}
@@ -61,28 +59,25 @@ func (app *App) redisInit() {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
 			LogFieldKeyMessage: message,
-		}, true).Error("failed initializing redis")
+		}, true).Error("failed to run Redis")
 
-		golog.Fatalf("failed initializing redis: %v. message: %v", err, message)
+		golog.Fatalf("failed to run Redis: %v. message: %v", err, message)
 	}
 
 	app.redis = redisInitialized
 
-	app.Log(nil, true).Info("redis initialized successfully")
+	app.Log(nil, true).Info("Redis is running")
 }
 
 func (app *App) databaseInit() {
 	if app.log == nil {
-		golog.Fatalf("failed initializing database: logger is not running. " +
-			"message: Ensure the logger is running before initializing the database, or run redis.Run(redis.Config{...}) in your app")
+		golog.Fatalf("failed to run database: logger is not running")
 	}
 
-	app.Log(nil, true).Info("initializing database")
+	app.Log(nil, true).Info("starting database")
 
 	if app.config.database == nil {
-		app.Log(map[string]any{
-			LogFieldKeyMessage: "If you want to enable Database, you can run database.Run(database.Config{...}) in your app",
-		}, true).Info("database is not run by the client. Database is ignored")
+		app.Log(nil, true).Info("Database is disabled. To enable it, register its config with app.Use(database.Run(...)).")
 
 		return
 	}
@@ -115,21 +110,19 @@ func (app *App) databaseInit() {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
 			LogFieldKeyMessage: message,
-		}, true).Error("failed initializing database")
+		}, true).Error("failed to run database")
 
-		golog.Fatalf("failed initializing database: %v. message: %v", err, message)
+		golog.Fatalf("failed to run database: %v. message: %v", err, message)
 	}
 
 	app.database = databaseInitialized
 
-	app.Log(nil, true).Info("database initialized successfully")
+	app.Log(nil, true).Info("database is running")
 }
 
 func (app *App) newServer() {
 	if app.log == nil {
-		golog.Fatalf("failed initializing server: " +
-			"logger is not running. message: Ensure the logger is running before initializing the server, " +
-			"or run redis.Run(redis.Config{...}) in your app")
+		golog.Fatalf("failed to run server: logger is not running")
 	}
 
 	app.registerService("Server")
@@ -139,21 +132,19 @@ func (app *App) newServer() {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
 			LogFieldKeyMessage: message,
-		}, true).Error("failed to initializing server")
+		}, true).Error("failed to run server")
 
-		golog.Fatalf("failed initializing server: %v. message: %v", err, message)
+		golog.Fatalf("failed to run server: %v. message: %v", err, message)
 	}
 
 	app.server = serverInitialized
 
-	app.Log(nil, true).Info("server initialized successfully")
+	app.Log(nil, true).Info("server configuration is ready")
 }
 
 func (app *App) reconfigureServer() {
 	if app.log == nil {
-		golog.Fatalf("failed initializing server: " +
-			"logger is not running. message: Ensure the logger is running before initializing the server, " +
-			"or run redis.Run(redis.Config{...}) in your app")
+		golog.Fatalf("failed to run server: logger is not running")
 	}
 
 	app.registerService("Server")
@@ -163,15 +154,15 @@ func (app *App) reconfigureServer() {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
 			LogFieldKeyMessage: message,
-		}, true).Error("failed to initializing server")
+		}, true).Error("failed to run server")
 
-		golog.Fatalf("failed initializing server: %v. message: %v", err, message)
+		golog.Fatalf("failed to run server: %v. message: %v", err, message)
 	}
 
 	app.server = serverInitialized
 }
 
-// ensureServer initializes the server once, using the handler's config if provided,
+// serverInit runs the server once, using the handler's config if provided,
 // otherwise the default config. Safe to call multiple times.
 func (app *App) serverInit() {
 	if app.config.server == nil {
@@ -179,7 +170,7 @@ func (app *App) serverInit() {
 
 		app.config.server = &def
 
-		app.Log(nil, true).Info("initializing server")
+		app.Log(nil, true).Info("configuring server")
 
 		app.newServer()
 	} else {
@@ -189,19 +180,17 @@ func (app *App) serverInit() {
 
 func (app *App) filterInit(config *filter.Config) {
 	if app == nil {
-		golog.Fatalf("failed to run filter: gorest is not running. message: Ensure the gorest is running in your app.")
+		golog.Fatalf("failed to run filter: application is nil")
 	}
 
 	if app.log == nil {
-		golog.Fatalf("failed initializing filter: logger is not running. " +
-			"message: Ensure the logger is running before initializing the filter, or run filter.Run(filter.Config{...}) in your app")
+		golog.Fatalf("failed to run filter: logger is not running")
 	}
 
 	if config == nil {
 		app.config.filter = nil
 		app.filter = nil
-		app.Log(nil, true).Info("filter is not run by the client. Filter is ignored. " +
-			"If you want to enable Filter, you can run filter.Run(filter.Config{...}) in your app")
+		app.Log(nil, true).Info("JWT filter is disabled.")
 
 		return
 	}
@@ -226,7 +215,7 @@ func (app *App) filterInit(config *filter.Config) {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
 			LogFieldKeyMessage: message,
-		}, true).Error("failed initializing filter")
+		}, true).Error("failed to run filter")
 
 		app.config.filter = nil
 		app.filter = nil

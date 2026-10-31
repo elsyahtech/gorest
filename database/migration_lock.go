@@ -21,7 +21,7 @@ func acquireMigrationLock(
 	config *Config,
 ) (func(context.Context) error, string, error) {
 	if ctx == nil || database == nil || config == nil {
-		return nil, "Ensure the migration context and database configuration are initialized.",
+		return nil, "Ensure the migration context and database configuration are set.",
 			errors.New("migration lock: missing context, database, or config")
 	}
 
@@ -113,7 +113,7 @@ func mongoCaseAcquireMigrationLock(
 ) (func(context.Context) error, string, error) {
 	collection, _, _, err := database.Collection(config, migrationLockTable)
 	if err != nil {
-		const message = "Ensure MongoDB is initialized and the migration lock collection is accessible."
+		const message = "Ensure MongoDB is running and the migration lock collection is accessible."
 
 		return nil, message,
 			fmt.Errorf("migration lock: open MongoDB lock collection: %w", err)

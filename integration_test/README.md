@@ -401,10 +401,31 @@ go test -tags=integration ./integration_test/app ./integration_test/filter ./int
 - **App:** `app.Start()` handles `SIGTERM` and completes an in-flight request.
   Validate the 30-second shutdown grace period with your process supervisor.
 - **Filter:** token issuance, signature/claim checks, cookie settings, and HTTP
-  authentication/refresh. Does not test application login, account status,
-  authorization, revocation, or CSRF policy.
+  authentication/refresh, including bearer authentication through a grouped
+  route registered with `group.Get(path, middleware, handler)`. Does not test
+  application login, account status, authorization, revocation, or CSRF policy.
 - **Logger:** file output, rotation limits, and redaction of recognized
   sensitive values.
+
+The unit suite also verifies a signed bearer token through
+`app.Group(...).Get(path, app.Filter().Authentication(), handler)`, rejects a
+request without a token before the handler runs, and preserves the existing
+single-handler route calls. Run that focused check with:
+
+```sh
+go test . -run '^TestGroupRouteRunsJWTAuthenticationMiddleware$' -count=1
+```
+
+Server route-adapter unit tests verify nil server/router, required handlers,
+middleware chain entries, and all route methods fail during registration
+instead of panicking on the first request:
+
+```sh
+go test ./server -run '^TestRouteRegistrationRejectsInvalidInputs$' -count=1
+```
+
+The grouped-route HTTP integration test runs as part of the Filter suite above.
+It uses the in-process Fiber server and does not require an external service.
 
 The separate unit test `TestAppCloseGracefullyShutsDownHTTPServer` checks
 `app.Close()` directly. The helper-process integration test above exercises

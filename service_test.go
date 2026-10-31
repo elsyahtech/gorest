@@ -29,7 +29,6 @@ func TestUseConfiguresDisabledServicesServerAndFilter(t *testing.T) {
 		database.Config{Disable: true, Driver: database.SQLITE},
 		disabledRedis,
 		serverConfig,
-		filter.Config{},
 	); got != app {
 		t.Fatal("Use() did not return the application")
 	}
@@ -50,7 +49,7 @@ func TestUseConfiguresDisabledServicesServerAndFilter(t *testing.T) {
 	filterConfig := &filter.Config{SignatureKey: &secret}
 	app.Use(filterConfig)
 	if app.filter == nil || app.config.filter == nil || app.config.filter.Issuer != app.config.AppName {
-		t.Fatal("valid pointer filter configuration was not initialized with the application issuer")
+		t.Fatal("valid pointer filter configuration was not applied with the application issuer")
 	}
 	if len(app.modules) != 3 || app.modules[2] != "Filter" {
 		t.Fatalf("registered modules = %#v, want Logger, Server, and Filter", app.modules)

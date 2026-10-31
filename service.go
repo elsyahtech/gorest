@@ -5,6 +5,7 @@ import (
 	"fmt"
 	golog "log"
 	"slices"
+	"strings"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
@@ -125,18 +126,34 @@ func (app *App) useCaseServer(args []any, idx int) {
 
 func (app *App) useCaseFilter(args []any, idx int) {
 	if argType, filterOk := args[idx].(filter.Config); filterOk {
-		app.filterInit(&argType)
+		app.initializeConfiguredFilter(&argType)
 	} else if argPtr, filterOk := args[idx].(*filter.Config); filterOk {
-		app.filterInit(argPtr)
+		if argPtr == nil {
+			app.filterInit(nil)
+			return
+		}
+		app.initializeConfiguredFilter(argPtr)
+	}
+}
+
+func (app *App) initializeConfiguredFilter(config *filter.Config) {
+	filterConfig := filter.Run(*config)
+	if filterConfig.SignatureKey == nil || strings.TrimSpace(*filterConfig.SignatureKey) == "" {
+		app.abortStartup(errors.New("JWT filter was configured without a signature key"))
+	}
+
+	app.filterInit(&filterConfig)
+	if app.filter == nil {
+		app.abortStartup(errors.New("failed to run JWT filter; check its signing method and token durations"))
 	}
 }
 
 //nolint:unparam
 func (app *App) routerRegistry(args ...RouterRegistrar) (*fiber.App, string, error) {
 	if app.server == nil {
-		const message = "ensure that you have run the Server in your app"
+		const message = "Ensure server.Run(...) is registered with app.Use(...) before registering routes."
 
-		return nil, message, errors.New("server has not been run in your app, please run the server")
+		return nil, message, errors.New("server is not running")
 	}
 
 	for _, registrar := range args {

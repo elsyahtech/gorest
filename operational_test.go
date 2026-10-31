@@ -25,7 +25,7 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 			wantBody:   `"redis":"disabled"`,
 		},
 		{
-			name:       "redis not initialized",
+			name:       "redis service not running",
 			redis:      &redis.Config{},
 			wantStatus: http.StatusServiceUnavailable,
 			wantBody:   `"redis":"not_initialized"`,

@@ -264,6 +264,36 @@ func TestAuthenticationRenewsAccessAndContinuesRequestWithValidRefreshOverHTTP(t
 	}
 }
 
+func TestAuthenticationBearerTokenWorksOnGroupedRouteOverHTTP(t *testing.T) {
+	suite := newAuthenticationHTTPSuite(t)
+	accessToken := createSignedTestToken(
+		t,
+		suite.signingKey,
+		"filter-auth-integration",
+		"access",
+		time.Hour,
+	)
+
+	request := httptest.NewRequest(http.MethodGet, "/users/select-all", nil)
+	request.Header.Set("Authorization", "Bearer "+accessToken)
+	response, err := suite.httpServer.SRV.Test(request)
+	if err != nil {
+		t.Fatalf("send grouped route request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("grouped route status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read grouped route response: %v", err)
+	}
+	if got := string(body); got != "access" {
+		t.Fatalf("handler received token type %q, want access", got)
+	}
+}
+
 type authenticationHTTPSuite struct {
 	signingKey string
 	httpServer *server.Server
@@ -287,13 +317,9 @@ func newAuthenticationHTTPSuite(t *testing.T) *authenticationHTTPSuite {
 		}
 	})
 
-	httpServer, _, err := server.New(nil)
-	if err != nil {
-		t.Fatalf("initialize HTTP server: %v", err)
-	}
-	httpServer.Add(
-		[]string{http.MethodGet},
-		"/protected",
+	group := app.Group("/users")
+	group.Get(
+		"/select-all",
 		app.Filter().Authentication(),
 		func(ctx *server.Context) error {
 			detail, ok := ctx.Locals("tokenJWT").(jwtfilter.TokenDetail)
@@ -304,13 +330,13 @@ func newAuthenticationHTTPSuite(t *testing.T) *authenticationHTTPSuite {
 		},
 	)
 
-	return &authenticationHTTPSuite{signingKey: signingKey, httpServer: httpServer}
+	return &authenticationHTTPSuite{signingKey: signingKey, httpServer: group}
 }
 
 func (suite *authenticationHTTPSuite) getProtected(t *testing.T, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
-	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request := httptest.NewRequest(http.MethodGet, "/users/select-all", nil)
 	for _, cookie := range cookies {
 		request.AddCookie(cookie)
 	}

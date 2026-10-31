@@ -2,9 +2,10 @@
 
 GOREST uses JSON Web Tokens (JWTs) for access and refresh tokens. Its optional
 Filter issues these tokens, stores them in `HttpOnly` cookies, and provides
-middleware to authenticate requests. The filter is initialized only when a
+middleware to authenticate requests. The filter is configured only when a
 non-empty `SignatureKey` is configured. Without a key, the filter remains
-disabled.
+disabled by default; applications that enable JWT must provide a valid
+configuration.
 
 ```go
 key := os.Getenv("GOREST_JWT_SIGNATURE_KEY")
@@ -18,9 +19,47 @@ app := gorest.New()
 app.Use(filterConfig)
 ```
 
+## Required startup validation
+
+JWT is optional: creating an application without registering a filter
+configuration leaves JWT disabled. However, passing a filter configuration to
+`app.Use(...)` explicitly requests the JWT filter. If its `SignatureKey` is
+nil or empty, or if the signing method or token durations are invalid, GOREST
+logs the cause, closes running services, and terminates the process with a
+non-zero exit status. `app.Use(...)` does not return an error because its
+existing API is chainable.
+
+Accessing `app.Filter()` while JWT is disabled, or creating authentication
+middleware from a `filter.Filter` that is not running, also aborts startup. This
+makes route setup fail immediately instead of registering middleware that only
+returns an internal server error when a request arrives. A disabled filter is
+reported as “JWT filter is not running”; configure it with `filter.Run(...)`
+and register the result using `app.Use(...)`. Route registrars
+passed to `app.RegisterServices(...)` execute synchronously during registration;
+call that method before `app.Start()` so configuration and middleware errors
+are found before the HTTP listener opens. Configure JWT before registering
+routes that use it:
+
+```go
+key := os.Getenv("GOREST_JWT_SIGNATURE_KEY")
+config := filter.ConfigDefault
+config.SignatureKey = &key
+app.Use(config)
+
+jwtFilter := app.Filter()
+group := app.Group("/orm-queries")
+group.Get("/users/select-all", jwtFilter.Authentication(), hndlr.GetUsersWithAllColumns)
+```
+
+GOREST can validate that a key is present, but cannot determine whether a
+non-empty key is the intended secret. A key mismatch is detected when a token
+signed with a different key is validated. Load the same high-entropy secret
+from a secret manager or environment-specific secret store wherever tokens are
+issued and verified; do not commit it to source control.
+
 Use a high-entropy secret from a secret manager or environment-specific secret
 store. Do not commit it to source control. `SigningMethod` defaults to `HS256`;
-unsupported method names prevent filter initialization.
+unsupported method names prevent the filter from running.
 
 An HTTP handler can issue both tokens with:
 
@@ -43,9 +82,13 @@ cookies; the JWT's own expiration still applies. An empty `CookieDomain`
 creates host-only cookies; set a domain only when sharing cookies across
 subdomains is intended.
 
-`filter.GetClientIP()` follows Fiber's configured client-IP and trusted-proxy
-settings. Do not trust forwarded headers unless the server is configured to
-accept them only from known proxies.
+`filter.GetClientIP()` uses the first valid IP address in `X-Forwarded-For`,
+which supports deployments behind reverse proxies and services such as
+Cloudflare; if the header is absent or invalid, it falls back to Fiber's
+connection IP. Because forwarded headers can be supplied by clients, configure
+the public edge to overwrite or sanitize `X-Forwarded-For` and prevent direct
+untrusted access to the application when using this value for security
+decisions.
 
 ## Authenticating requests
 

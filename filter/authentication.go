@@ -2,7 +2,10 @@ package filter
 
 import (
 	"errors"
+	golog "log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/elsyahtech/gorest/server"
@@ -10,8 +13,16 @@ import (
 )
 
 func (filter *Filter) Authentication() server.Handler {
+	if filter == nil || filter.Config == nil || filter.Config.SignatureKey == nil || strings.TrimSpace(*filter.Config.SignatureKey) == "" {
+		golog.Fatalf("cannot use the filter authentication middleware: JWT filter is not running. Set SignatureKey in filter.Run(...) and register it with app.Use(...) before using authentication middleware.")
+	}
+
+	if filter.JWT == nil || filter.JWT.Method == nil {
+		golog.Fatalf("cannot use the filter authentication middleware: JWT signing method is not configured. Set a supported SigningMethod in filter.Run(...) and register it with app.Use(...).")
+	}
+
 	return func(ctx *server.Context) error {
-		if filter == nil || filter.Config == nil || filter.Config.SignatureKey == nil || *filter.Config.SignatureKey == "" {
+		if filter == nil || filter.Config == nil || filter.Config.SignatureKey == nil || strings.TrimSpace(*filter.Config.SignatureKey) == "" {
 			return ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{
 				errorKey:   "authentication filter is not configured",
 				messageKey: "The server cannot validate authentication tokens",
@@ -89,7 +100,13 @@ func tokenDetailFromClaims(claims map[string]any, tokenString string) (TokenDeta
 	}, nil
 }
 
-// GetClientIP returns the client IP according to Fiber's proxy configuration.
+// GetClientIP returns the first valid address in X-Forwarded-For, falling back
+// to Fiber's connection IP when the header is absent or invalid.
 func GetClientIP(ctx server.Context) string {
+	firstAddress := strings.TrimSpace(strings.Split(ctx.Get("X-Forwarded-For"), ",")[0])
+	if net.ParseIP(firstAddress) != nil {
+		return firstAddress
+	}
+
 	return ctx.IP()
 }
