@@ -61,6 +61,26 @@ const (
 	DatabaseEnabled               = true
 	DefaultMaxOpenConnections     = 50
 	DefaultMaxIdleConnections     = 5
+
+	_id          = "_id"
+	dolarLimit   = "$limit"
+	dolarSkip    = "$skip"
+	dolarProject = "$project"
+	dolarSort    = "$sort"
+	dolarMatch   = "$match"
+	dolarUnwind  = "$unwind"
+	dolar        = "$"
+	dolarId      = "$_id."
+	dolarAnd     = "$and"
+	dolarGroup   = "$group"
+	dolarNe      = "$ne"
+	dolarSum     = "$sum"
+	dolarMin     = "$min"
+	dolarMax     = "$max"
+	dolarCond    = "$cond"
+	dolarExpr    = "$expr"
+	dolarEq      = "$eq"
+	dolarSet     = "$set"
 )
 
 // ===============================================================================================================

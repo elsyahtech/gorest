@@ -1,18 +1,127 @@
 package gorest
 
 import (
+	"context"
+	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/elsyahtech/gorest/database"
 )
 
+func TestNewInitializesApplicationDefaultsAndServices(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	app := New()
+	if app == nil {
+		t.Fatal("New() returned nil")
+	}
+	if app.Name() != DefaultAppName || app.Version() != DefaultVersion || app.Timezone() != DefaultTimezone {
+		t.Fatalf("application defaults = (%q, %q, %q)", app.Name(), app.Version(), app.Timezone())
+	}
+	if app.server == nil || app.log == nil || app.services == nil {
+		t.Fatal("New() did not initialize server, logger, and service registry")
+	}
+	if message, code, err := app.Close(); err != nil {
+		t.Fatalf("close newly initialized application: HTTP %d, %s: %v", code, message, err)
+	}
+}
+
+func TestValidateProductionSQLiteHost(t *testing.T) {
+	tests := []struct {
+		name    string
+		host    string
+		wantErr bool
+	}{
+		{name: "empty", host: ""},
+		{name: "localhost", host: "localhost"},
+		{name: "ipv4 loopback", host: "127.0.0.1"},
+		{name: "ipv6 loopback", host: "::1"},
+		{name: "remote dns", host: "db.internal.example", wantErr: true},
+		{name: "remote ip", host: "10.0.0.4", wantErr: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateProductionSQLiteHost(test.host)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateProductionSQLiteHost(%q) error = %v, wantErr %t", test.host, err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestInsecureProductionApproval(t *testing.T) {
+	originalInput := insecureProductionPromptInput
+	originalOutput := insecureProductionPromptOutput
+	originalInteractive := isInteractiveTerminal
+	t.Cleanup(func() {
+		insecureProductionPromptInput = originalInput
+		insecureProductionPromptOutput = originalOutput
+		isInteractiveTerminal = originalInteractive
+	})
+
+	t.Run("default terminal detection", func(t *testing.T) {
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer reader.Close()
+		defer writer.Close()
+		insecureProductionPromptInput = reader
+		if defaultIsInteractiveTerminal() {
+			t.Fatal("pipe unexpectedly reported as an interactive terminal")
+		}
+	})
+
+	t.Run("explicit top level approval", func(t *testing.T) {
+		app := New(Config{AllowInsecureProduction: true, Environment: Production})
+		approved, err := app.requestInsecureProductionApproval("Redis", false)
+		if err != nil || !approved {
+			t.Fatalf("approval = %t, err = %v", approved, err)
+		}
+	})
+
+	t.Run("headless startup requires approval", func(t *testing.T) {
+		isInteractiveTerminal = func() bool { return false }
+		app := New(Config{Environment: Production})
+		approved, err := app.requestInsecureProductionApproval("Redis", false)
+		if err == nil || approved {
+			t.Fatalf("approval = %t, err = %v; want startup policy error", approved, err)
+		}
+	})
+
+	t.Run("interactive operator can approve", func(t *testing.T) {
+		isInteractiveTerminal = func() bool { return true }
+		insecureProductionPromptInput = strings.NewReader("yes\n")
+		insecureProductionPromptOutput = io.Discard
+		app := New(Config{Environment: Production})
+		approved, err := app.requestInsecureProductionApproval("PostgreSQL database", false)
+		if err != nil || !approved {
+			t.Fatalf("approval = %t, err = %v", approved, err)
+		}
+	})
+
+	t.Run("interactive operator defaults to denial", func(t *testing.T) {
+		isInteractiveTerminal = func() bool { return true }
+		insecureProductionPromptInput = strings.NewReader("\n")
+		insecureProductionPromptOutput = io.Discard
+		app := New(Config{Environment: Production})
+		approved, err := app.requestInsecureProductionApproval("Redis", false)
+		if err == nil || approved {
+			t.Fatalf("approval = %t, err = %v; want denied startup", approved, err)
+		}
+	})
+}
+
 func TestProductionDatabaseTLSWarning(t *testing.T) {
 	tests := []struct {
-		name       string
 		config     *database.Config
-		wantWarn   bool
+		name       string
 		wantReason string
+		wantWarn   bool
 	}{
 		{
 			name: "no database configured",
@@ -20,7 +129,8 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 		{
 			name: "database disabled",
 			config: &database.Config{
-				Driver: database.POSTGRES,
+				Disable: true,
+				Driver:  database.POSTGRES,
 			},
 		},
 		{
@@ -169,14 +279,23 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 			wantReason: "MongoDB TLS is disabled",
 		},
 		{
-			name: "scylla tls unsupported by config field",
+			name: "scylla tls enabled",
 			config: &database.Config{
 				Disable: false,
 				Driver:  database.SCYLLA,
 				TLS:     database.TLSEnabled,
 			},
+			wantWarn: false,
+		},
+		{
+			name: "scylla tls disabled",
+			config: &database.Config{
+				Disable: false,
+				Driver:  database.SCYLLA,
+				TLS:     database.TLSDisabled,
+			},
 			wantWarn:   true,
-			wantReason: "does not configure ScyllaDB transport encryption",
+			wantReason: "ScyllaDB TLS is disabled",
 		},
 	}
 
@@ -190,6 +309,31 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 				t.Errorf("warning = %q, want it to contain %q", warning, test.wantReason)
 			}
 		})
+	}
+}
+
+func TestRetryStartupTransientThenSuccess(t *testing.T) {
+	attempts := 0
+	value, message, err := retryStartup(context.Background(), func(context.Context) (int, string, error) {
+		attempts++
+		if attempts < 3 {
+			return 0, "database is still starting", errors.New("connection refused")
+		}
+		return 42, "", nil
+	})
+	if err != nil || value != 42 || message != "" || attempts != 3 {
+		t.Fatalf("retryStartup() = (%d, %q, %v), attempts=%d", value, message, err, attempts)
+	}
+}
+
+func TestRetryStartupNonTransientFailure(t *testing.T) {
+	attempts := 0
+	_, _, err := retryStartup(context.Background(), func(context.Context) (int, string, error) {
+		attempts++
+		return 0, "certificate guidance", errors.New("certificate signed by unknown authority")
+	})
+	if err == nil || attempts != 1 {
+		t.Fatalf("retryStartup() attempts=%d error=%v, want immediate non-transient failure", attempts, err)
 	}
 }
 

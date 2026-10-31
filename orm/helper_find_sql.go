@@ -253,6 +253,10 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 	valueArgs := req.joinArgs
 	limitVal := orm.LimitVal
 
+	if req.activeDriver == database.SQLSERVER && orm.limitSet && limitVal == 0 {
+		whereParts = append(whereParts, "1 = 0")
+	}
+
 	if len(orm.WhereClauses) > 0 {
 		argIndex := 0
 
@@ -300,7 +304,10 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 	}, nil
 }
 
-func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounter int, valueArgs []any) ([]any, int, error) {
+func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounterParam int, valueArgsParam []any) ([]any, int, error) {
+	argCounter := argCounterParam
+	valueArgs := valueArgsParam
+
 	if len(orm.GroupByClauses) > 0 {
 		orm.safeWriteString(" GROUP BY ")
 		orm.safeWriteString(strings.Join(orm.GroupByClauses, ", "))
@@ -377,6 +384,10 @@ func (orm *ORM) buildLimitOffsetFindSQL(req *structBuildLimitOffsetFindSQL) []an
 }
 
 func (orm *ORM) buildLimitOffsetForSQLSRVInFindSQL(req *structBuildLimitOffsetFindSQL) {
+	if orm.limitSet && req.limitVal == 0 {
+		return
+	}
+
 	if len(orm.OrderByClauses) == 0 {
 		orm.safeWriteString(" ORDER BY (SELECT NULL)")
 	}

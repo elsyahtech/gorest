@@ -26,6 +26,16 @@ func TestRedisReturnsErrorWhenAppHasNoRedisService(t *testing.T) {
 	}
 }
 
+func TestRedisSessionPingReturnsErrorWhenUnavailable(t *testing.T) {
+	var session *RedisSession
+	if err := session.Ping(context.Background()); err == nil {
+		t.Fatal("Ping() error = nil, want unavailable-service error")
+	}
+	if err := (&RedisSession{}).Ping(context.Background()); err == nil {
+		t.Fatal("Ping() error = nil for empty session")
+	}
+}
+
 func TestRedisReturnsErrorForNilApp(t *testing.T) {
 	var app *RedisSession
 

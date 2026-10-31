@@ -89,7 +89,9 @@ func (db *Database) ExecSQL(ctx context.Context, config *Config, query string, a
 		return nil, message, code, err
 	}
 
-	return result, "Data saved successfully", http.StatusOK, nil
+	const message = "Data saved successfully"
+
+	return result, message, http.StatusOK, nil
 }
 
 func (db *Database) QuerySQL(ctx context.Context, config *Config, query string, args ...any) (*sql.Rows, string, int, error) {
@@ -317,14 +319,16 @@ func (db *Database) CreateCollection(
 		// NamespaceExists (code 48): the collection already exists, a client-side conflict.
 		var cmdErr mongo.CommandError
 
-		if errors.As(err, &cmdErr) && cmdErr.Code == 48 {
-			message, code, err := setError(
-				"Collection already exists, use a different name or skip creation",
-				fmt.Errorf("createCollection: %w", err),
-				http.StatusConflict,
-			)
+		if errors.As(err, &cmdErr) {
+			if cmdErr.Code == 48 {
+				message, code, err := setError(
+					"Collection already exists, use a different name or skip creation",
+					fmt.Errorf("createCollection: %w", err),
+					http.StatusConflict,
+				)
 
-			return message, code, err
+				return message, code, err
+			}
 		}
 
 		message, code, err := setError(
@@ -341,35 +345,37 @@ func (db *Database) CreateCollection(
 // ========================================================================================================
 // SCYLLA
 // ========================================================================================================.
-func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, args ...any) (string, int, error) {
+func (db *Database) validateScyllaAdapter(ctx context.Context, config *Config) (string, int, error) {
 	if db == nil || config == nil {
-		message, code, err := setError(
+		return setError(
 			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
 				"and the application must be running SCYLLA",
 			errors.New("database service is not running"),
 			http.StatusServiceUnavailable,
 		)
-
-		return message, code, err
 	}
 
 	if db.Scylla == nil {
-		message, code, err := setError(
+		return setError(
 			"Ensure that your application running use the SCYLLA",
 			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
 			http.StatusServiceUnavailable,
 		)
-
-		return message, code, err
 	}
 
 	if ctx == nil {
-		message, code, err := setError(
+		return setError(
 			"Ensure the context is not empty.",
 			errors.New("context is empty"),
 			http.StatusBadRequest,
 		)
+	}
 
+	return "", http.StatusOK, nil
+}
+
+func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, args ...any) (string, int, error) {
+	if message, code, err := db.validateScyllaAdapter(ctx, config); err != nil {
 		return message, code, err
 	}
 
@@ -398,34 +404,7 @@ func (db *Database) ExecCQL(ctx context.Context, config *Config, query string, a
 }
 
 func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, args ...any) (*gocql.Iter, string, int, error) {
-	if db == nil || config == nil {
-		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
-				"and the application must be running SCYLLA",
-			errors.New("database service is not running"),
-			http.StatusServiceUnavailable,
-		)
-
-		return nil, message, code, err
-	}
-
-	if db.Scylla == nil {
-		message, code, err := setError(
-			"Ensure that your application running use the SCYLLA",
-			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
-			http.StatusServiceUnavailable,
-		)
-
-		return nil, message, code, err
-	}
-
-	if ctx == nil {
-		message, code, err := setError(
-			"Ensure the context is not empty.",
-			errors.New("context is empty"),
-			http.StatusBadRequest,
-		)
-
+	if message, code, err := db.validateScyllaAdapter(ctx, config); err != nil {
 		return nil, message, code, err
 	}
 
@@ -443,34 +422,7 @@ func (db *Database) QueryCQL(ctx context.Context, config *Config, query string, 
 }
 
 func (db *Database) MapScanCAS(ctx context.Context, config *Config, query string, args ...any) (applied bool, troubleshoot string, httpCode int, err error) {
-	if db == nil || config == nil {
-		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
-				"and the application must be running SCYLLA",
-			errors.New("database service is not running"),
-			http.StatusServiceUnavailable,
-		)
-
-		return false, message, code, err
-	}
-
-	if db.Scylla == nil {
-		message, code, err := setError(
-			"Ensure that your application running use the SCYLLA",
-			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
-			http.StatusServiceUnavailable,
-		)
-
-		return false, message, code, err
-	}
-
-	if ctx == nil {
-		message, code, err := setError(
-			"Ensure the context is not empty.",
-			errors.New("context is empty"),
-			http.StatusBadRequest,
-		)
-
+	if message, code, err := db.validateScyllaAdapter(ctx, config); err != nil {
 		return false, message, code, err
 	}
 
@@ -502,34 +454,7 @@ func (db *Database) MapScanCAS(ctx context.Context, config *Config, query string
 }
 
 func (db *Database) ExecBatchCQL(ctx context.Context, config *Config, queries []string, batchArgs [][]any) (string, int, error) {
-	if db == nil || config == nil {
-		message, code, err := setError(
-			"Ensure that you have run database.Run(database.Config{...}) in your app, "+
-				"and the application must be running SCYLLA",
-			errors.New("database service is not running"),
-			http.StatusServiceUnavailable,
-		)
-
-		return message, code, err
-	}
-
-	if db.Scylla == nil {
-		message, code, err := setError(
-			"Ensure that your application running use the SCYLLA",
-			fmt.Errorf("scylla database is not running. Your application is currently running on %s", config.Driver),
-			http.StatusServiceUnavailable,
-		)
-
-		return message, code, err
-	}
-
-	if ctx == nil {
-		message, code, err := setError(
-			"Ensure the context is not empty.",
-			errors.New("context is empty"),
-			http.StatusBadRequest,
-		)
-
+	if message, code, err := db.validateScyllaAdapter(ctx, config); err != nil {
 		return message, code, err
 	}
 
@@ -571,6 +496,42 @@ func (db *Database) ExecBatchCQL(ctx context.Context, config *Config, queries []
 	}
 
 	return "Data saved successfully", http.StatusOK, nil
+}
+
+// Ping verifies that the configured database connection is currently usable.
+func (db *Database) Ping(ctx context.Context, cfg *Config) (string, error) {
+	if ctx == nil {
+		return "provide a valid database health-check context", errors.New("database health-check context is nil")
+	}
+	if db == nil || cfg == nil {
+		return "ensure the database module is initialized", errors.New("database service is not running")
+	}
+
+	if cfg.Driver == MONGO {
+		if db.Mongo == nil {
+			return "ensure MongoDB is initialized", errors.New("MongoDB service is not running")
+		}
+		if err := db.Mongo.Ping(ctx, nil); err != nil {
+			return "verify MongoDB connectivity, credentials, TLS, and server availability", err
+		}
+		return "database healthy", nil
+	}
+	if cfg.Driver == SCYLLA {
+		if db.Scylla == nil {
+			return "ensure ScyllaDB is initialized", errors.New("ScyllaDB service is not running")
+		}
+		if err := db.Scylla.Query("SELECT now() FROM system.local").WithContext(ctx).Exec(); err != nil {
+			return "verify ScyllaDB connectivity, credentials, TLS, and server availability", err
+		}
+		return "database healthy", nil
+	}
+	if db.SQL == nil {
+		return "ensure the SQL database is initialized", errors.New("SQL database service is not running")
+	}
+	if err := db.SQL.PingContext(ctx); err != nil {
+		return "verify database connectivity, credentials, TLS, pool availability, and server health", err
+	}
+	return "database healthy", nil
 }
 
 //nolint:revive

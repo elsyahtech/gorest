@@ -8,15 +8,14 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/elsyahtech/gorest/database"
 )
 
 type oracleReturnBind struct {
+	holder      reflect.Value
 	column      string
 	destination int
-	holder      reflect.Value
 }
 
 // updateOracleWithReturn keeps Oracle's RETURNING INTO bind handling isolated
@@ -45,16 +44,16 @@ func (orm *ORM) updateOracleWithReturn(
 			return orm.Error
 		}
 
-		scanned, affected, err := orm.execOracleUpdateReturning(
-			execCtx,
-			tableName,
-			strings.Join(field.setClauses, ", "),
-			strings.Join(where.parts, " AND "),
-			where.args,
-			row,
-			meta,
-			plan,
-		)
+		scanned, affected, err := orm.execOracleUpdateReturning(&structExecOracleUpdateReturning{
+			execCtx:     execCtx,
+			tableName:   tableName,
+			setClause:   strings.Join(field.setClauses, ", "),
+			whereClause: strings.Join(where.parts, " AND "),
+			args:        where.args,
+			inputRow:    row,
+			meta:        meta,
+			plan:        plan,
+		})
 		if err != nil {
 			return err
 		}
@@ -72,23 +71,27 @@ func (orm *ORM) updateOracleWithReturn(
 		return err
 	}
 
+	const message = "Data updated successfully"
+
 	orm.RowsAffected = int64(len(returned))
-	orm.Message = "Data updated successfully"
+	orm.Message = message
 
 	return nil
 }
 
-func (orm *ORM) execOracleUpdateReturning(
-	execCtx context.Context,
-	tableName string,
-	setClause string,
-	whereClause string,
-	args []any,
-	inputRow reflect.Value,
-	meta columnMetaData,
-	plan *returnPlan,
-) (reflect.Value, bool, error) {
-	binds, err := buildOracleReturnBinds(plan, inputRow, meta)
+type structExecOracleUpdateReturning struct {
+	execCtx     context.Context
+	plan        *returnPlan
+	inputRow    reflect.Value
+	tableName   string
+	setClause   string
+	whereClause string
+	meta        columnMetaData
+	args        []any
+}
+
+func (orm *ORM) execOracleUpdateReturning(req *structExecOracleUpdateReturning) (reflect.Value, bool, error) {
+	binds, err := buildOracleReturnBinds(req.plan, req.inputRow, req.meta)
 	if err != nil {
 		return reflect.Value{}, false, orm.setError(
 			"Oracle Return() requires each returned column to map to a supported Go field type.",
@@ -100,22 +103,22 @@ func (orm *ORM) execOracleUpdateReturning(
 	placeholders := make([]string, 0, len(binds))
 
 	for idx := range binds {
-		placeholders = append(placeholders, getPlaceholder(database.ORACLE, len(args)+idx+1))
-		args = append(args, sql.Out{Dest: binds[idx].holder.Addr().Interface()})
+		placeholders = append(placeholders, getPlaceholder(database.ORACLE, len(req.args)+idx+1))
+		req.args = append(req.args, sql.Out{Dest: binds[idx].holder.Addr().Interface()})
 	}
 
 	query := fmt.Sprintf(
 		"UPDATE %s SET %s WHERE %s RETURNING %s INTO %s",
-		tableName,
-		setClause,
-		whereClause,
-		strings.Join(plan.queryCols, ", "),
+		req.tableName,
+		req.setClause,
+		req.whereClause,
+		strings.Join(req.plan.queryCols, ", "),
 		strings.Join(placeholders, ", "),
 	)
 
-	args = orm.sanitizeArgs(args)
+	req.args = orm.sanitizeArgs(req.args)
 
-	result, _, _, err := orm.Database.ExecSQL(execCtx, orm.DatabaseConfig, query, args...)
+	result, _, _, err := orm.Database.ExecSQL(req.execCtx, orm.DatabaseConfig, query, req.args...)
 	if err != nil {
 		return reflect.Value{}, false, orm.setDatabaseOperationError("Update return", err)
 	}
@@ -139,7 +142,7 @@ func (orm *ORM) execOracleUpdateReturning(
 		return reflect.Value{}, false, nil
 	}
 
-	returned := reflect.New(plan.destType).Elem()
+	returned := reflect.New(req.plan.destType).Elem()
 
 	for _, bind := range binds {
 		if bind.destination < 0 {
@@ -155,82 +158,4 @@ func (orm *ORM) execOracleUpdateReturning(
 	}
 
 	return returned, true, nil
-}
-
-func buildOracleReturnBinds(plan *returnPlan, inputRow reflect.Value, meta columnMetaData) ([]oracleReturnBind, error) {
-	_, destinationFields := taggedColumns(plan.destType)
-	inputType := inputRow.Type()
-	binds := make([]oracleReturnBind, 0, len(plan.queryCols))
-
-	for _, column := range plan.queryCols {
-		destinationIdx, hasDestination := destinationFields[strings.ToLower(column)]
-
-		var fieldType reflect.Type
-
-		if hasDestination {
-			fieldType = plan.destType.Field(destinationIdx).Type
-		} else {
-			inputIdx, exists := meta.allColumnPrimaryKeyIdx[column]
-			if !exists {
-				for inputColumn, idx := range meta.allColumnPrimaryKeyIdx {
-					if strings.EqualFold(inputColumn, column) {
-						inputIdx, exists = idx, true
-						break
-					}
-				}
-			}
-
-			if !exists {
-				return nil, fmt.Errorf("return column %q has no matching tagged field", column)
-			}
-
-			fieldType = inputType.Field(inputIdx).Type
-		}
-
-		for fieldType.Kind() == reflect.Pointer {
-			fieldType = fieldType.Elem()
-		}
-
-		if !isOracleOutputBindType(fieldType) {
-			return nil, fmt.Errorf("return column %q has unsupported output type %s", column, fieldType)
-		}
-
-		binds = append(binds, oracleReturnBind{
-			column:      column,
-			destination: destinationIdxOrMinusOne(destinationIdx, hasDestination),
-			holder:      reflect.New(fieldType).Elem(),
-		})
-	}
-
-	if len(binds) == 0 {
-		return nil, errors.New("Return() has no columns to bind")
-	}
-
-	return binds, nil
-}
-
-func destinationIdxOrMinusOne(idx int, ok bool) int {
-	if !ok {
-		return -1
-	}
-
-	return idx
-}
-
-func isOracleOutputBindType(typ reflect.Type) bool {
-	if typ == reflect.TypeOf((*time.Time)(nil)).Elem() {
-		return true
-	}
-
-	switch typ.Kind() {
-	case reflect.String, reflect.Bool,
-		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
-		return true
-	case reflect.Slice:
-		return typ.Elem().Kind() == reflect.Uint8
-	default:
-		return false
-	}
 }

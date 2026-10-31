@@ -50,8 +50,8 @@ func TestDatabaseOperationErrorsHaveConsistentDriverContract(t *testing.T) {
 
 func TestDatabaseOperationErrorHTTPClassification(t *testing.T) {
 	tests := []struct {
-		name string
 		err  error
+		name string
 		want int
 	}{
 		{
@@ -106,5 +106,41 @@ func TestORMOperationWithoutDatabaseReturnsServiceUnavailable(t *testing.T) {
 	query := (&ORM{}).Create(&struct{}{})
 	if query.Error == nil || query.HTTPCode != http.StatusServiceUnavailable {
 		t.Fatalf("Create() without database = HTTP %d, error %v; want HTTP 503 and error", query.HTTPCode, query.Error)
+	}
+}
+
+func TestSetScyllaFindErrorClassifiesNilInvalidAndDriverErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code []int
+		want int
+	}{
+		{name: "nil error", want: http.StatusInternalServerError},
+		{
+			name: "invalid Scylla query",
+			err:  errors.New("SELECT DISTINCT queries must only request partition key columns"),
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "explicit bad request",
+			err:  errors.New("invalid input"),
+			code: []int{http.StatusBadRequest},
+			want: http.StatusBadRequest,
+		},
+		{name: "driver error", err: errors.New("connection failed"), want: http.StatusInternalServerError},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			query := &ORM{DatabaseConfig: &database.Config{Driver: database.SCYLLA}}
+			err := query.setScyllaFindError("Scylla Find failed", test.err, test.code...)
+			if query.HTTPCode != test.want {
+				t.Fatalf("HTTP status = %d, want %d", query.HTTPCode, test.want)
+			}
+			if (err != nil) != (test.err != nil) {
+				t.Fatalf("setScyllaFindError() error = %v, want underlying nil state %t", err, test.err != nil)
+			}
+		})
 	}
 }

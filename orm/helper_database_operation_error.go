@@ -68,45 +68,15 @@ func (orm *ORM) setDatabaseOperationErrorKind(
 }
 
 func classifyDatabaseOperationError(driverName string, err error) (databaseOperationErrorKind, int) {
-	if database.IsDuplicateKeyError(err) || mongo.IsDuplicateKeyError(err) || isDuplicateRequestValueError(err) {
+	if isConflictError(err) {
 		return databaseConflictError, http.StatusConflict
 	}
 
-	if errors.Is(err, context.DeadlineExceeded) || mongo.IsTimeout(err) {
-		return databaseTimeoutError, http.StatusGatewayTimeout
-	}
-	if isDriverTimeoutError(driverName, err) {
+	if isTimeoutError(driverName, err) {
 		return databaseTimeoutError, http.StatusGatewayTimeout
 	}
 
-	var (
-		scyllaWriteTimeout *gocql.RequestErrWriteTimeout
-		scyllaReadTimeout  *gocql.RequestErrReadTimeout
-	)
-
-	if errors.As(err, &scyllaWriteTimeout) || errors.As(err, &scyllaReadTimeout) {
-		return databaseTimeoutError, http.StatusGatewayTimeout
-	}
-
-	var scyllaUnavailable *gocql.RequestErrUnavailable
-
-	if errors.As(err, &scyllaUnavailable) {
-		return databaseUnavailableError, http.StatusServiceUnavailable
-	}
-
-	var networkErr net.Error
-	if errors.As(err, &networkErr) {
-		if networkErr.Timeout() {
-			return databaseTimeoutError, http.StatusGatewayTimeout
-		}
-
-		return databaseUnavailableError, http.StatusServiceUnavailable
-	}
-
-	if errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone) {
-		return databaseUnavailableError, http.StatusServiceUnavailable
-	}
-	if isDriverUnavailableError(driverName, err) {
+	if isUnavailableError(driverName, err) {
 		return databaseUnavailableError, http.StatusServiceUnavailable
 	}
 
@@ -117,6 +87,60 @@ func classifyDatabaseOperationError(driverName string, err error) (databaseOpera
 	return databaseExecutionError, http.StatusInternalServerError
 }
 
+func isConflictError(err error) bool {
+	return database.IsDuplicateKeyError(err) ||
+		mongo.IsDuplicateKeyError(err) ||
+		isDuplicateRequestValueError(err)
+}
+
+func isTimeoutError(driverName string, err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || mongo.IsTimeout(err) {
+		return true
+	}
+
+	if isDriverTimeoutError(driverName, err) {
+		return true
+	}
+
+	var (
+		scyllaWriteTimeout *gocql.RequestErrWriteTimeout
+		scyllaReadTimeout  *gocql.RequestErrReadTimeout
+	)
+	if errors.As(err, &scyllaWriteTimeout) || errors.As(err, &scyllaReadTimeout) {
+		return true
+	}
+
+	var networkErr net.Error
+	if errors.As(err, &networkErr) && networkErr.Timeout() {
+		return true
+	}
+
+	return false
+}
+
+func isUnavailableError(driverName string, err error) bool {
+	var scyllaUnavailable *gocql.RequestErrUnavailable
+	if errors.As(err, &scyllaUnavailable) {
+		return true
+	}
+
+	var networkErr net.Error
+
+	if errors.As(err, &networkErr) && !networkErr.Timeout() {
+		return true
+	}
+
+	if errors.Is(err, driver.ErrBadConn) || errors.Is(err, sql.ErrConnDone) {
+		return true
+	}
+
+	if isDriverUnavailableError(driverName, err) {
+		return true
+	}
+
+	return false
+}
+
 func isDriverTimeoutError(driverName string, err error) bool {
 	switch driverName {
 	case database.ORACLE:
@@ -125,40 +149,86 @@ func isDriverTimeoutError(driverName string, err error) bool {
 		}
 	case database.MYSQL:
 		var mysqlErr *mysql.MySQLError
-		return errors.As(err, &mysqlErr) && (mysqlErr.Number == 1205 || mysqlErr.Number == 3024)
+
+		if !errors.As(err, &mysqlErr) {
+			return false
+		}
+
+		return mysqlErr.Number == 1205 || mysqlErr.Number == 3024
 	case database.POSTGRES:
 		var postgresErr *pq.Error
-		return errors.As(err, &postgresErr) && postgresErr.Code == "57014"
+
+		if !errors.As(err, &postgresErr) {
+			return false
+		}
+
+		return postgresErr.Code == "57014"
 	case database.SQLSERVER:
 		var sqlServerErr interface{ SQLErrorNumber() int32 }
+
 		return errors.As(err, &sqlServerErr) && (sqlServerErr.SQLErrorNumber() == -2 || sqlServerErr.SQLErrorNumber() == 1222)
+	default:
 	}
+
 	return false
 }
 
 func isDriverUnavailableError(driverName string, err error) bool {
 	switch driverName {
 	case database.ORACLE:
-		if oracleErr, ok := godror.AsOraErr(err); ok {
-			code := oracleErr.Code()
-			return code == 3113 || code == 3114 || code >= 12500 && code <= 12599
-		}
+		return isOracleUnavailableError(err)
 	case database.MYSQL:
-		var mysqlErr *mysql.MySQLError
-		return errors.As(err, &mysqlErr) && (mysqlErr.Number == 2002 || mysqlErr.Number == 2003 || mysqlErr.Number == 2006 || mysqlErr.Number == 2013)
+		return isMySQLUnavailableError(err)
 	case database.POSTGRES:
-		var postgresErr *pq.Error
-		return errors.As(err, &postgresErr) && strings.HasPrefix(string(postgresErr.Code), "08")
+		return isPostgresUnavailableError(err)
 	case database.SQLSERVER:
-		var sqlServerErr interface{ SQLErrorNumber() int32 }
-		if errors.As(err, &sqlServerErr) {
-			switch sqlServerErr.SQLErrorNumber() {
-			case 53, 64, 233, 10053, 10054, 10060:
-				return true
-			}
-		}
+		return isSQLServerUnavailableError(err)
+	default:
+		return false
 	}
-	return false
+}
+
+func isOracleUnavailableError(err error) bool {
+	oracleErr, ok := godror.AsOraErr(err)
+	if !ok {
+		return false
+	}
+
+	code := oracleErr.Code()
+
+	return code == 3113 || code == 3114 || code >= 12500 && code <= 12599
+}
+
+func isMySQLUnavailableError(err error) bool {
+	var mysqlErr *mysql.MySQLError
+
+	if !errors.As(err, &mysqlErr) {
+		return false
+	}
+
+	return mysqlErr.Number == 2002 || mysqlErr.Number == 2003 ||
+		mysqlErr.Number == 2006 || mysqlErr.Number == 2013
+}
+
+func isPostgresUnavailableError(err error) bool {
+	var postgresErr *pq.Error
+
+	return errors.As(err, &postgresErr) && strings.HasPrefix(string(postgresErr.Code), "08")
+}
+
+func isSQLServerUnavailableError(err error) bool {
+	var sqlServerErr interface{ SQLErrorNumber() int32 }
+
+	if !errors.As(err, &sqlServerErr) {
+		return false
+	}
+
+	switch sqlServerErr.SQLErrorNumber() {
+	case 53, 64, 233, 10053, 10054, 10060:
+		return true
+	default:
+		return false
+	}
 }
 
 // Some databases and application triggers report request-level unique-value
@@ -169,6 +239,7 @@ func isDuplicateRequestValueError(err error) bool {
 	}
 
 	message := strings.ToLower(err.Error())
+
 	return strings.Contains(message, "duplicate email in request") ||
 		strings.Contains(message, "duplicate key") ||
 		strings.Contains(message, "unique constraint") ||
@@ -185,11 +256,14 @@ func databaseTroubleshootingMessage(kind databaseOperationErrorKind) string {
 		return "The database is unavailable. Check that the database service is running and reachable."
 	case databaseInvalidQuery:
 		return "The database rejected the query syntax or requested operation. Check the query clauses and supported database features."
-	default:
+	case databaseExecutionError:
 		return "The database operation could not be completed. Check database connectivity, permissions, schema, query syntax, and data types."
 	}
+
+	return "The database operation could not be completed. Check database connectivity, permissions, schema, query syntax, and data types."
 }
 
+//nolint:revive,goconst
 func databaseErrorReference(driverName string, kind databaseOperationErrorKind) string {
 	refs := map[string]map[databaseOperationErrorKind]string{
 		database.ORACLE: {
@@ -247,5 +321,6 @@ func databaseErrorReference(driverName string, kind databaseOperationErrorKind) 
 			return reference
 		}
 	}
+
 	return "https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract"
 }

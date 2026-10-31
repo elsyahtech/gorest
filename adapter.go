@@ -12,6 +12,7 @@ import (
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/filter"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/orm"
 	gorestredis "github.com/elsyahtech/gorest/redis"
@@ -57,6 +58,14 @@ func (app *App) Database() *DBSession {
 		database: app.database,
 		config:   app.config.database,
 	}
+}
+
+// Ping verifies database availability from the application-facing session.
+func (session *DBSession) Ping(ctx context.Context) (string, error) {
+	if session == nil || session.database == nil {
+		return "ensure the database module is initialized", errors.New("database service is not running")
+	}
+	return session.database.Ping(ctx, session.config)
 }
 
 // GetDBConfig is a getter for the database configuration used by the application,
@@ -254,6 +263,23 @@ func (dbSession *DBSession) ExecCQL(ctx context.Context, query string, args ...a
 // QueryCQL executes a CQL query (typically SELECT) and returns an iterator over the resulting rows.
 // The caller must close the returned *gocql.Iter (usually with defer iter.Close()),
 // and check the error returned by Close after iterating.
+// ExecBatchCQL executes multiple CQL statements with their corresponding arguments.
+func (dbSession *DBSession) ExecBatchCQL(ctx context.Context, queries []string, batchArgs [][]any) (string, int, error) {
+	if dbSession == nil || dbSession.database == nil {
+		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+				"To use ScyllaDB, the application must be configured with the SCYLLA driver",
+			http.StatusServiceUnavailable,
+			errors.New("database service is not running")
+	}
+
+	message, httpCode, err := dbSession.database.ExecBatchCQL(ctx, dbSession.config, queries, batchArgs)
+	if err != nil {
+		return message, httpCode, fmt.Errorf("%w", err)
+	}
+
+	return message, httpCode, nil
+}
+
 func (dbSession *DBSession) QueryCQL(ctx context.Context, query string, args ...any) (*gocql.Iter, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
@@ -388,27 +414,7 @@ type QueryBuilderMongo func(ctx context.Context, client *mongo.Client) error
 // needs direct raw MongoDB operations.
 // Prefer the built-in helpers (MongoCollection, DecodeMongoCursor, etc.) when possible.
 func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) (string, int, error) {
-	if dbSession == nil || dbSession.config == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
-				"and the application must be running MONGO",
-			http.StatusServiceUnavailable, errors.New("database service is not running")
-	}
-	if ctx == nil || fn == nil {
-		return "Provide a non-nil context and MongoDB query callback.", http.StatusBadRequest,
-			errors.New("rawQueryMongo: context or callback is nil")
-	}
-
-	if dbSession.database.Mongo == nil {
-		return "Ensure that your application running use the MONGO",
-			http.StatusServiceUnavailable, fmt.Errorf("mongo database is not running. Your application is currently running on %s", dbSession.config.Driver)
-	}
-
-	if err := fn(ctx, dbSession.database.Mongo); err != nil {
-		return "Check the MongoDB operation, collection permissions, and document/query values.",
-			http.StatusInternalServerError, fmt.Errorf("rawQueryMongo: %w", err)
-	}
-
-	return "", http.StatusOK, nil
+	return runRawQuery(ctx, dbSession, mongoRawQueryAdapter{callback: fn})
 }
 
 // QueryBuilderScylla is a function that receives the ScyllaDB session and runs queries on it directly,
@@ -420,24 +426,80 @@ type QueryBuilderScylla func(ctx context.Context, session *gocql.Session) error
 // where the built-in helpers are not enough.
 // Prefer ExecCQL, QueryCQL, and ScanCQL when possible.
 func (dbSession *DBSession) RawQueryScylla(ctx context.Context, fn QueryBuilderScylla) (string, int, error) {
-	if dbSession == nil || dbSession.config == nil || dbSession.database == nil {
+	return runRawQuery(ctx, dbSession, scyllaRawQueryAdapter{callback: fn})
+}
+
+type rawQueryAdapter interface {
+	driverName() string
+	driverDisplayName() string
+	databaseName() string
+	methodName() string
+	callbackErrorMessage() string
+	callbackIsNil() bool
+	adapterIsAvailable(*database.Database) bool
+	run(context.Context, *database.Database) error
+}
+
+type mongoRawQueryAdapter struct {
+	callback QueryBuilderMongo
+}
+
+func (mongoRawQueryAdapter) driverName() string        { return "MONGO" }
+func (mongoRawQueryAdapter) driverDisplayName() string { return "MongoDB" }
+func (mongoRawQueryAdapter) databaseName() string      { return "mongo" }
+func (mongoRawQueryAdapter) methodName() string        { return "rawQueryMongo" }
+func (mongoRawQueryAdapter) callbackErrorMessage() string {
+	return "Check the MongoDB operation, collection permissions, and document/query values."
+}
+func (adapter mongoRawQueryAdapter) callbackIsNil() bool { return adapter.callback == nil }
+func (mongoRawQueryAdapter) adapterIsAvailable(db *database.Database) bool {
+	return db.Mongo != nil
+}
+func (adapter mongoRawQueryAdapter) run(ctx context.Context, db *database.Database) error {
+	return adapter.callback(ctx, db.Mongo)
+}
+
+type scyllaRawQueryAdapter struct {
+	callback QueryBuilderScylla
+}
+
+func (scyllaRawQueryAdapter) driverName() string        { return "SCYLLA" }
+func (scyllaRawQueryAdapter) driverDisplayName() string { return "ScyllaDB" }
+func (scyllaRawQueryAdapter) databaseName() string      { return "scylla" }
+func (scyllaRawQueryAdapter) methodName() string        { return "rawQueryScylla" }
+func (scyllaRawQueryAdapter) callbackErrorMessage() string {
+	return "Check the CQL statement, table schema, permissions, and ScyllaDB connectivity."
+}
+func (adapter scyllaRawQueryAdapter) callbackIsNil() bool { return adapter.callback == nil }
+func (scyllaRawQueryAdapter) adapterIsAvailable(db *database.Database) bool {
+	return db.Scylla != nil
+}
+func (adapter scyllaRawQueryAdapter) run(ctx context.Context, db *database.Database) error {
+	return adapter.callback(ctx, db.Scylla)
+}
+
+func runRawQuery(ctx context.Context, session *DBSession, adapter rawQueryAdapter) (string, int, error) {
+	if session == nil || session.config == nil || session.database == nil {
 		return "Ensure that you have run database.Run(database.Config{...}) in your app, " +
-				"and the application must be running SCYLLA",
+				"and the application must be running " + adapter.driverName(),
 			http.StatusServiceUnavailable, errors.New("database service is not running")
 	}
-	if ctx == nil || fn == nil {
-		return "Provide a non-nil context and ScyllaDB query callback.", http.StatusBadRequest,
-			errors.New("rawQueryScylla: context or callback is nil")
+
+	if ctx == nil || adapter.callbackIsNil() {
+		return "Provide a non-nil context and " + adapter.driverDisplayName() + " query callback.", http.StatusBadRequest,
+			fmt.Errorf("%s: context or callback is nil", adapter.methodName())
 	}
 
-	if dbSession.database.Scylla == nil {
-		return "Ensure that your application running use the SCYLLA",
-			http.StatusServiceUnavailable, fmt.Errorf("scylla database is not running. Your application is currently running on %s", dbSession.config.Driver)
+	if !adapter.adapterIsAvailable(session.database) {
+		return "Ensure that your application running use the " + adapter.driverName(),
+			http.StatusServiceUnavailable, fmt.Errorf(
+				"%s database is not running. Your application is currently running on %s",
+				adapter.databaseName(), session.config.Driver,
+			)
 	}
 
-	if err := fn(ctx, dbSession.database.Scylla); err != nil {
-		return "Check the CQL statement, table schema, permissions, and ScyllaDB connectivity.",
-			http.StatusInternalServerError, fmt.Errorf("rawQueryScylla: %w", err)
+	if err := adapter.run(ctx, session.database); err != nil {
+		return adapter.callbackErrorMessage(), http.StatusInternalServerError, fmt.Errorf("%s: %w", adapter.methodName(), err)
 	}
 
 	return "", http.StatusOK, nil
@@ -460,32 +522,33 @@ func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string,
 // 503 if the database service is unavailable, and 500 if the driver cannot start it.
 func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return nil, "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusServiceUnavailable,
-			errors.New("database service is not running")
+		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+			"To use ORM, the application must use one of the following databases: " +
+			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+
+		return nil, message, http.StatusServiceUnavailable, errors.New("database service is not running")
 	}
 
 	if dbSession.config == nil {
-		return nil, "Ensure that the database configuration is available.",
-			http.StatusServiceUnavailable,
-			errors.New("database configuration is not running")
+		const message = "Ensure that the database configuration is available."
+
+		return nil, message, http.StatusServiceUnavailable, errors.New("database configuration is not running")
 	}
 
 	if ctx == nil {
-		return nil, "Ensure the context is not empty.",
-			http.StatusBadRequest,
-			errors.New("context is empty")
+		const message = "Ensure the context is not empty."
+
+		return nil, message, http.StatusBadRequest, errors.New("context is empty")
 	}
 
 	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
 		return dbSession, "", http.StatusOK, nil
 	}
 
-	txCtx := ctx
-
-	var cancel context.CancelFunc
+	var (
+		txCtx  context.Context
+		cancel context.CancelFunc
+	)
 
 	if dbSession.config.Timeout > 0 {
 		txCtx, cancel = context.WithTimeout(ctx, dbSession.config.Timeout)
@@ -509,61 +572,49 @@ func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxO
 // Rollback aborts the active transaction, discarding all changes made since BeginTx.
 // Returns 400 Bad Request if there is no active transaction or it has already been finalized, and 500 Internal Server Error if rollback fails.
 func (dbSession *DBSession) Rollback() (string, int, error) {
-	if dbSession == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusServiceUnavailable,
-			errors.New("database service is not running")
-	}
-	if dbSession.config == nil {
-		return "Ensure that the database configuration is available.", http.StatusServiceUnavailable,
-			errors.New("rollback: database configuration is not available")
-	}
-
-	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
-		return "", http.StatusOK, nil
-	}
-
-	if dbSession.database.Tx == nil {
-		return "Ensure that a database transaction has been properly started before attempting a rollback",
-			http.StatusBadRequest,
-			errors.New("rollback: no active transaction to rollback")
-	}
-	if !dbSession.txDone.CompareAndSwap(false, true) {
-		return "The transaction has already been committed or rolled back.", http.StatusBadRequest,
-			errors.New("rollback: transaction is already finished")
-	}
-
-	err := dbSession.database.Tx.Rollback()
-
-	if dbSession.txCancel != nil {
-		dbSession.txCancel()
-	}
-
-	if err != nil {
-		return "Ensure the database connection is healthy and the transaction is not already closed or committed",
-			http.StatusInternalServerError,
-			fmt.Errorf("rollback: %w", err)
-	}
-
-	return "Transaction rolled back successfully", http.StatusOK, nil
+	return dbSession.finalizeTransaction(&structFinalizeTransaction{
+		operation:        "rollback",
+		noTransaction:    "Ensure that a database transaction has been properly started before attempting a rollback",
+		operationFailure: "Ensure the database connection is healthy and the transaction is not already closed or committed",
+		success:          "Transaction rolled back successfully",
+		finish:           (*sql.Tx).Rollback,
+	})
 }
 
 // Commit saves all changes made in the active transaction.
 // Returns 400 Bad Request if there is no active transaction or it has already been finalized, and 500 Internal Server Error if commit fails.
 // After Commit, the transaction is finished and Rollback has nothing left to undo.
 func (dbSession *DBSession) Commit() (string, int, error) {
+	return dbSession.finalizeTransaction(&structFinalizeTransaction{
+		operation:        "commit",
+		noTransaction:    "Ensure that a database transaction has been properly started before attempting a commit",
+		operationFailure: "Ensure the database connection is active and the transaction has not timed out",
+		success:          "Transaction committed successfully",
+		finish:           (*sql.Tx).Commit,
+	})
+}
+
+type structFinalizeTransaction struct {
+	finish           func(*sql.Tx) error
+	operation        string
+	noTransaction    string
+	operationFailure string
+	success          string
+}
+
+func (dbSession *DBSession) finalizeTransaction(req *structFinalizeTransaction) (string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
-		return "Ensure that you have run database.Run(database.Config{...}) in your app. " +
-				"To use ORM, the application must use one of the following databases: " +
-				"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA",
-			http.StatusServiceUnavailable,
-			errors.New("database service is not running")
+		const message = "Ensure that you have run database.Run(database.Config{...}) in your app. " +
+			"To use ORM, the application must use one of the following databases: " +
+			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
+
+		return message, http.StatusServiceUnavailable, errors.New("database service is not running")
 	}
+
 	if dbSession.config == nil {
-		return "Ensure that the database configuration is available.", http.StatusServiceUnavailable,
-			errors.New("commit: database configuration is not available")
+		const message = "Ensure that the database configuration is available."
+
+		return message, http.StatusServiceUnavailable, fmt.Errorf("%s: database configuration is not available", req.operation)
 	}
 
 	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
@@ -571,35 +622,34 @@ func (dbSession *DBSession) Commit() (string, int, error) {
 	}
 
 	if dbSession.database.Tx == nil {
-		return "Ensure that a database transaction has been properly started before attempting a commit",
-			http.StatusBadRequest,
-			errors.New("commit: no active transaction to commit")
-	}
-	if !dbSession.txDone.CompareAndSwap(false, true) {
-		return "The transaction has already been committed or rolled back.", http.StatusBadRequest,
-			errors.New("commit: transaction is already finished")
+		return req.noTransaction, http.StatusBadRequest, fmt.Errorf("%s: no active transaction to %s", req.operation, req.operation)
 	}
 
-	err := dbSession.database.Tx.Commit()
+	if !dbSession.txDone.CompareAndSwap(false, true) {
+		const message = "The transaction has already been committed or rolled back."
+
+		return message, http.StatusBadRequest, fmt.Errorf("%s: transaction is already finished", req.operation)
+	}
+
+	err := req.finish(dbSession.database.Tx)
 
 	if dbSession.txCancel != nil {
 		dbSession.txCancel()
 	}
 
 	if err != nil {
-		return "Ensure the database connection is active and the transaction has not timed out",
-			http.StatusInternalServerError,
-			fmt.Errorf("commit: %w", err)
+		return req.operationFailure, http.StatusInternalServerError, fmt.Errorf("%s: %w", req.operation, err)
 	}
 
-	return "Transaction committed successfully", http.StatusOK, nil
+	return req.success, http.StatusOK, nil
 }
 
-// Close shuts down all application services
+// Close shuts down all application services.
 func (app *App) Close() (string, int, error) {
 	if app == nil {
-		return "Application is not initialized", http.StatusBadRequest,
-			errors.New("close: app is nil")
+		const message = "Application is not initialized"
+
+		return message, http.StatusBadRequest, errors.New("close: app is nil")
 	}
 
 	var (
@@ -615,8 +665,10 @@ func (app *App) Close() (string, int, error) {
 		defer cancel()
 
 		if err != nil {
-			msg := "failed to gracefully shut down HTTP server"
+			const msg = "failed to gracefully shut down HTTP server"
+
 			app.Log(Map{LogFieldKeyError: err}).Error(msg)
+
 			message, httpCode = msg, http.StatusInternalServerError
 
 			errs = append(errs, fmt.Errorf("failed to shut down HTTP server: %w", err))
@@ -635,7 +687,12 @@ func (app *App) Close() (string, int, error) {
 	}
 
 	if app.database != nil {
-		ctx, cancel := app.NewContext(app.config.database.Timeout)
+		timeout := app.config.database.Timeout
+		if timeout <= 0 {
+			timeout = database.DefaultTimeout
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		msg, code, err := app.database.Close(ctx, app.config.database)
@@ -745,6 +802,10 @@ func (app *App) Log(field map[string]any, args ...bool) *zap.Logger {
 // GetRedisConfig is a getter for the Redis configuration used by the application,
 // as set with app.Use(redis.Run(...)).
 func (app *App) GetRedisConfig() gorestredis.Config {
+	if app == nil || app.config.redis == nil {
+		return gorestredis.Config{}
+	}
+
 	return *app.config.redis
 }
 
@@ -764,10 +825,10 @@ func (app *App) Redis() *RedisSession {
 // It returns an error if Redis is not enabled, was not registered, or failed to initialize.
 func (redisSession *RedisSession) QueryRedis() (*redis.Client, string, int, error) {
 	if redisSession == nil || redisSession.redis == nil {
-		return nil, "Ensure that you have run redis.Run(redis.Config{...}) in your app. " +
-				"To use QueryRedis, Redis must be enabled and initialized with app.Use(...).",
-			http.StatusServiceUnavailable,
-			errors.New("redis has not been run in your app")
+		const message = "Ensure that you have run redis.Run(redis.Config{...}) in your app. " +
+			"To use QueryRedis, Redis must be enabled and initialized with app.Use(...)."
+
+		return nil, message, http.StatusServiceUnavailable, errors.New("redis has not been run in your app")
 	}
 
 	client, message, httpCode, err := redisSession.redis.Redis()
@@ -778,10 +839,21 @@ func (redisSession *RedisSession) QueryRedis() (*redis.Client, string, int, erro
 	return client, message, httpCode, nil
 }
 
+// Ping verifies Redis availability from the application-facing session.
+func (redisSession *RedisSession) Ping(ctx context.Context) error {
+	if redisSession == nil || redisSession.redis == nil {
+		return errors.New("redis service is not running")
+	}
+
+	return redisSession.redis.Ping(ctx)
+}
+
 // NewContext returns a context for a Redis operation, capped by the configured
 // Redis timeout and any earlier parent deadline. Always call the returned cancel
 // function.
-func (redisSession *RedisSession) NewContext(ctx context.Context) (context.Context, context.CancelFunc) {
+func (redisSession *RedisSession) NewContext(ctxParam context.Context) (context.Context, context.CancelFunc) {
+	ctx := ctxParam
+
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -869,4 +941,21 @@ func (app *App) All(path string, handler server.HandlerFunc) {
 //	api.Get("/users", handler).
 func (app *App) Group(prefix string, handlers ...server.HandlerFunc) *server.Server {
 	return app.server.Group(prefix, handlers...)
+}
+
+func (app *App) Filter() *filter.Filter {
+	if app == nil {
+		return nil
+	}
+
+	return app.filter
+}
+
+func (flt *Filter) CreateToken(ctx Context, tokenID string) (string, int, error) {
+	message, httpCode, err := flt.filter.CreateToken(ctx, tokenID)
+	if err != nil {
+		return message, httpCode, fmt.Errorf("%w", err)
+	}
+
+	return message, httpCode, nil
 } //nolint:revive

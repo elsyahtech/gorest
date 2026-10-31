@@ -19,6 +19,8 @@ func (orm *ORM) OrderBy(args ...string) *ORM {
 
 		if dir != asc && dir != desc {
 			orm.orderByInvalid = true
+
+			//nolint:errcheck,revive
 			orm.setError(
 				"Ensure the OrderBy() direction is ASC or DESC.",
 				fmt.Errorf("OrderBy: invalid direction %q, use ASC or DESC", args[1]),
@@ -31,6 +33,8 @@ func (orm *ORM) OrderBy(args ...string) *ORM {
 		orm.OrderByClauses = append(orm.OrderByClauses, fmt.Sprintf("%s %s", strings.TrimSpace(args[0]), dir))
 	default:
 		orm.orderByInvalid = true
+
+		//nolint:errcheck,revive
 		orm.setError(
 			"Pass at most two arguments to OrderBy(). Use OrderBy(\"column DESC\") or OrderBy(\"column\", \"DESC\").",
 			errors.New("OrderBy: too many arguments"),

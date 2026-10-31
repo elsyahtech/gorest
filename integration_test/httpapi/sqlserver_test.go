@@ -117,6 +117,7 @@ func TestSQLServerHTTPCRUDAndParameterBinding(t *testing.T) {
 		fmt.Sprintf("CREATE TABLE dbo.%s (id NVARCHAR(80) NOT NULL PRIMARY KEY, email NVARCHAR(320) NOT NULL UNIQUE, name NVARCHAR(200) NOT NULL)", table),
 		"DROP TABLE dbo."+table,
 	)
+	internaltest.SQLORMCoverage(t, database.SQLSERVER)
 	internaltest.SQLParallelTransactions(t, database.SQLSERVER)
 }
 

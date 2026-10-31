@@ -2,6 +2,7 @@ package gorest
 
 import (
 	dbimpr "github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/filter"
 	logimpr "github.com/elsyahtech/gorest/log"
 	redisimpr "github.com/elsyahtech/gorest/redis"
 	serverimpr "github.com/elsyahtech/gorest/server"
@@ -19,6 +20,9 @@ type Config struct {
 
 	//nolint:revive
 	database *dbimpr.Config `json:"-"`
+
+	//nolint:revive
+	filter *filter.Config `json:"-"`
 
 	// This function allows to setup app name for the app
 	//
@@ -49,18 +53,25 @@ type Config struct {
 	// This function allows to enable or disable debug mode globally.
 	// Default: false
 	Debug bool `json:"debug"`
+
+	// This function allows to enable or disable insecure production mode.
+	// When set to true, the application will allow insecure connections in production mode.
+	// Default: false
+	AllowInsecureProduction bool `json:"allow_insecure_production"`
 }
 
 var ConfigDefault = Config{
-	log:         &logimpr.ConfigDefault,
-	server:      &serverimpr.ConfigDefault,
-	redis:       nil,
-	database:    nil,
-	AppName:     DefaultAppName,
-	Version:     DefaultVersion,
-	Environment: Development,
-	Timezone:    DefaultTimezone,
-	Debug:       false,
+	log:                     &logimpr.ConfigDefault,
+	server:                  &serverimpr.ConfigDefault,
+	filter:                  &filter.ConfigDefault,
+	redis:                   nil,
+	database:                nil,
+	AppName:                 DefaultAppName,
+	Version:                 DefaultVersion,
+	Environment:             Development,
+	Timezone:                DefaultTimezone,
+	Debug:                   false,
+	AllowInsecureProduction: false,
 }
 
 func configDefault(config ...Config) Config {

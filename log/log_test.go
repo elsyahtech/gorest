@@ -1,16 +1,64 @@
+//nolint:revive,nolintlint // Package log provides logging utilities for the application.
 package log
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+type fallbackStringer string
+
+func (value fallbackStringer) String() string {
+	return string(value)
+}
+
+func TestRunAppliesLogConfigurationDefaults(t *testing.T) {
+	config := Run(Config{LogDir: t.TempDir(), Caller: false})
+	if config.LogDir == "" || config.LogFile != ConfigDefault.LogFile ||
+		config.MaxFileSize != ConfigDefault.MaxFileSize ||
+		config.MaxBackups != ConfigDefault.MaxBackups ||
+		config.MaxAge != ConfigDefault.MaxAge || config.Caller {
+		t.Fatalf("Run() configuration = %#v", config)
+	}
+
+	if got := Run(); got != ConfigDefault {
+		t.Fatalf("Run() without configuration = %#v, want %#v", got, ConfigDefault)
+	}
+}
+
+func TestRedactFallbackHandlesOpaqueAndStringValues(t *testing.T) {
+	type hiddenValue struct {
+		secret string
+	}
+
+	opaque := reflect.ValueOf(hiddenValue{secret: "private"}).Field(0)
+	if got := redactFallback(opaque); got != redactedValue {
+		t.Fatalf("redactFallback(unexported) = %#v, want redacted marker", got)
+	}
+
+	for _, value := range []any{
+		fallbackStringer("password=secret"),
+		errors.New("token=secret"),
+		"visible",
+	} {
+		got := redactFallback(reflect.ValueOf(value))
+		if strings.Contains(fmt.Sprint(got), "secret") {
+			t.Fatalf("redactFallback(%T) exposed a secret: %v", value, got)
+		}
+		if value == "visible" && got != "visible" {
+			t.Fatalf("redactFallback(safe string) = %#v, want visible", got)
+		}
+	}
+}
 
 func TestNewRotatesLogAndAppliesBackupLimit(t *testing.T) {
 	config := Config{
@@ -218,6 +266,28 @@ func TestLoggerRedactsSensitiveFieldsNestedValuesAndMessages(t *testing.T) {
 		if !strings.Contains(text, expected) {
 			t.Errorf("log output does not contain %q: %s", expected, text)
 		}
+	}
+}
+
+func TestIsSensitiveKeyOnlyMatchesSensitiveNames(t *testing.T) {
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{key: "payload", want: false},
+		{key: "alias", want: false},
+		{key: "Authorization", want: true},
+		{key: "refresh-token", want: true},
+		{key: "email", want: true},
+		{key: "profile_email", want: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.key, func(t *testing.T) {
+			if got := isSensitiveKey(test.key); got != test.want {
+				t.Errorf("isSensitiveKey(%q) = %t, want %t", test.key, got, test.want)
+			}
+		})
 	}
 }
 

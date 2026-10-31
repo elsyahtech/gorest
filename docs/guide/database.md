@@ -1,13 +1,14 @@
-## Database Query
+# Database Query Overview
 
-### ORM
+Use the ORM for mapped models and common query operations:
 
 ```go
 query := db.Table("users").Find(&user)
 ```
 
-Read the full [ORM Guide](orm.md) for query methods, driver support, limitations, and troubleshooting.
+For available operations and driver-specific limitations, see the
+[ORM reference](orm.md).
 
-### Native APIs and choosing an approach
-
-For a neutral comparison of the ORM and native APIs, including tradeoffs and examples for SQL, MongoDB, and ScyllaDB, see the [Querying Guide](querying.md).
+Use native APIs when you need direct driver access or database-specific
+features. The [querying guide](querying.md) compares both approaches and
+provides examples for SQL, MongoDB, and ScyllaDB.

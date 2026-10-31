@@ -99,7 +99,10 @@ func databaseURLHost(host, port string) string {
 
 // SQLite DSN builder.
 func sqliteDSN(cfg *Config, _ string) string {
-	filePath, _ := sqliteFilePath(cfg)
+	filePath, err := sqliteFilePath(cfg)
+	if err != nil {
+		return ""
+	}
 
 	return "file:" + filePath
 }
@@ -167,43 +170,31 @@ func mongoDSN(cfg *Config) string {
 	}
 
 	if cfg.SSLCertPath != "" {
-		query.Set("tlsCertificateKeyFile", cfg.SSLCertPath)
+		if cfg.SSLKeyPath != "" {
+			query.Set("tlsCertificateFile", cfg.SSLCertPath)
+			query.Set("tlsPrivateKeyFile", cfg.SSLKeyPath)
+		} else {
+			query.Set("tlsCertificateKeyFile", cfg.SSLCertPath)
+		}
 	}
-
-	queryStr := query.Encode()
 
 	if cfg.Username != "" && cfg.Password != "" {
-		// Escape username dan password
-		username := url.QueryEscape(cfg.Username)
-		password := url.QueryEscape(cfg.Password)
-
-		dsn := fmt.Sprintf(
-			"mongodb://%s:%s@%s:%s/%s?authSource=admin",
-			username,
-			password,
-			cfg.Host,
-			cfg.Port,
-			cfg.Name,
-		)
-
-		if queryStr != "" {
-			dsn += "&" + queryStr
+		authSource := cfg.AuthSource
+		if authSource == "" {
+			authSource = "admin"
 		}
-
-		return dsn
+		query.Set("authSource", authSource)
 	}
 
-	// Unauthenticated
-	dsn := fmt.Sprintf(
-		"mongodb://%s:%s/%s",
-		cfg.Host,
-		cfg.Port,
-		cfg.Name,
-	)
-
-	if queryStr != "" {
-		dsn += "?" + queryStr
+	dsn := url.URL{
+		Scheme:   "mongodb",
+		Host:     databaseURLHost(cfg.Host, cfg.Port),
+		Path:     "/" + cfg.Name,
+		RawQuery: query.Encode(),
+	}
+	if cfg.Username != "" && cfg.Password != "" {
+		dsn.User = url.UserPassword(cfg.Username, cfg.Password)
 	}
 
-	return dsn
+	return dsn.String()
 }

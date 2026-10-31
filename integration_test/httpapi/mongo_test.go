@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	dockercontainer "github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	gorest "github.com/elsyahtech/gorest"
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/integration_test/internaltest"
@@ -36,6 +38,24 @@ type mongoUser struct {
 	Name  string `gorest:"name, required" json:"name"`
 }
 
+type mongoPreloadDepartment struct {
+	ID   string `gorest:"_id, primary_key" bson:"_id"`
+	Name string `gorest:"name" bson:"name"`
+}
+
+type mongoPreloadOrder struct {
+	ID     string `gorest:"_id, primary_key" bson:"_id"`
+	UserID string `gorest:"user_id" bson:"user_id"`
+	Status string `gorest:"status" bson:"status"`
+}
+
+type mongoPreloadUser struct {
+	ID           string                  `gorest:"_id, primary_key" bson:"_id"`
+	DepartmentID string                  `gorest:"department_id" bson:"department_id"`
+	Department   *mongoPreloadDepartment `gorest:"-" references:"ID" bson:"-"`
+	Orders       []mongoPreloadOrder     `gorest:"-" references:"UserID" bson:"-"`
+}
+
 type mongoUserHandler struct {
 	db         *gorest.DBSession
 	collection string
@@ -49,11 +69,17 @@ func TestMongoHTTPCRUDAndParameterBinding(t *testing.T) {
 	if image == "" {
 		image = mongoImageDefault
 	}
+	hostPort := availableLoopbackPort(t)
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        image,
 			ExposedPorts: []string{"27017/tcp"},
-			WaitingFor:   wait.ForListeningPort("27017/tcp").WithStartupTimeout(8 * time.Minute),
+			HostConfigModifier: func(config *dockercontainer.HostConfig) {
+				config.PortBindings = nat.PortMap{
+					"27017/tcp": {{HostIP: "127.0.0.1", HostPort: hostPort}},
+				}
+			},
+			WaitingFor: wait.ForListeningPort("27017/tcp").WithStartupTimeout(8 * time.Minute),
 		},
 		Started: true,
 	})
@@ -68,19 +94,8 @@ func TestMongoHTTPCRUDAndParameterBinding(t *testing.T) {
 		}
 	})
 
-	host, err := container.Host(ctx)
-	if err != nil {
-		t.Fatalf("get MongoDB container host: %v", err)
-	}
-	if host == "localhost" {
-		host = "127.0.0.1"
-	}
-	port, err := container.MappedPort(ctx, "27017/tcp")
-	if err != nil {
-		t.Fatalf("get MongoDB mapped port: %v", err)
-	}
-	t.Setenv("GOREST_IT_MONGO_HOST", host)
-	t.Setenv("GOREST_IT_MONGO_PORT", port.Port())
+	t.Setenv("GOREST_IT_MONGO_HOST", "127.0.0.1")
+	t.Setenv("GOREST_IT_MONGO_PORT", hostPort)
 	t.Setenv("GOREST_IT_MONGO_NAME", mongoDatabase)
 	t.Setenv("GOREST_IT_MONGO_TLS", "false")
 	t.Setenv("GOREST_IT_REQUIRED", "1")
@@ -115,7 +130,74 @@ func TestMongoHTTPCRUDAndParameterBinding(t *testing.T) {
 		}
 	})
 
+	runMongoRuntimeRecovery(t, app, container)
 	runMongoCRUDHTTPScenario(t, app.Database(), collectionName)
+	runMongoPreloadScenario(t, app.Database())
+	internaltest.MongoORMCoverage(t)
+}
+
+func runMongoPreloadScenario(t *testing.T, db *gorest.DBSession) {
+	t.Helper()
+
+	const (
+		usersCollection       = "gorest_preload_users"
+		departmentsCollection = "departments"
+		ordersCollection      = "orders"
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	users, message, code, err := db.MongoCollection(usersCollection)
+	if err != nil {
+		t.Fatalf("open Mongo preload users collection (HTTP %d, %s): %v", code, message, err)
+	}
+	departments, message, code, err := db.MongoCollection(departmentsCollection)
+	if err != nil {
+		t.Fatalf("open Mongo preload departments collection (HTTP %d, %s): %v", code, message, err)
+	}
+	orders, message, code, err := db.MongoCollection(ordersCollection)
+	if err != nil {
+		t.Fatalf("open Mongo preload orders collection (HTTP %d, %s): %v", code, message, err)
+	}
+	t.Cleanup(func() {
+		for _, collection := range []*mongo.Collection{users, departments, orders} {
+			if err := collection.Drop(context.Background()); err != nil {
+				t.Errorf("drop Mongo preload collection: %v", err)
+			}
+		}
+	})
+
+	if _, err := departments.InsertOne(ctx, mongoPreloadDepartment{ID: "department-1", Name: "Engineering"}); err != nil {
+		t.Fatalf("insert Mongo preload department: %v", err)
+	}
+	if _, err := users.InsertOne(ctx, mongoPreloadUser{ID: "user-1", DepartmentID: "department-1"}); err != nil {
+		t.Fatalf("insert Mongo preload user: %v", err)
+	}
+	if _, err := orders.InsertMany(ctx, []any{
+		mongoPreloadOrder{ID: "order-1", UserID: "user-1", Status: "active"},
+		mongoPreloadOrder{ID: "order-2", UserID: "user-1", Status: "inactive"},
+	}); err != nil {
+		t.Fatalf("insert Mongo preload orders: %v", err)
+	}
+
+	var loaded []mongoPreloadUser
+	query := db.Table(usersCollection).
+		Preload("Department").
+		Preload("Orders", "orders.status = ?", "active").
+		Find(&loaded)
+	if query.Error != nil {
+		t.Fatalf("Mongo belongs-to and has-many preload failed (HTTP %d): %v", query.HTTPCode, query.Error)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("Mongo preload returned %d users, want 1", len(loaded))
+	}
+	if loaded[0].Department == nil || loaded[0].Department.ID != "department-1" ||
+		loaded[0].Department.Name != "Engineering" {
+		t.Fatalf("Mongo belongs-to preload = %#v", loaded[0].Department)
+	}
+	if len(loaded[0].Orders) != 1 || loaded[0].Orders[0].ID != "order-1" {
+		t.Fatalf("filtered Mongo has-many preload = %#v, want only active order", loaded[0].Orders)
+	}
 }
 
 func runMongoCRUDHTTPScenario(t *testing.T, db *gorest.DBSession, collection string) {

@@ -30,6 +30,12 @@ func New(ctx context.Context, config *Config) (*Redis, string, error) {
 		return nil, message, errors.New("redis initialization context is nil")
 	}
 
+	if ctx.Err() != nil {
+		const message = "provide a valid startup context before initializing Redis"
+
+		return nil, message, fmt.Errorf("redis initialization context is canceled or expired: %w", ctx.Err())
+	}
+
 	opts := &redis.Options{
 		Addr:                  fmt.Sprintf("%s:%s", config.Host, config.Port),
 		Username:              config.Username,
@@ -82,6 +88,10 @@ func New(ctx context.Context, config *Config) (*Redis, string, error) {
 }
 
 func setupTLS(config *Config) (*tls.Config, string, error) {
+	if config == nil {
+		return nil, "configure Redis TLS settings", errors.New("redis TLS config is nil")
+	}
+
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: false,
 	}
@@ -102,6 +112,10 @@ func setupTLS(config *Config) (*tls.Config, string, error) {
 }
 
 func configSSLCAPath(config *Config, tlsConfig *tls.Config) (string, error) {
+	if config == nil || tlsConfig == nil {
+		return "configure valid Redis TLS settings", errors.New("redis CA TLS configuration is nil")
+	}
+
 	caCert, err := os.ReadFile(config.SSLCAPath)
 	if err != nil {
 		const message = "please ensure the file path is correct, the application has read permissions, and the file is not corrupted."
@@ -123,6 +137,10 @@ func configSSLCAPath(config *Config, tlsConfig *tls.Config) (string, error) {
 }
 
 func configSSLCertPath(config *Config, tlsConfig *tls.Config) (string, error) {
+	if config == nil || tlsConfig == nil {
+		return "configure valid Redis TLS settings", errors.New("redis client TLS configuration is nil")
+	}
+
 	if config.SSLCertPath == "" || config.SSLKeyPath == "" {
 		const message = "configure both the client certificate and private key, or leave both paths empty"
 

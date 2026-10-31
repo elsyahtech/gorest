@@ -7,6 +7,7 @@ import (
 	"github.com/elsyahtech/gorest/database"
 )
 
+//nolint:revive,funlen
 func (orm *ORM) findScylla(data any) error {
 	activeDriver := orm.DatabaseConfig.Driver
 
@@ -30,12 +31,8 @@ func (orm *ORM) findScylla(data any) error {
 	// 4. Resolve struct info (type, slice value, and slice flag)
 	structInfo, isSlice := resolveStructInfo(valElem)
 
-	if len(orm.GroupByClauses) > 0 {
-		columns, err := orm.validateGroupByColumns(structInfo.structType, tableName)
-		if err != nil {
-			return orm.Error
-		}
-		orm.GroupByClauses = columns
+	if err := orm.validateGroupByColumns(structInfo.structType, tableName); err != nil {
+		return orm.Error
 	}
 
 	// 5. Build grouping select clauses
@@ -48,10 +45,8 @@ func (orm *ORM) findScylla(data any) error {
 	}
 
 	// 7. Validate select table prefix
-	if len(column.table) > 0 {
-		if err := orm.validateSelectTablePrefixes(column.table, tableName, preload); err != nil {
-			return orm.Error
-		}
+	if err := orm.validateSelectTablePrefixes(column.table, tableName, preload); err != nil {
+		return orm.Error
 	}
 
 	columns := buildColumnsFindScylla(column, tableName, preload)
@@ -78,22 +73,7 @@ func (orm *ORM) findScylla(data any) error {
 		return orm.Error
 	}
 
-	if len(orderTerms) > 0 {
-		orderBy := make([]string, 0, len(orderTerms))
-
-		for _, term := range orderTerms {
-			part := term.Column
-
-			if term.Direction != "" {
-				part += " " + term.Direction
-			}
-
-			orderBy = append(orderBy, part)
-		}
-
-		orm.safeWriteString(" ORDER BY ")
-		orm.safeWriteString(strings.Join(orderBy, ", "))
-	}
+	orm.writeOrderTerms(orderTerms)
 
 	// 11. Build LIMIT
 	if limitVal > 0 || (orm.limitSet && limitVal == 0) {
@@ -138,10 +118,33 @@ func (orm *ORM) findScylla(data any) error {
 	}
 
 	// 19. Assign final result to ORM instance for handler consumption
+	message = "Data retrieved successfully"
+
 	orm.Result = data
-	orm.Message = "Data retrieved successfully"
+	orm.Message = message
 
 	return nil
+}
+
+func (orm *ORM) writeOrderTerms(orderTerms []orderByTerm) {
+	if len(orderTerms) == 0 {
+		return
+	}
+
+	orderBy := make([]string, 0, len(orderTerms))
+
+	for _, term := range orderTerms {
+		part := term.Column
+
+		if term.Direction != "" {
+			part += " " + term.Direction
+		}
+
+		orderBy = append(orderBy, part)
+	}
+
+	orm.safeWriteString(" ORDER BY ")
+	orm.safeWriteString(strings.Join(orderBy, ", "))
 }
 
 func (orm *ORM) setScyllaFindError(message string, err error, code ...int) error {

@@ -1,0 +1,17 @@
+{
+  "collection": "orders",
+  "delete": [
+    { "id": "ord-001" },
+    { "id": "ord-002" },
+    { "id": "ord-003" },
+    { "id": "ord-004" },
+    { "id": "ord-005" },
+    { "id": "ord-006" },
+    { "id": "ord-007" },
+    { "id": "ord-008" },
+    { "id": "ord-009" },
+    { "id": "ord-010" },
+    { "id": "ord-011" },
+    { "id": "ord-012" }
+  ]
+}

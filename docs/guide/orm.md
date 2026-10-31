@@ -8,7 +8,7 @@ Supported drivers:
 - Document: MongoDB
 - Wide-column: ScyllaDB
 
-For a neutral comparison of ORM and native query APIs, see the [Querying Guide](querying.md). For database connection and migration setup, see [Database Guide](database.md). For the complete struct-tag reference, see [the main guide](../guide.md#5-defining-entities--struct).
+For a neutral comparison of ORM and native query APIs, see the [Querying Guide](querying.md). For database connection settings, see the [Configuration Guide](../configuration.md); for migration workflows, see the [migration and seeder guide](../guide.md#migration-seeder). For the complete struct-tag reference, see [entity mapping](../guide.md#entity-mapping).
 
 New to the ORM? Follow the sequential [ORM Tutorial](orm-tutorial.md) from defining a model through reads, writes, failure cases, and troubleshooting. Use this page as the feature reference.
 
@@ -413,7 +413,7 @@ if query.Error != nil {
 fmt.Printf("created %d row(s), key: %s\n", query.RowsAffected, query.LastInsertId)
 ```
 
-Create accepts a struct or a non-empty slice of structs. Mark at least one field `primary_key` for all currently supported drivers, including MongoDB and ScyllaDB. `required` is opt-in and is validated before Create; see the [struct-tag guide](../guide.md#5-defining-entities--struct) for its empty-value rules. For example, if `email` is omitted from JSON, a Go string becomes `""`, and Create rejects it before sending a query:
+Create accepts a struct or a non-empty slice of structs. Mark at least one field `primary_key` for all currently supported drivers, including MongoDB and ScyllaDB. `required` is opt-in and is validated before Create; see the [struct-tag guide](../guide.md#entity-mapping) for its empty-value rules. For example, if `email` is omitted from JSON, a Go string becomes `""`, and Create rejects it before sending a query:
 
 ```go
 user := User{ID: "user-124", DepartmentID: "dept-01"} // Email is empty.
@@ -531,6 +531,8 @@ if query.Error != nil {
 fmt.Printf("deleted %d users\n", query.RowsAffected)
 ```
 
+<a id="return-values-from-writes"></a>
+
 ## 4. Return values from writes
 
 `Return()` asks ORM to read values produced by a write back into the input object or a separate destination. Its variadic arguments accept a destination pointer and/or column names:
@@ -576,6 +578,8 @@ Driver details:
 - Oracle uses `RETURNING ... INTO` and currently supports single-record `Update().Return()`. Oracle bulk update with Return is rejected; update records individually or omit `Return()`.
 - PostgreSQL and SQLite use `RETURNING`; SQL Server uses `OUTPUT`.
 - If a separate return destination is a single struct but the write returns multiple rows, use a slice destination instead.
+
+<a id="upsert"></a>
 
 ## 5. Upsert
 
@@ -653,34 +657,21 @@ Keep these three protection layers distinct:
 
 Tag the real database key with `primary_key` and pass dynamic values through placeholders. ORM clause methods validate a limited syntax, not business authorization or whether a user should be allowed to choose a particular table/column/filter. `Table()` accepts plain SQL/CQL identifiers (optionally qualified by database/schema); `Select()` accepts column identifiers or supported aggregate expressions; `Distinct()` accepts column identifiers; and `Join()` accepts a simple equality join. `Where()`, SQL `Having()`, conditional `Upsert()`, and SQL `Preload()` conditions accept only documented placeholder-based forms. Do not pass request-controlled clause strings directly to these APIs. Map dynamic choices to fixed application constants or explicit allowlists. `GroupBy()` validates identifiers against tagged destination columns, and `OrderBy()` validates identifiers against tagged model columns and permits only `ASC`/`DESC`. Use native queries for advanced driver-specific SQL. Keep schema constraints and indexes in migrations; ORM validation is an additional guard, not a replacement for database rules.
 
-### Unit-test coverage and integration testing
+### Testing and environment qualification
 
-GOREST's ORM has unit tests for core query-building and validation behavior. They exercise driver-specific placeholder formats, SQL literal/comment handling in the placeholder parser, placeholder/argument count checks, parameter binding (including values that resemble SQL syntax), OrderBy identifier validation, Create/Update/Delete/Upsert validation, pagination SQL generation, relation and preload-alias mapping, and query-state isolation. The configured integration suites exercise quote, question-mark, and comment markers as bound values across all seven drivers, and separately verify that `Where()` rejects literal/comment syntax in the condition before database execution. The repository's full Go unit-test suite passes with `go test ./...`; a focused race-detector test also exercises concurrent query building with independent ORM instances.
+GOREST includes unit and optional integration tests for ORM and database
+adapter behavior. These framework-level checks are not compatibility
+guarantees for every database product or version, and they do not validate a
+consuming application's schema, authorization rules, TLS setup, or business
+logic. See the [integration test guide](../../integration_test/README.md) for
+suite prerequisites and commands.
 
-These tests verify GOREST logic in isolation. They do not connect to every supported database, prove that every generated query is accepted by every database version, or establish that an application is free from SQL injection. Parameter binding protects argument values. ORM clause validation rejects unsupported syntax, but applications must still keep request-controlled choices within an allowlist and use native query arguments for dynamic values. `GroupBy()` and `OrderBy()` validate identifiers against tagged destination columns; SQL `Having()` and the other guarded clauses accept only their documented syntax.
-
-The repository provides opt-in database integration suites and managed HTTP end-to-end runners under [`integration_test/`](../../integration_test/). The [integration test map](../../integration_test/README.md#integration-suite-map) lists each package and its scenarios. The service-configured suites use `go test -tags=integration`; the managed HTTP runners use `make integration-test-<driver>-e2e` and the additional `integrationcontainers` tag internally. SQLite uses a temporary local database. The six remote-driver suites use configured services; the HTTP runners provision disposable services for PostgreSQL, Oracle, SQL Server, MySQL, MongoDB, and ScyllaDB, while SQLite needs no container. The tests cover representative CRUD and bound values, SQL transaction rollback, eight parallel SQL transactions per SQL driver, bounded concurrent HTTP CRUD requests for all seven drivers, pagination/grouping, selected ORM mapping and Upsert scenarios, and guarded unfiltered writes. A driver without its host configuration is skipped unless `GOREST_IT_REQUIRED=1` is set. Redis is also part of the broad `./integration_test/...` package run and needs a reachable Redis service. A passing SQLite test is evidence only for SQLite and the scenarios actually exercised, not for the other six databases.
-
-The [managed HTTP runner guide](../../integration_test/README.md#managed-http-end-to-end-runners) describes each driver's HTTP scenario, prerequisites, and generated JSONL/summary evidence. These examples exercise GOREST's handlers and database integration, not a consuming application's routes, authorization policy, or business logic. Concurrent HTTP checks are bounded correctness checks, not sustained load or throughput tests; the SQL transaction test is also a fixed eight-worker scenario. These tests do not prove every database feature and configuration. Applications should add handler-level tests against their own schema, permissions, TLS settings, and deployment environment.
-
-Application developers should add integration tests for their own handlers using a real database configured to match the target environment as closely as practical. GOREST cannot reproduce each application's database engine and version, schema, extensions, TLS and authentication settings, permissions, data shape, network conditions, or operational configuration. Those differences can affect whether a query succeeds and what it does, so only tests against the application's actual database setup can validate the end-to-end behavior for that deployment.
-
-Integration tests should exercise representative success and failure cases through the handler and verify persisted state, not just the returned ORM status. Include the relevant authorization and tenant scoping, schema constraints, transactions and rollback behavior, pagination boundaries, relation/preload data, and concurrent operations for your workload. Run them against isolated test data and never rely on a unit test alone as evidence that production queries, security policies, or database configuration are correct.
-
-### Integration Test Coverage and Evidence Matrix
-
-This matrix helps users review how GOREST documents and tests important database and application behavior. It links each area to the relevant guide sections and available test scenarios, making the scope of the current evidence easier to inspect when evaluating GOREST for a project or audit.
-
-A link to a test file identifies a test scenario in the repository; it does not prove that the test has passed in a particular environment. Driver integration suites are opt-in and may be skipped when their services are not configured. To produce reproducible evidence, run the relevant suite and record the command, database/server version, environment configuration, and whether each test passed or was skipped. See the [integration test instructions](../../integration_test/README.md).
-
-| Area | What is checked | Why it matters | Documentation and test evidence |
-|---|---|---|---|
-| Parameter binding | Driver-specific placeholders, placeholder-to-argument counts, and placeholders inside literals, comments, and dialect-specific syntax. | Prevents query failures and values being bound to the wrong parameters. | [ORM: Where and injection safety](#where-filters-and-injection-safety), [Native SQL: safety boundary](querying.md#sql-safety-boundary), [placeholder parser tests](../../orm/helper_placeholder_normalization_test.go), [ORM binding and validation tests](../../orm/audit_evidence_test.go), [per-driver integration tests](../../integration_test/README.md). |
-| ORM mapping | Column aliases, zero values, pointers and nulls, relationships, preloads, and type conversion. | Prevents query results from being mapped incorrectly or losing their intended meaning. | [ORM: Select and projection](#select-columns), [ORM: Join and Preload](#join-and-preload), [entity tag guide](../guide.md#5-defining-entities--struct), [ORM mapping and alias tests](../../orm/audit_evidence_test.go), [PostgreSQL nullable and preload tests](../../integration_test/postgres/coverage_test.go), [MongoDB nullable mapping test](../../integration_test/mongo/mongo_test.go). |
-| Write operations | Create, Update, Delete, Upsert, bulk operations, and partial failures or changes. | Ensures a failed operation is not mistaken for a fully successful write or a complete rollback. | [ORM: Create and Update](#3-create-and-update-records), [ORM: Return values](#return-values-from-writes), [ORM: Upsert](#5-upsert), [ORM: Delete safety](#6-delete-and-update-safety), [ORM error contract](#shared-database-error-contract), [integration test scenarios and driver notes](../../integration_test/README.md). |
-| Concurrency | Query-state isolation, bounded concurrent HTTP CRUD requests on all seven drivers, and eight parallel SQL transactions per SQL driver. | Detects state leaking between requests and basic failures when independent transactions run together. | [ORM: unit and integration test coverage](#unit-test-coverage-and-integration-testing), [ORM state-isolation test](../../orm_state_isolation_test.go), [concurrent query-building test](../../orm/audit_evidence_test.go), [SQL transaction lifecycle tests](../../adapter_transaction_test.go), [per-driver concurrency scenarios and commands](../../integration_test/README.md#integration-suite-map). These fixed-size checks are not sustained load tests and do not cover every application transaction pattern. |
-| Security | Dynamic identifiers, SQL injection, application authorization, secret handling, and TLS. | Parameter binding does not restrict table or column choices, authorize an operation, or ensure that a connection is encrypted. | [ORM: Where and injection safety](#where-filters-and-injection-safety), [Querying: native API safety responsibilities](querying.md#sql-safety-boundary), [ORM: three layers of write protection](#6-delete-and-update-safety), [database TLS configuration](../configuration.md#4-database-configuration-databaserun), [log redaction and secrets](logger.md), [PostgreSQL row-level security test](../../integration_test/postgres/coverage_test.go). Configuration documentation describes driver-specific TLS settings; the PostgreSQL RLS test covers only that PostgreSQL scenario, not every application policy or every driver's TLS setup. |
-| Lifecycle | Startup failures, timeouts and cancellation, and shutdown while requests are active. | Ensures resources are managed and application shutdown remains controlled. | [migration/seeder startup and graceful shutdown](../guide.md#startup-behavior-when-migration-or-seeding-fails), [transaction timeouts and context cancellation](#transactions), [native query context and resource rules](querying.md#shared-safety-and-lifecycle-rules), [graceful shutdown test](../../app_lifecycle_test.go), [signal-based shutdown test](../../integration_test/app/app_test.go), [integration test instructions](../../integration_test/README.md). |
+Before deployment, run the relevant suites with the database product, version,
+and configuration used by your application. Add application-level tests for
+your own schema, permissions, transactions, error handling, and tenant scope;
+use isolated test data and verify persisted state. The driver feature matrix
+below describes ORM operation support and limitations, not a guarantee that
+all driver/server combinations behave identically.
 
 ## 7. Driver feature matrix
 

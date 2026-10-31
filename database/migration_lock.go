@@ -2,11 +2,8 @@ package database
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -20,10 +17,10 @@ const migrationLockTable = "gorest_migration_lock"
 // operator must inspect the database and explicitly clear the stale record.
 func acquireMigrationLock(
 	ctx context.Context,
-	db *Database,
+	database *Database,
 	config *Config,
 ) (func(context.Context) error, string, error) {
-	if ctx == nil || db == nil || config == nil {
+	if ctx == nil || database == nil || config == nil {
 		return nil, "Ensure the migration context and database configuration are initialized.",
 			errors.New("migration lock: missing context, database, or config")
 	}
@@ -38,102 +35,162 @@ func acquireMigrationLock(
 	// while a schema migration is in progress.
 	lockName := "database_startup"
 	driver := NormalizeDatabaseDriver(config.Driver)
+
 	switch driver {
 	case MYSQL, POSTGRES, SQLSERVER, SQLITE, ORACLE:
-		if err := ensureSQLMigrationLockTable(ctx, db, config, driver); err != nil {
-			return nil, "Ensure the database user can create and access the GOREST migration lock table.", err
-		}
-
-		query := "INSERT INTO " + migrationLockTable + " (lock_name, owner_id, acquired_at) VALUES (?, ?, CURRENT_TIMESTAMP)"
-		args := []any{lockName, owner}
-		switch driver {
-		case POSTGRES:
-			query = "INSERT INTO " + migrationLockTable + " (lock_name, owner_id, acquired_at) VALUES ($1, $2, CURRENT_TIMESTAMP)"
-		case SQLSERVER:
-			query = "INSERT INTO " + migrationLockTable + " (lock_name, owner_id, acquired_at) VALUES (@p1, @p2, SYSUTCDATETIME())"
-		case ORACLE:
-			query = "INSERT INTO " + migrationLockTable + " (lock_name, owner_id, acquired_at) VALUES (:1, :2, CURRENT_TIMESTAMP)"
-		}
-		if _, _, _, err := db.ExecSQL(ctx, config, query, args...); err != nil {
-			if IsDuplicateKeyError(err) {
-				return nil, migrationLockHeldMessage(), fmt.Errorf("migration lock: %s lock is already held", lockName)
-			}
-			return nil, "Ensure the database is reachable and the migration lock table accepts writes.",
-				fmt.Errorf("migration lock: acquire SQL lock: %w", err)
-		}
-
-		return func(releaseCtx context.Context) error {
-			query := "DELETE FROM " + migrationLockTable + " WHERE lock_name = ? AND owner_id = ?"
-			args := []any{lockName, owner}
-			switch driver {
-			case POSTGRES:
-				query = "DELETE FROM " + migrationLockTable + " WHERE lock_name = $1 AND owner_id = $2"
-			case SQLSERVER:
-				query = "DELETE FROM " + migrationLockTable + " WHERE lock_name = @p1 AND owner_id = @p2"
-			case ORACLE:
-				query = "DELETE FROM " + migrationLockTable + " WHERE lock_name = :1 AND owner_id = :2"
-			}
-			_, _, _, err := db.ExecSQL(releaseCtx, config, query, args...)
-			return err
-		}, "", nil
-
+		return sqlAcquireMigrationLock(ctx, database, config, driver, lockName, owner)
 	case MONGO:
-		collection, _, _, err := db.Collection(config, migrationLockTable)
-		if err != nil {
-			return nil, "Ensure MongoDB is initialized and the migration lock collection is accessible.",
-				fmt.Errorf("migration lock: open MongoDB lock collection: %w", err)
-		}
-		_, err = collection.InsertOne(ctx, bson.M{
-			"_id":         lockName,
-			"owner_id":    owner,
-			"acquired_at": time.Now().UTC(),
-		})
-		if err != nil {
-			if mongo.IsDuplicateKeyError(err) {
-				return nil, migrationLockHeldMessage(), fmt.Errorf("migration lock: %s lock is already held", lockName)
-			}
-			return nil, "Ensure MongoDB is reachable and the migration lock collection accepts writes.",
-				fmt.Errorf("migration lock: acquire MongoDB lock: %w", err)
-		}
-
-		return func(releaseCtx context.Context) error {
-			_, err := collection.DeleteOne(releaseCtx, bson.M{"_id": lockName, "owner_id": owner})
-			return err
-		}, "", nil
-
+		return mongoCaseAcquireMigrationLock(ctx, database, config, lockName, owner)
 	case SCYLLA:
-		create := "CREATE TABLE IF NOT EXISTS " + migrationLockTable + " (lock_name text PRIMARY KEY, owner_id text, acquired_at timestamp)"
-		if _, _, err := db.ExecCQL(ctx, config, create); err != nil {
-			return nil, "Ensure the ScyllaDB keyspace allows creation and access to the migration lock table.",
-				fmt.Errorf("migration lock: create ScyllaDB lock table: %w", err)
-		}
-
-		applied, _, _, err := db.MapScanCAS(ctx, config,
-			"INSERT INTO "+migrationLockTable+" (lock_name, owner_id, acquired_at) VALUES (?, ?, ?) IF NOT EXISTS",
-			lockName, owner, time.Now().UTC(),
-		)
-		if err != nil {
-			return nil, "Ensure the ScyllaDB migration lock table supports conditional writes and is reachable.",
-				fmt.Errorf("migration lock: acquire ScyllaDB lock: %w", err)
-		}
-		if !applied {
-			return nil, migrationLockHeldMessage(), fmt.Errorf("migration lock: %s lock is already held", lockName)
-		}
-
-		return func(releaseCtx context.Context) error {
-			_, _, err := db.ExecCQL(releaseCtx, config,
-				"DELETE FROM "+migrationLockTable+" WHERE lock_name = ? IF owner_id = ?", lockName, owner)
-			return err
-		}, "", nil
-
+		return scyllaCaseAcquireMigrationLock(ctx, database, config, lockName, owner)
 	default:
 		return nil, "Configure one of the supported GOREST database drivers before running migrations.",
 			fmt.Errorf("migration lock: unsupported driver %q", config.Driver)
 	}
 }
 
-func ensureSQLMigrationLockTable(ctx context.Context, db *Database, config *Config, driver string) error {
+func sqlAcquireMigrationLock(
+	ctx context.Context,
+	database *Database,
+	config *Config,
+	driver string,
+	lockName string,
+	owner string,
+) (func(context.Context) error, string, error) {
+	if err := ensureSQLMigrationLockTable(ctx, database, config, driver); err != nil {
+		return nil, "Ensure the database user can create and access the GOREST migration lock table.", err
+	}
+
+	query := sqlCaseAcquireMigrationLock(driver)
+	args := []any{lockName, owner}
+
+	_, _, _, err := database.ExecSQL(ctx, config, query, args...)
+	if err != nil {
+		if IsDuplicateKeyError(err) {
+			return nil, migrationLockHeldMessage(), fmt.Errorf("migration lock: %s lock is already held", lockName)
+		}
+
+		return nil, "Ensure the database is reachable and the migration lock table accepts writes.",
+			fmt.Errorf("migration lock: acquire SQL lock: %w", err)
+	}
+
+	return func(releaseCtx context.Context) error {
+		return releaseSQLMigrationLock(releaseCtx, database, config, driver, lockName, owner)
+	}, "", nil
+}
+
+func releaseSQLMigrationLock(
+	ctx context.Context,
+	database *Database,
+	config *Config,
+	driver string,
+	lockName string,
+	owner string,
+) error {
+	query := "DELETE FROM " + migrationLockTable + " WHERE lock_name = ? AND owner_id = ?"
+
+	//nolint:revive
+	switch driver {
+	case POSTGRES:
+		query = "DELETE FROM " + migrationLockTable + " WHERE lock_name = $1 AND owner_id = $2"
+	case SQLSERVER:
+		query = "DELETE FROM " + migrationLockTable + " WHERE lock_name = @p1 AND owner_id = @p2"
+	case ORACLE:
+		query = "DELETE FROM " + migrationLockTable + " WHERE lock_name = :1 AND owner_id = :2"
+	}
+
+	_, _, _, err := database.ExecSQL(ctx, config, query, lockName, owner)
+
+	return err
+}
+
+func mongoCaseAcquireMigrationLock(
+	ctx context.Context,
+	database *Database,
+	config *Config,
+	lockName string,
+	owner string,
+) (func(context.Context) error, string, error) {
+	collection, _, _, err := database.Collection(config, migrationLockTable)
+	if err != nil {
+		const message = "Ensure MongoDB is initialized and the migration lock collection is accessible."
+
+		return nil, message,
+			fmt.Errorf("migration lock: open MongoDB lock collection: %w", err)
+	}
+
+	const (
+		ownerId    = "owner_id"
+		acquiredAt = "acquired_at"
+	)
+
+	_, err = collection.InsertOne(ctx, bson.M{
+		_id:        lockName,
+		ownerId:    owner,
+		acquiredAt: time.Now().UTC(),
+	})
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, migrationLockHeldMessage(), fmt.Errorf("migration lock: %s lock is already held", lockName)
+		}
+
+		const message = "Ensure MongoDB is reachable and the migration lock collection accepts writes."
+
+		return nil, message,
+			fmt.Errorf("migration lock: acquire MongoDB lock: %w", err)
+	}
+
+	return func(releaseCtx context.Context) error {
+		_, err := collection.DeleteOne(releaseCtx, bson.M{"_id": lockName, "owner_id": owner})
+		if err != nil {
+			return fmt.Errorf("migration lock: release MongoDB lock: %w", err)
+		}
+
+		return nil
+	}, "", nil
+}
+
+func scyllaCaseAcquireMigrationLock(
+	ctx context.Context,
+	database *Database,
+	config *Config,
+	lockName string,
+	owner string,
+) (func(context.Context) error, string, error) {
+	create := "CREATE TABLE IF NOT EXISTS " + migrationLockTable + " (lock_name text PRIMARY KEY, owner_id text, acquired_at timestamp)"
+	if _, _, err := database.ExecCQL(ctx, config, create); err != nil {
+		const message = "Ensure the ScyllaDB keyspace allows creation and access to the migration lock table."
+
+		return nil, message,
+			fmt.Errorf("migration lock: create ScyllaDB lock table: %w", err)
+	}
+
+	applied, _, _, err := database.MapScanCAS(ctx, config,
+		"INSERT INTO "+migrationLockTable+" (lock_name, owner_id, acquired_at) VALUES (?, ?, ?) IF NOT EXISTS",
+		lockName, owner, time.Now().UTC(),
+	)
+	if err != nil {
+		const message = "Ensure the ScyllaDB migration lock table supports conditional writes and is reachable."
+
+		return nil, message,
+			fmt.Errorf("migration lock: acquire ScyllaDB lock: %w", err)
+	}
+
+	if !applied {
+		return nil, migrationLockHeldMessage(), fmt.Errorf("migration lock: %s lock is already held", lockName)
+	}
+
+	return func(releaseCtx context.Context) error {
+		_, _, err := database.ExecCQL(releaseCtx, config,
+			"DELETE FROM "+migrationLockTable+" WHERE lock_name = ? IF owner_id = ?", lockName, owner)
+
+		return err
+	}, "", nil
+}
+
+func ensureSQLMigrationLockTable(ctx context.Context, database *Database, config *Config, driver string) error {
 	var query string
+
 	switch driver {
 	case MYSQL, POSTGRES, SQLITE:
 		query = `CREATE TABLE IF NOT EXISTS gorest_migration_lock (
@@ -165,31 +222,17 @@ func ensureSQLMigrationLockTable(ctx context.Context, db *Database, config *Conf
 		return fmt.Errorf("migration lock: unsupported SQL driver %q", driver)
 	}
 
-	if _, _, _, err := db.ExecSQL(ctx, config, query); err != nil && !isMigrationLockTableExistsError(err) {
+	_, _, _, err := database.ExecSQL(ctx, config, query)
+	if err != nil && !isMigrationLockTableExistsError(err) {
 		return fmt.Errorf("migration lock: create SQL lock table: %w", err)
 	}
+
 	return nil
 }
 
-func isMigrationLockTableExistsError(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "ora-00955") ||
-		strings.Contains(message, "already an object named") ||
-		strings.Contains(message, "already exists") ||
-		strings.Contains(message, "relation \"gorest_migration_lock\" already exists")
-}
-
 func migrationLockHeldMessage() string {
-	return "A migration or seeder runner already holds this database lock, or a previous run stopped before releasing it. Inspect migration state before manually removing a stale lock."
-}
+	const message = "A migration or seeder runner already holds this database lock, " +
+		"or a previous run stopped before releasing it. Inspect migration state before manually removing a stale lock."
 
-func newMigrationLockOwner() (string, error) {
-	var bytes [16]byte
-	if _, err := rand.Read(bytes[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes[:]), nil
+	return message
 }

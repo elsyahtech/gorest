@@ -31,9 +31,20 @@ import (
 func TestRedisOperationsPoolTimeoutAndApplicationShutdown(t *testing.T) {
 	config := integrationConfig(t)
 	preflightRedis(t, config)
+	cleanupTimeout := config.Timeout + 2*time.Second
+	if cleanupTimeout < time.Second {
+		cleanupTimeout = time.Second
+	}
 
 	app := gorest.New()
 	app.Use(gorestredis.Run(config))
+	registeredConfig := app.GetRedisConfig()
+	if registeredConfig.Host != config.Host || registeredConfig.Port != config.Port ||
+		registeredConfig.Timeout != config.Timeout {
+		t.Fatalf("GetRedisConfig() = host %q, port %q, timeout %s; want configured Redis settings",
+			registeredConfig.Host, registeredConfig.Port, registeredConfig.Timeout)
+	}
+
 	closed := false
 	t.Cleanup(func() {
 		if !closed {
@@ -57,7 +68,7 @@ func TestRedisOperationsPoolTimeoutAndApplicationShutdown(t *testing.T) {
 		if closed {
 			return
 		}
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cleanupCancel()
 		if err := client.Del(cleanupCtx, key).Err(); err != nil {
 			t.Errorf("delete integration key: %v", err)
@@ -82,7 +93,7 @@ func TestRedisOperationsPoolTimeoutAndApplicationShutdown(t *testing.T) {
 		if closed {
 			return
 		}
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cleanupCancel()
 		if err := client.Del(cleanupCtx, workerKeys...).Err(); err != nil {
 			t.Errorf("delete concurrent integration keys: %v", err)
@@ -90,10 +101,10 @@ func TestRedisOperationsPoolTimeoutAndApplicationShutdown(t *testing.T) {
 	})
 
 	testConcurrentPoolUse(t, session, client, workerKeys)
-	testConfiguredOperationTimeout(t, session, client)
+	testConfiguredOperationTimeout(t, session, client, config.Timeout)
 	testParentContextDeadline(t, session, client)
 
-	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
 	if err := client.Del(cleanupCtx, append(workerKeys, key)...).Err(); err != nil {
 		t.Errorf("delete integration keys before shutdown: %v", err)
 	}
@@ -155,6 +166,7 @@ func TestRedisTLSRejectsUntrustedServerCertificate(t *testing.T) {
 	if !config.TLS {
 		t.Skip("set GOREST_IT_REDIS_TLS=true and configure a TLS-enabled Redis endpoint")
 	}
+	preflightRedis(t, config)
 
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -183,11 +195,8 @@ func TestRedisTLSRejectsUntrustedServerCertificate(t *testing.T) {
 	}
 
 	config.SSLCAPath = caPath
-	config.SSLCertPath = ""
-	config.SSLKeyPath = ""
-	config.Timeout = time.Second
 	config.MaxRetries = 0
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout+2*time.Second)
 	defer cancel()
 
 	client, message, err := gorestredis.New(ctx, &config)
@@ -201,6 +210,10 @@ func TestRedisTLSRejectsUntrustedServerCertificate(t *testing.T) {
 	}
 	if client != nil {
 		t.Fatal("Redis.New() returned a client after TLS verification failed")
+	}
+	var unknownAuthority x509.UnknownAuthorityError
+	if !errors.As(err, &unknownAuthority) {
+		t.Fatalf("Redis.New() error = %v, want an untrusted-server-CA error", err)
 	}
 	if message == "" {
 		t.Fatal("Redis.New() returned no diagnostic message after TLS verification failed")
@@ -216,6 +229,16 @@ func integrationConfig(t *testing.T) gorestredis.Config {
 	config.Username = os.Getenv("GOREST_IT_REDIS_USERNAME")
 	config.Password = os.Getenv("GOREST_IT_REDIS_PASSWORD")
 	config.Timeout = 300 * time.Millisecond
+	if raw := strings.TrimSpace(os.Getenv("GOREST_IT_REDIS_TIMEOUT")); raw != "" {
+		timeout, err := time.ParseDuration(raw)
+		if err != nil {
+			t.Fatalf("parse GOREST_IT_REDIS_TIMEOUT: %v", err)
+		}
+		if timeout <= 0 || timeout > 5*time.Second {
+			t.Fatal("GOREST_IT_REDIS_TIMEOUT must be greater than 0 and no more than 5s")
+		}
+		config.Timeout = timeout
+	}
 	config.PoolSize = 4
 	config.MinIdleConns = 1
 	config.MaxActiveConns = 4
@@ -247,7 +270,7 @@ func integrationConfig(t *testing.T) gorestredis.Config {
 func preflightRedis(t *testing.T, config gorestredis.Config) {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout+2*time.Second)
 	defer cancel()
 
 	client, message, err := gorestredis.New(ctx, &config)
@@ -309,7 +332,7 @@ func testConcurrentPoolUse(t *testing.T, session *gorest.RedisSession, client *g
 	}
 }
 
-func testConfiguredOperationTimeout(t *testing.T, session *gorest.RedisSession, client *goredis.Client) {
+func testConfiguredOperationTimeout(t *testing.T, session *gorest.RedisSession, client *goredis.Client, timeout time.Duration) {
 	t.Helper()
 
 	ctx, cancel := session.NewContext(context.Background())
@@ -325,8 +348,8 @@ func testConfiguredOperationTimeout(t *testing.T, session *gorest.RedisSession, 
 		(!errors.As(err, &timeoutErr) || !timeoutErr.Timeout()) {
 		t.Fatalf("blocking Redis command error = %v, want a context or I/O timeout", err)
 	}
-	if elapsed := time.Since(started); elapsed > 2*time.Second {
-		t.Fatalf("configured Redis operation timeout took %s, want less than 2s", elapsed)
+	if elapsed := time.Since(started); elapsed > timeout+time.Second {
+		t.Fatalf("configured Redis operation timeout took %s, want less than %s", elapsed, timeout+time.Second)
 	}
 }
 

@@ -1,5 +1,24 @@
+# GOREST Guides
+
+This page gives short overviews of GOREST's main components, followed by
+detailed chapters on migrations and seeders, entity mapping, and responses.
+Use the [documentation index](./README.md) to choose a guide by task.
+
+| Area | Focused technical guide |
+| --- | --- |
+| Application and subsystem settings | [Configuration](./configuration.md) |
+| Logging, rotation, and redaction | [Logger](./guide/logger.md) |
+| Routes and HTTP middleware | [Server and router](./guide/router.md) |
+| JWT filter behavior | [JWT filter](./guide/filter.md) |
+| ORM or native database APIs | [Querying](./guide/querying.md) |
+| ORM operations and driver support | [ORM tutorial](./guide/orm-tutorial.md) · [ORM reference](./guide/orm.md) |
+| Response handling | [Response guide](./guide/response/view_response.md) |
+
+This page's detailed chapters: [migrations and seeders](#migration-seeder),
+[entity mapping](#entity-mapping), and [response handling](#response-handling).
+
 ## 1. Logger Guide
-Gorest integrated with Zap as a core logger.
+GOREST includes Zap as its core logger.
 
 * **Overview:** A high-performance, built-in structured logger for GOREST lifecycle and framework messages.
 * **Key Benefits:** Zap-based structured logging, automatic size-based file rotation with backup count and age limits, and heuristic redaction of recognized sensitive values. Applications remain responsible for emitting their own request/business events, minimizing logged data, and redacting application-specific sensitive values before logging.
@@ -27,20 +46,37 @@ Read the full Server & Router technical breakdown: [Router Technical Guide](./gu
 
 ---
 
-## 3. Database, ORM & Querying Guide
-* **Overview:** A multi-driver data persistence layer with driver-specific migration and seeder workflows, execution history, and a reflection-powered ORM.
-* **Key Benefits:** Supports 7 database drivers (MySQL, PostgreSQL, SQL Server, Oracle, SQLite, MongoDB, ScyllaDB) with ORM features such as custom `gorest` tags and `Preload()`, plus native query APIs. The best fit depends on the operation; the Querying Guide compares their tradeoffs and explains when each may be appropriate.
-* **Sample Output Preview:**
+## 3. JWT Filter Guide
 
-Start with the [Querying Guide](./guide/querying.md) to compare ORM and native queries, then use the [ORM Tutorial](./guide/orm-tutorial.md) for a guided ORM path. The [Database Guide](./guide/database.md) covers connection and schema setup; the [ORM Guide](./guide/orm.md) is the ORM feature reference.
+* **Overview:** GOREST can issue access and refresh JWTs in configurable cookies when a signing key is provided.
+* **Important:** Token validation, authorization, and session lifecycle are application responsibilities. Review GOREST-specific claim names and the production cookie transport warning.
+
+Read the full [JWT Filter Guide](./guide/filter.md).
 
 ---
 
-## 4. Database Migration & Seeder
+## 4. Database, ORM & Querying Guide
+* **Overview:** A multi-driver data persistence layer with driver-specific migration and seeder workflows, execution history, and a reflection-powered ORM.
+* **Key Benefits:** Supports 7 database drivers (MySQL, PostgreSQL, SQL Server, Oracle, SQLite, MongoDB, ScyllaDB) with ORM features such as custom `gorest` tags and `Preload()`, plus native query APIs. The best fit depends on the operation; the Querying Guide compares their tradeoffs and explains when each may be appropriate.
 
-### How to Run Migration:
+Start with the [database query overview](./guide/database.md) or the
+[Querying Guide](./guide/querying.md) to compare ORM and native APIs, then use
+the [ORM Tutorial](./guide/orm-tutorial.md) for a guided ORM path. The
+[database configuration guide](./configuration.md) covers connections and
+driver settings; [schema examples](./guide/database/schema.md) show migration
+and seeder files; the [ORM Guide](./guide/orm.md) is the feature reference.
 
-By default, migrations and seeders can be triggered automatically upon application startup by simply setting `Migration: true` and `Seeder: true` inside your database configuration block in `main.go`:
+---
+
+<a id="migration-seeder"></a>
+
+## 5. Database Migration & Seeder
+
+### Run migrations and seeders
+
+To run migrations or seeders during application startup, enable the relevant
+flags in the database configuration:
+
 ```go
 dbConfig := database.ConfigDefault
 dbConfig.Driver = database.SQLITE
@@ -72,17 +108,66 @@ if message, _, err := app.Close(); err != nil {
 
 When enabled, Gorest runs database startup tasks synchronously before starting the HTTP server. Migration runs before seeding when both are enabled. The `Migration` and `Seeder` flags are independent, so seeding can be enabled without running migrations.
 
-If a migration or seeder returns an error, Gorest logs the failure and aborts application startup; the application is not started. If migration fails, seeding is skipped. Check the logged error and message, resolve the database or script issue, then restart the application. A failed task may already have made database changes; rollback behavior depends on the database driver and migration script.
+If a migration or seeder returns an error, Gorest logs the failure and aborts application startup; the application is not started. If migration fails, seeding is skipped. SQL migrations and seeders run in a per-file transaction where the driver supports it. Gorest also attempts bounded compensation in reverse execution order using matching `.down` files. If compensation succeeds, Gorest removes the failed run's history/state and releases the startup lock; startup still fails. If compensation cannot complete, Gorest reports the rollback error and retains the state and lock to prevent an unsafe retry.
+
+The rollback attempt is best-effort, not a guarantee of atomicity. Database outages, timeouts, permission errors, SQL engines that implicitly commit DDL (notably MySQL and Oracle), non-transactional tables, and driver-specific transaction behavior can prevent full rollback. Always provide compensation files for operations that may commit outside a transaction. If a transaction or compensation cannot be confirmed, Gorest does not claim rollback succeeded: startup remains aborted, the lock/state stay in place, and the database must be inspected and reconciled before the lock is manually removed.
+
+#### Compensation files
+
+Place a compensation file beside each migration or seeder using the same basename plus `.down` before the extension. The file is not executed during normal startup. When a file fails, Gorest first attempts to roll back its SQL transaction where applicable, then runs compensations in reverse order for changes that may remain from the failed file and earlier files in that startup batch.
+
+```text
+database/
+├── migrations/
+│   └── postgres/
+│       ├── 001_users.sql
+│       └── 001_users.down.sql
+└── seeders/
+    └── postgres/
+        ├── 001_initial_users.sql
+        └── 001_initial_users.down.sql
+```
+
+For complete driver-specific examples, see the [migration compensation examples](../database/migrations/README.md) and [seeder compensation examples](../database/seeders/README.md), including paired `.down` files in each driver folder.
+
+SQL `.down.sql` and ScyllaDB `.down.cql` files contain the database's native inverse statements. MongoDB migration `.down.json` files use explicit actions:
+
+```json
+{
+  "dropCollections": ["users"],
+  "dropIndexes": [
+    { "collection": "accounts", "name": "email_unique" }
+  ]
+}
+```
+
+For MongoDB seeders, provide explicit filters that identify only the records created by that seeder:
+
+```json
+{
+  "collection": "users",
+  "delete": [
+    { "email": "admin@example.test" }
+  ]
+}
+```
+
+Use uniquely identifying filters for seeded records and explicit names for indexes. Treat `.down` files as immutable after their matching up-file has been applied. A missing, invalid, or failing `.down` file is reported as incomplete rollback. If a database becomes unreachable during rollback, Gorest makes no claim that changes were undone; it retains the lock/state and requires operator recovery.
 
 When `app.Start()` receives `SIGINT` or `SIGTERM`, GOREST initiates graceful Fiber shutdown and waits for active requests to finish before closing Redis, database, and logger resources. The graceful wait is bounded by 30 seconds; if it expires, shutdown reports an error and proceeds with closing the remaining services. Calling `app.Close()` directly follows the same server-before-dependencies order. Applications do not need to reach into GOREST's server or service instances to perform this shutdown sequence.
 
 > **Migration and seeder coordination:** GOREST uses a database-backed `gorest_migration_lock` record to prevent two current-version GOREST startup runners from executing migrations or seeders concurrently. The lock is intentionally not time-limited. A failed run or unclean shutdown leaves the lock in place, and the `gorest_migration_state` store records each file's content hash and `running`/`applied` status. GOREST blocks a retry when it finds a failed or unfinished state. For recovery, stop all runners, inspect the affected schema/data, the `gorest_migration_state` entry (`migration:<filename>` or `seeder:<filename>`), and the existing execution history. Reconcile the state based on what actually completed, then manually remove the `database_startup` lock record using the database's native tools. Do not delete state or lock records before inspecting the database. Older GOREST versions do not use this lock and must not run migrations at the same time.
 >
-> **Migration and seeder history:** The existing history store records filenames; GOREST does not infer that a file is safe to skip because a table or collection exists. Applied files are immutable: add a new file instead of editing one. For files recorded by older GOREST versions, the first upgraded run backfills a hash from the file currently present; edits made before that upgrade cannot be detected. The lock and state records prevent concurrent execution and automatic retry after a failure, but do not make schema changes atomic. A script may have changed the database before failing, and rollback behavior depends on the driver and script. Test against an isolated staging database, take appropriate backups, and use backward-compatible expand-and-contract changes when application versions overlap during deployment.
+> **Migration and seeder history:** The existing history store records filenames; GOREST does not infer that a file is safe to skip because a table or collection exists. Applied files are immutable: add a new file instead of editing one. For files recorded by older GOREST versions, the first upgraded run backfills a hash from the file currently present; edits made before that upgrade cannot be detected. Transactions and compensation files improve failure recovery but cannot guarantee atomic schema changes across every driver. Test against an isolated staging database, take appropriate backups, and use backward-compatible expand-and-contract changes when application versions overlap during deployment.
 
-### Integration coverage
+### Validate migration behavior
 
-The managed HTTP integration runner for each of the seven drivers creates a temporary migration file and seeder file using that driver's supported format, calls `app.RunDatabaseStartupTasks()`, verifies the seeded data, and calls the startup tasks a second time to check successful repeat-run behavior. It also starts two independent OS processes against a two-file migration fixture: the first pauses after file one is applied and file two is recorded as `running`; the second must be rejected by the database startup lock. A separate run kills a real child process at that pause point, verifies the applied/running history and retained lock, confirms a new startup is rejected, then performs operator recovery and reruns successfully. For the six container-backed drivers, another scenario force-stops the database container with zero-second stop grace while the migration process holds the lock between files, restarts that same container, checks the persisted state and lock, and verifies recovery and rerun. PostgreSQL, MySQL, and SQL Server additionally run a deliberately slow migration statement; the test checks the database activity view to confirm it is active before killing the migration process, then verifies unfinished state and recovery. Oracle, MongoDB, and ScyllaDB currently have restart coverage at a migration-file boundary, not an in-flight statement interruption test. SQLite has no separate database server, so its process recovery scenario is used instead. The synchronization hooks exist only in builds using the `integration` build tag. These tests do not simulate host power loss or storage corruption, or make a multi-file migration batch atomic. Run the matching `make integration-test-<driver>-e2e` target described in the [integration test guide](../integration_test/README.md#managed-http-end-to-end-runners); account for those limits and deployment considerations separately.
+GOREST's automated tests exercise database startup tasks and recovery
+behavior, but they do not make a multi-file migration batch atomic or qualify
+an application's schema changes for production. Run the relevant suites
+against an isolated database and validate your recovery procedure before
+deployment. See the [integration test guide](../integration_test/README.md)
+for prerequisites and commands.
 
 ---
 
@@ -116,7 +201,9 @@ Read Schema Sample for migration and seeder needs [SQL Schema](./guide/database/
 
 ---
 
-## 5. Defining Entities & Struct
+<a id="entity-mapping"></a>
+
+## 6. Defining Entities & Struct
 
 Gorest uses the `gorest` struct tag to map Go fields to database columns or document fields. The first item is the database field name; comma-separated items after it are options. The `json` tag is separate and controls JSON input/output names.
 
@@ -165,18 +252,17 @@ The filter value must be a valid 24-character hex ObjectID. If a collection uses
 
 --- 
 
-## 6. Response Handling Guide
+<a id="response-handling"></a>
 
-* **Overview:** True to Gorest's philosophy—“A lightweight, opinionated framework for building websites, REST APIs, and backend services”—response rendering is completely flexible.
-* **Key Benefits:** Unified response format for lightning-fast REST JSON APIs, alongside built-in server-side rendering support for traditional HTML web applications and templates.
-* **Sample Output Preview:**
+## 7. Response Handling Guide
+
+* **Overview:** Route handlers can return Fiber responses directly. GOREST also provides an optional JSON response envelope through the `view` package.
+* **Important:** GOREST does not configure a template engine by default. Applications that need server-side rendering must configure and use a Fiber-compatible renderer.
 
 ```text
-// JSON API vs Traditional HTML Rendering
-return ctx.JSON(gorest.Map{"status": "success", "data": users})
-
-// OR
-return ctx.Render("templates/index", gorest.Map{"Title": "Welcome to Gorest"})
+// Direct Fiber response
+return ctx.Status(200).JSON(gorest.Map{"status": "success", "data": users})
 ```
 
-Read the full response handler technical breakdown: [Response Handler Guide](./guide/response/view_response.md)
+For the optional JSON envelope and error/status behavior, see the
+[response guide](./guide/response/view_response.md).

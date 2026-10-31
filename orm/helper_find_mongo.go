@@ -209,7 +209,7 @@ func (orm *ORM) buildMongoDistinctPipeline(filter bson.M, sort bson.D, table str
 	}
 
 	groupID := bson.D{}
-	project := bson.D{{Key: "_id", Value: 0}}
+	project := bson.D{{Key: _id, Value: 0}}
 
 	seen := make(map[string]struct{}, len(orm.DistinctCols))
 
@@ -243,31 +243,31 @@ func (orm *ORM) buildMongoDistinctPipeline(filter bson.M, sort bson.D, table str
 
 		key := fmt.Sprintf("field%d", idx)
 
-		groupID = append(groupID, bson.E{Key: key, Value: "$" + field})
-		project = append(project, bson.E{Key: output, Value: "$_id." + key})
+		groupID = append(groupID, bson.E{Key: key, Value: dolar + field})
+		project = append(project, bson.E{Key: output, Value: dolarId + key})
 	}
 
 	pipeline := mongo.Pipeline{}
 
 	if len(filter) > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$match", Value: filter}})
+		pipeline = append(pipeline, bson.D{{Key: dolarMatch, Value: filter}})
 	}
 
 	pipeline = append(pipeline,
-		bson.D{{Key: "$group", Value: bson.D{{Key: "_id", Value: groupID}}}},
-		bson.D{{Key: "$project", Value: project}},
+		bson.D{{Key: dolarGroup, Value: bson.D{{Key: _id, Value: groupID}}}},
+		bson.D{{Key: dolarProject, Value: project}},
 	)
 
 	if len(sort) > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$sort", Value: sort}})
+		pipeline = append(pipeline, bson.D{{Key: dolarSort, Value: sort}})
 	}
 
 	if orm.OffsetVal > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$skip", Value: orm.OffsetVal}})
+		pipeline = append(pipeline, bson.D{{Key: dolarSkip, Value: orm.OffsetVal}})
 	}
 
 	if orm.LimitVal > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: orm.LimitVal}})
+		pipeline = append(pipeline, bson.D{{Key: dolarLimit, Value: orm.LimitVal}})
 	}
 
 	return pipeline, nil
@@ -310,24 +310,26 @@ func normalizeBSONValue(val any) any {
 	}
 }
 
+type structBuildRowsScanFindMongo struct {
+	execCtx        context.Context
+	structType     reflect.Type
+	cursor         *mongo.Cursor
+	fieldLookupMap map[string]*structFieldInfo
+	valElem        *reflect.Value
+	sliceVal       *reflect.Value
+	isSlice        bool
+}
+
 //nolint:revive
-func (orm *ORM) buildRowsScanFindMongo(
-	execCtx context.Context,
-	cursor *mongo.Cursor,
-	structType reflect.Type,
-	fieldLookupMap map[string]*structFieldInfo,
-	isSlice bool,
-	valElem *reflect.Value,
-	sliceVal *reflect.Value,
-) (*mongo.Cursor, error) {
-	for cursor.Next(execCtx) {
+func (orm *ORM) buildRowsScanFindMongo(req *structBuildRowsScanFindMongo) (*mongo.Cursor, error) {
+	for req.cursor.Next(req.execCtx) {
 		var doc bson.M
 
-		if err := cursor.Decode(&doc); err != nil {
+		if err := req.cursor.Decode(&doc); err != nil {
 			return nil, orm.setDatabaseOperationError("Find", err)
 		}
 
-		newStructPtr := reflect.New(structType)
+		newStructPtr := reflect.New(req.structType)
 		newStructVal := newStructPtr.Elem()
 
 		for key, raw := range doc {
@@ -336,7 +338,7 @@ func (orm *ORM) buildRowsScanFindMongo(
 			}
 
 			keyLower := strings.ToLower(key)
-			fieldInfo, found := fieldLookupMap[keyLower]
+			fieldInfo, found := req.fieldLookupMap[keyLower]
 
 			if !found {
 				continue
@@ -357,28 +359,28 @@ func (orm *ORM) buildRowsScanFindMongo(
 
 		orm.RowsAffected++
 
-		if !isSlice {
-			valElem.Set(newStructVal)
+		if !req.isSlice {
+			req.valElem.Set(newStructVal)
 
 			break
 		}
 
-		if valElem.Type().Elem().Kind() == reflect.Pointer {
-			*sliceVal = reflect.Append(*sliceVal, newStructPtr)
+		if req.valElem.Type().Elem().Kind() == reflect.Pointer {
+			*req.sliceVal = reflect.Append(*req.sliceVal, newStructPtr)
 		} else {
-			*sliceVal = reflect.Append(*sliceVal, newStructVal)
+			*req.sliceVal = reflect.Append(*req.sliceVal, newStructVal)
 		}
 	}
 
-	if isSlice {
-		valElem.Set(*sliceVal)
+	if req.isSlice {
+		req.valElem.Set(*req.sliceVal)
 	}
 
-	if err := cursor.Err(); err != nil {
+	if err := req.cursor.Err(); err != nil {
 		return nil, orm.setDatabaseOperationError("Find", err)
 	}
 
-	return cursor, nil
+	return req.cursor, nil
 }
 
 func (orm *ORM) loadFindMogoPreloadData(
@@ -387,15 +389,21 @@ func (orm *ORM) loadFindMogoPreloadData(
 	valElem *reflect.Value,
 	isSlice bool,
 ) error {
-	if !preload.isEmpty() {
-		parents, err := orm.collectParents(*valElem, isSlice)
-		if err != nil {
-			return orm.Error
-		}
+	if orm.IsDistinct {
+		return nil
+	}
 
-		if err := orm.loadMongoPreloads(execCtx, preload, parents); err != nil {
-			return orm.Error
-		}
+	if preload.isEmpty() {
+		return nil
+	}
+
+	parents, err := orm.collectParents(*valElem, isSlice)
+	if err != nil {
+		return orm.Error
+	}
+
+	if err := orm.loadMongoPreloads(execCtx, preload, parents); err != nil {
+		return orm.Error
 	}
 
 	return nil

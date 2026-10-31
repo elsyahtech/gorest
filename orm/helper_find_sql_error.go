@@ -28,76 +28,101 @@ func isInvalidDatabaseQueryError(driver string, err error) bool {
 
 	switch driver {
 	case database.ORACLE:
-		oracleErr, ok := godror.AsOraErr(err)
-		if !ok {
-			return false
-		}
-
-		switch oracleErr.Code() {
-		case 933, 936:
-			return true
-		default:
-			return false
-		}
+		return oracleCaseOnIsInvalidDatabaseQueryError(err)
 	case database.MYSQL:
-		var mysqlErr *mysql.MySQLError
-
-		if !errors.As(err, &mysqlErr) {
-			return false
-		}
-
-		switch mysqlErr.Number {
-		case 1064:
-			return true
-		default:
-			return false
-		}
+		return mysqlCaseOnIsInvalidDatabaseQueryError(err)
 	case database.POSTGRES:
-		var postgresErr *pq.Error
-
-		if !errors.As(err, &postgresErr) {
-			return false
-		}
-
-		switch postgresErr.Code {
-		case "42601":
-			return true
-		default:
-			return false
-		}
+		return postgresCaseOnIsInvalidDatabaseQueryError(err)
 	case database.SQLSERVER:
-		var sqlServerErr interface{ SQLErrorNumber() int32 }
-
-		if !errors.As(err, &sqlServerErr) {
-			return false
-		}
-
-		switch sqlServerErr.SQLErrorNumber() {
-		case 102, 156:
-			return true
-		default:
-			return false
-		}
+		return sqlServerCaseOnIsInvalidDatabaseQueryError(err)
 	case database.SQLITE:
 		errText := strings.ToLower(err.Error())
 
 		return strings.Contains(errText, "syntax error") || strings.Contains(errText, "incomplete input")
 	case database.MONGO:
-		var serverErr mongo.ServerError
-
-		if errors.As(err, &serverErr) {
-			for _, code := range []int{2, 9, 14, 168, 40324} {
-				if serverErr.HasErrorCode(code) {
-					return true
-				}
-			}
-		}
+		return mongoCaseOnIsInvalidDatabaseQueryError(err)
 	case database.SCYLLA:
 		errText := strings.ToLower(err.Error())
 
 		return strings.Contains(errText, "select distinct queries must only request partition key columns") ||
 			strings.Contains(errText, "group by non-primary-key column") ||
 			strings.Contains(errText, "order by is only supported when the partition key is restricted by an eq or an in")
+	default:
+	}
+
+	return false
+}
+
+func oracleCaseOnIsInvalidDatabaseQueryError(err error) bool {
+	oracleErr, ok := godror.AsOraErr(err)
+	if !ok {
+		return false
+	}
+
+	switch oracleErr.Code() {
+	case 933, 936:
+		return true
+	default:
+		return false
+	}
+}
+
+func mysqlCaseOnIsInvalidDatabaseQueryError(err error) bool {
+	var mysqlErr *mysql.MySQLError
+
+	if !errors.As(err, &mysqlErr) {
+		return false
+	}
+
+	switch mysqlErr.Number {
+	case 1064:
+		return true
+	default:
+		return false
+	}
+}
+
+func postgresCaseOnIsInvalidDatabaseQueryError(err error) bool {
+	var postgresErr *pq.Error
+
+	if !errors.As(err, &postgresErr) {
+		return false
+	}
+
+	switch postgresErr.Code {
+	case "42601":
+		return true
+	default:
+		return false
+	}
+}
+
+func sqlServerCaseOnIsInvalidDatabaseQueryError(err error) bool {
+	var sqlServerErr interface{ SQLErrorNumber() int32 }
+
+	if !errors.As(err, &sqlServerErr) {
+		return false
+	}
+
+	switch sqlServerErr.SQLErrorNumber() {
+	case 102, 156:
+		return true
+	default:
+		return false
+	}
+}
+
+func mongoCaseOnIsInvalidDatabaseQueryError(err error) bool {
+	var serverErr mongo.ServerError
+
+	if !errors.As(err, &serverErr) {
+		return false
+	}
+
+	for _, code := range []int{2, 9, 14, 168, 40324} {
+		if serverErr.HasErrorCode(code) {
+			return true
+		}
 	}
 
 	return false
@@ -111,38 +136,28 @@ func isGroupBySelectionError(driver string, err error) bool {
 		}
 	case database.MYSQL:
 		var mysqlErr *mysql.MySQLError
-		return errors.As(err, &mysqlErr) && mysqlErr.Number == 1055
+
+		if !errors.As(err, &mysqlErr) {
+			return false
+		}
+
+		return mysqlErr.Number == 1055
 	case database.POSTGRES:
 		var postgresErr *pq.Error
-		return errors.As(err, &postgresErr) && postgresErr.Code == "42803"
+
+		if !errors.As(err, &postgresErr) {
+			return false
+		}
+
+		return postgresErr.Code == "42803"
 	case database.SQLSERVER:
 		var sqlServerErr interface{ SQLErrorNumber() int32 }
+
 		return errors.As(err, &sqlServerErr) && sqlServerErr.SQLErrorNumber() == 8120
+	default:
 	}
 
 	// SQLite permits non-grouped result columns, so it does not report this
 	// class of GROUP BY error.
-	return false
-}
-
-func isUnknownColumnError(driver string, err error) bool {
-	switch driver {
-	case database.ORACLE:
-		if oracleErr, ok := godror.AsOraErr(err); ok {
-			return oracleErr.Code() == 904
-		}
-	case database.MYSQL:
-		var mysqlErr *mysql.MySQLError
-		return errors.As(err, &mysqlErr) && mysqlErr.Number == 1054
-	case database.POSTGRES:
-		var postgresErr *pq.Error
-		return errors.As(err, &postgresErr) && postgresErr.Code == "42703"
-	case database.SQLSERVER:
-		var sqlServerErr interface{ SQLErrorNumber() int32 }
-		return errors.As(err, &sqlServerErr) && sqlServerErr.SQLErrorNumber() == 207
-	case database.SQLITE:
-		return strings.Contains(strings.ToLower(err.Error()), "no such column")
-	}
-
 	return false
 }

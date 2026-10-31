@@ -101,7 +101,7 @@ HTTP Server Parameter Breakdown:
 - **Limiter:** Applies configured request limits. Tune the policy and use suitable edge or shared controls for the deployment; it is not, by itself, DDoS protection.
 
 ### 3. Redis Configuration (`redis.Run(...)`)
-For caching, session management, and key-value operations, Gorest provides Redis integration with authentication, database selection, connection-pool settings, and TLS/mTLS configuration options. Confirm the effective TLS and certificate settings against the Redis server and deployment environment.
+For caching and other Redis-backed operations, Gorest provides Redis integration with authentication, database selection, connection-pool settings, and TLS/mTLS configuration options. Confirm the effective TLS and certificate settings against the Redis server and deployment environment.
 
 You can configure Redis by passing `redis.Config`:
 
@@ -117,8 +117,9 @@ redis.Run(redis.Config{
     Database: 0,  // Redis database index number (usually 0 to 15)
 
     // Security & TLS
-    TLS:         false,           // Enable when required by the Redis endpoint; verify TLS in the target environment
-    SSLCAPath:   "",              // Path to CA certificate file for TLS verification
+    TLS:                     false, // Enable when required by the Redis endpoint; verify TLS in the target environment
+    AllowInsecureProduction: false, // Explicit opt-in for an intentional, non-TLS production exception
+    SSLCAPath:               "",    // Path to CA certificate file for TLS verification
     SSLCertPath: "",              // Path to client certificate file for mutual TLS (mTLS)
     SSLKeyPath:  "",              // Path to client certificate private key file for mTLS
 
@@ -163,6 +164,12 @@ if err := client.Set(ctx, "cache:key", "value", time.Minute).Err(); err != nil {
 }
 ```
 
+In production-like environments, GOREST warns when Redis TLS is disabled and records whether the deployment explicitly opted in with `AllowInsecureProduction`. Interactive foreground startup prompts for approval before opening the unencrypted connection; the default is no. Headless deployments use the typed application or Redis config opt-in and never prompt. Enable the opt-in only for trusted local or isolated networks after documenting the risk and network controls.
+
+For TLS implementation validation, a localhost certificate is sufficient to test certificate loading, encrypted handshakes, mutual TLS, invalid certificates, and expiry handling. A public or private DNS name is needed for production-representative hostname verification. Testing against `localhost` does not prove that a publicly deployed certificate chain and hostname are valid; use a certificate whose SAN matches the production hostname and is issued or trusted by an approved CA.
+
+SQLite is local storage and does not use network transport. Production SQLite accepts empty, `localhost`, `127.0.0.1`, and `::1` host values only. Remote hosts are rejected rather than silently ignored. SQLite remains allowed in development/testing and for explicitly approved single-node production workloads, but it is not recommended for horizontally scaled or shared remote deployments.
+
 TLS verification is enabled by default when TLS is configured; GOREST does not set `InsecureSkipVerify`. `SSLCAPath` adds a CA pool for server verification. Configure both `SSLCertPath` and `SSLKeyPath` together when mutual TLS is required. Connection timeout, retry, and pool options are passed to go-redis, but they do not guarantee recovery from prolonged Redis outages; validate reconnect behavior, resource limits, and application fallback policy against the Redis version and deployment used by your service.
 
 ### 4. Database Configuration (`database.Run(...)`)
@@ -176,9 +183,25 @@ GOREST accepts custom `Environment` labels such as `staging`, `uat`, or `preview
 
 For compatibility and ease of local development, an omitted `TLS` value defaults to disabled for network database drivers (MongoDB defaults to `false`; SQLite does not use TLS). Gorest does not automatically enable TLS based on the database host: TLS modes and certificate or wallet requirements differ by driver, and automatically enabling one could break existing local or legacy deployments. This is not a secure production default. A remote database connection without TLS can expose credentials and data to interception or modification on an untrusted network. Configure a driver-supported TLS mode explicitly for production and validate the server certificate; do not treat a private IP, VPN, or firewall as a replacement for transport encryption.
 
-For an enabled database, `app.Start()` logs a driver-aware warning when the environment is production-like (anything except `development` or `testing`) and TLS is disabled, optional, lacks required certificate configuration, or cannot be verified from GOREST's TLS field (ScyllaDB). This is a warning, not a startup block; operators must still configure and verify encryption before deployment. Custom labels such as `staging` and `uat` receive the same warning policy.
+For an enabled database, `app.Start()` logs a driver-aware warning when the environment is production-like (anything except `development` or `testing`) and TLS is disabled, optional, or lacks required certificate configuration. ScyllaDB is evaluated using the same production policy when `TLS` is not `"enable"`. In production-like environments this policy is enforced at startup: without explicit approval, TLS-disabled database and Redis connections cannot proceed. Set component-level `AllowInsecureProduction: true` or application-level `gorest.Config.AllowInsecureProduction: true` only as an explicit, auditable opt-in for a trusted local or isolated network without transport TLS. For an interactive foreground process, GOREST prompts the operator before opening an unencrypted connection; the default is no, and `y`/`yes` records approval for that process. Headless deployments never wait for terminal input; they must enable TLS or use the application-level or component-level typed opt-in. Custom labels such as `staging` and `uat` receive the same production-like startup policy.
 
-Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`. MySQL requires a non-empty `SSLCAPath` only as a switch for GOREST to pass the `TLS` value to go-sql-driver/mysql; GOREST does not load that path as a CA file. MySQL TLS `true` uses the driver's system certificate roots. For a custom CA or client certificate, register a TLS profile with the MySQL driver and set `TLS` to that profile name (while keeping `SSLCAPath` non-empty); GOREST does not use `SSLCertPath` or `SSLKeyPath` for MySQL. SQLite has no network TLS. ScyllaDB's TLS is not currently configured by this database `TLS` field, so setting it does not enable ScyllaDB transport encryption.
+Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`. For MySQL, GOREST requires a non-empty `SSLCAPath` only as a switch for passing `TLS` to go-sql-driver/mysql; it does not load that path as a CA file. With go-sql-driver/mysql v1.10.1, `TLS: "true"` enables normal certificate verification using the system roots and verifies the hostname derived from the connection address. Do not use the driver's `skip-verify` or `preferred` modes in production because they disable certificate verification. For a custom CA or client certificate, register a TLS profile with `mysql.RegisterTLSConfig`, configure its `RootCAs`, `ServerName`, and optional client certificate, then set `TLS` to that profile name and keep `SSLCAPath` non-empty. GOREST does not pass `SSLCertPath` or `SSLKeyPath` to the MySQL driver. SQLite has no network TLS.
+
+### Operational endpoints and environment configuration
+
+Gorest registers framework-managed endpoints for monitoring:
+
+- `GET /health/live` — process liveness; does not perform infrastructure calls.
+- `GET /health/ready` — database readiness; returns HTTP 503 until the database responds.
+- `GET /metrics` — bounded runtime metrics such as goroutines, heap allocation, and GC cycles. This is suitable for export into the application's monitoring pipeline, but it is not a replacement for Prometheus/OpenTelemetry instrumentation.
+
+Database secrets can be loaded without placing them in source code using `database.ConfigFromEnv("GOREST_DB")`. Supported variables are `GOREST_DB_DRIVER`, `HOST`, `PORT`, `NAME`, `USERNAME`, `PASSWORD`, `TLS`, `SSL_CA`, `SSL_CERT`, and `SSL_KEY`. The password remains in the child-process environment only where required and is never logged by Gorest.
+
+```go
+cfg := database.ConfigFromEnv("GOREST_DB")
+db, message, err := app.Database() // use only after app.Use(database.Run(cfg))
+```
+ ScyllaDB TLS is enabled by setting `TLS: "enable"`. GOREST loads `SSLCAPath` as a custom root pool and enables server certificate plus hostname verification. `SSLCertPath` and `SSLKeyPath` must be configured together for optional mTLS.
 
 ```go
 app.Use(database.Run(database.Config{
@@ -200,8 +223,9 @@ app.Use(database.Run(database.Config{
     Timeout:               5 * time.Second,  // Connection and operation timeout limit
 
     // Security, TLS & Encryption (Driver-aware behavior)
-    TLS:                    "disable", // Local/development compatibility default only; explicitly configure production TLS
-    SSLCertPath:            "",        // Path to client SSL certificate file (mutual TLS)
+    TLS:                     "disable", // Local/development compatibility default only; explicitly configure production TLS
+    AllowInsecureProduction: false,      // Explicit opt-in for an intentional, documented production exception
+    SSLCertPath:             "",         // Path to client SSL certificate file (mutual TLS)
     SSLKeyPath:              "",        // Path to client SSL private key file
     SSLCAPath:               "",        // CA path (PostgreSQL/etc.), Oracle Wallet; for MySQL, non-empty enables TLS option but path isn't loaded
     TrustServerCertificate: false,     // MSSQL only: validate the server certificate; configure its CA as needed
@@ -222,6 +246,7 @@ app.Use(database.Run(database.Config{
 Database Parameter Breakdown:
 - **Driver & Target** (Driver, Host, Port, Name): Specifies the database engine and connection routing. Note that for Oracle, Name acts as the service name instead of the SID.
 - **Credentials** (Username, Password): Supplies driver connection credentials. Load production secrets from a deployment secret store or environment configuration; do not commit them.
+- **MongoDB authentication database** (`AuthSource`): Selects the database that stores the MongoDB user's credentials. It defaults to `admin`; set it when the user was created in another database.
 - **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls connection pool limits and lifetimes. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid. Tune these values for the database limits and application concurrency.
-- **TLS configuration** (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Requests driver-specific encrypted connections and certificate behavior. Support and semantics vary by driver; verify the negotiated connection and certificate validation in the target environment. For Oracle, `SSLCAPath` is used as the Oracle Wallet directory path (`TNS_ADMIN`) when TLS is set to `"enable"`.
+- **TLS configuration** (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Requests driver-specific encrypted connections and certificate behavior. Support and semantics vary by driver; verify the negotiated connection and certificate validation in the target environment. MongoDB uses `SSLCertPath` and `SSLKeyPath` together for a client certificate and private key when mTLS is required. For Oracle, `SSLCAPath` is used as the Oracle Wallet directory path (`TNS_ADMIN`) when TLS is set to `"enable"`.
 - **Migrations & Seeders** (Migration, Seeder, directories, QueryLogging): Automates database bootstrapping and gives developers direct visibility into query generation during development.

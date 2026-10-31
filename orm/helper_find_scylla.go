@@ -94,7 +94,8 @@ func (orm *ORM) execBuildWhereClauseFindScylla(
 	for _, clause := range orm.WhereClauses {
 		if cqlUnsupportedOr.MatchString(clause) {
 			return nil, 0, orm.setError(
-				"ScyllaDB CQL does not support OR in WHERE. Use IN for values on the same eligible key column or run separate queries. Reference: https://docs.scylladb.com/manual/stable/cql/dml/select.html#the-where-clause",
+				"ScyllaDB CQL does not support OR in WHERE. Use IN for values on the same eligible key column or run separate queries. "+
+					"Reference: https://docs.scylladb.com/manual/stable/cql/dml/select.html#the-where-clause",
 				errors.New("find: OR is not supported by ScyllaDB"),
 				http.StatusBadRequest,
 			)
@@ -129,7 +130,8 @@ func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 
 	if len(orm.JoinClauses) > 0 {
 		return orm.setError(
-			"ScyllaDB CQL does not support JOIN; a SELECT query can read from only one table. Use Preload or another query strategy. Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
+			"ScyllaDB CQL does not support JOIN; a SELECT query can read from only one table. Use Preload or another query strategy. "+
+				"Ref: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
 			errors.New("find: unsupported JOIN clause for ScyllaDB"),
 			http.StatusBadRequest,
 		)
@@ -137,7 +139,8 @@ func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 
 	if orm.OffsetVal > 0 {
 		return orm.setError(
-			"ScyllaDB CQL does not support OFFSET. Paginate with a clustering-key restriction (for example, .Where(\"created_at < ?\", last)) or another key-based query strategy. Reference: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
+			"ScyllaDB CQL does not support OFFSET. Paginate with a clustering-key restriction (for example, .Where(\"created_at < ?\", last)) or "+
+				"another key-based query strategy. Reference: https://docs.scylladb.com/manual/stable/cql/dml/select.html",
 			errors.New("find: OFFSET is not supported by ScyllaDB"),
 			http.StatusBadRequest,
 		)
@@ -146,9 +149,15 @@ func (orm *ORM) bannedJoinAndOffsetFindScylla() error {
 	return nil
 }
 
+type scyllaFindIterator interface {
+	Columns() []gocql.ColumnInfo
+	MapScan(map[string]any) bool
+	Close() error
+}
+
 //nolint:revive
 func (orm *ORM) buildIterScanFindScylla(
-	iter *gocql.Iter,
+	iter scyllaFindIterator,
 	structType reflect.Type,
 	fieldLookupMap map[string]*structFieldInfo,
 	isSlice bool,
@@ -164,8 +173,10 @@ func (orm *ORM) buildIterScanFindScylla(
 		}
 	}()
 
+	columns := iter.Columns()
+
 	for {
-		row := make(map[string]any)
+		row := scyllaScanRow(columns, structType, fieldLookupMap)
 		if !iter.MapScan(row) {
 			break
 		}

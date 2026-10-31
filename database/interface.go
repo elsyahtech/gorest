@@ -17,11 +17,12 @@ type Database struct {
 
 // migration purposes.
 type File struct {
-	CreatedAt time.Time
-	Name      string
-	Path      string
-	Content   string
-	Number    int
+	CreatedAt           time.Time
+	Name                string
+	Path                string
+	Content             string
+	CompensationContent string
+	Number              int
 }
 
 type databaseConnector func(*Config, string) string

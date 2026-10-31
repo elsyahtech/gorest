@@ -15,6 +15,15 @@ func Run(cfg Config) Config {
 }
 
 func New(ctx context.Context, config *Config, timezone string) (*Database, string, error) {
+	if ctx == nil {
+		return nil, "provide a non-nil startup context", errors.New("database initialization context is nil")
+	}
+
+	if ctx.Err() != nil {
+		message := "provide a valid startup context before initializing the database"
+		return nil, message, fmt.Errorf("database initialization context is canceled or expired: %w", ctx.Err())
+	}
+
 	if config == nil {
 		const message = "ensure that you have run database.Run(database.Config{...} in your app"
 

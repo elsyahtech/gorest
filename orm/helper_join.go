@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+//nolint:revive,lll
 var safeJoinClause = regexp.MustCompile(`(?i)^\s*(?:(?:LEFT|RIGHT|FULL)(?:\s+OUTER)?|INNER|CROSS)?\s+JOIN\s+[A-Za-z_][A-Za-z0-9_$#]*(?:\.[A-Za-z_][A-Za-z0-9_$#]*)?\s+ON\s+[A-Za-z_][A-Za-z0-9_$#]*(?:\.[A-Za-z_][A-Za-z0-9_$#]*)?\s*=\s*[A-Za-z_][A-Za-z0-9_$#]*(?:\.[A-Za-z_][A-Za-z0-9_$#]*)?\s*$`)
 
 func (orm *ORM) validateJoinClause(clause string) error {
@@ -17,5 +18,6 @@ func (orm *ORM) validateJoinClause(clause string) error {
 			http.StatusBadRequest,
 		)
 	}
+
 	return nil
 }

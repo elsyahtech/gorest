@@ -451,7 +451,7 @@ if query.Error != nil {
 
 Each row in a bulk update must have a distinct primary key. Duplicate keys are rejected with HTTP 400 and listed in the error because multiple payloads for one record would make the update ambiguous. Gorest then checks that all supplied IDs exist. If one or more are missing, it returns HTTP 404 and lists the missing IDs; no updates are issued. SQL and MongoDB perform this check in one lookup, while ScyllaDB checks each full primary key. This prevents a missing ID from being silently ignored while the other rows update.
 
-The preflight check handles missing IDs, but bulk updates can still partially complete if a later write fails or another process changes the records concurrently. SQL callers can use a transaction where supported. Review the [driver-specific bulk update notes](orm.md#4-update) before relying on atomic behavior.
+The preflight check handles missing IDs, but bulk updates can still partially complete if a later write fails or another process changes the records concurrently. SQL callers can use a transaction where supported. Review the [driver-specific bulk update notes](orm.md#update) before relying on atomic behavior.
 
 ### Delete records safely
 
@@ -494,7 +494,7 @@ if query.Error != nil {
 }
 ```
 
-Do not infer which fields are updated from the method name. A payload's zero values may overwrite existing values, and conflicting keys outside the specified target can still fail. Verify the before/after behavior for the target driver; details are in [Upsert](orm.md#5-upsert).
+Do not infer which fields are updated from the method name. A payload's zero values may overwrite existing values, and conflicting keys outside the specified target can still fail. Verify the before/after behavior for the target driver; details are in [Upsert](orm.md#upsert).
 
 ## 5. Exercise failure paths
 
@@ -543,4 +543,4 @@ If you want native queries instead, use the [Querying Guide](querying.md) for SQ
 
 - [ORM reference: all features, limits, and driver matrix](orm.md)
 - [Database connection and schema setup](database.md)
-- [Gorest struct tags](../guide.md#5-defining-entities--struct)
+- [Gorest struct tags](../guide.md#entity-mapping)

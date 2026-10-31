@@ -1,15 +1,21 @@
 package gorest
 
 import (
+	"context"
 	golog "log"
 
 	"github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/filter"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
 )
 
 func (app *App) logInit() {
+	if app == nil {
+		golog.Fatalf("failed to run logger: gorest is not running. message: Ensure the gorest is running in your app.")
+	}
+
 	app.registerService("Logger")
 
 	logInitialized, message, err := log.New(app.config.log, app.config.AppName)
@@ -35,10 +41,22 @@ func (app *App) redisInit() {
 		return
 	}
 
+	if isProductionEnvironment(app.config.Environment) && !app.config.redis.TLS {
+		approved, err := app.requestInsecureProductionApproval("Redis", app.config.redis.AllowInsecureProduction)
+		if err != nil {
+			golog.Fatal(err)
+		}
+		if approved {
+			app.config.redis.AllowInsecureProduction = true
+		}
+	}
+
 	ctx, cancel := app.NewContext(app.config.redis.Timeout)
 	defer cancel()
 
-	redisInitialized, message, err := redis.New(ctx, app.config.redis)
+	redisInitialized, message, err := retryStartup(ctx, func(attemptCtx context.Context) (*redis.Redis, string, error) {
+		return redis.New(attemptCtx, app.config.redis)
+	})
 	if err != nil {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
@@ -69,10 +87,30 @@ func (app *App) databaseInit() {
 		return
 	}
 
+	if isProductionEnvironment(app.config.Environment) && database.NormalizeDatabaseDriver(app.config.database.Driver) == database.SQLITE {
+		if err := validateProductionSQLiteHost(app.config.database.Host); err != nil {
+			golog.Fatal(err)
+		}
+	}
+
+	if isProductionEnvironment(app.config.Environment) {
+		if _, insecure := productionDatabaseTLSWarning(app.config.database); insecure {
+			approved, err := app.requestInsecureProductionApproval(database.NormalizeDatabaseDriver(app.config.database.Driver)+" database", app.config.database.AllowInsecureProduction)
+			if err != nil {
+				golog.Fatal(err)
+			}
+			if approved {
+				app.config.database.AllowInsecureProduction = true
+			}
+		}
+	}
+
 	ctx, cancel := app.NewContext(app.config.database.Timeout)
 	defer cancel()
 
-	databaseInitialized, message, err := database.New(ctx, app.config.database, app.config.Timezone)
+	databaseInitialized, message, err := retryStartup(ctx, func(attemptCtx context.Context) (*database.Database, string, error) {
+		return database.New(attemptCtx, app.config.database, app.config.Timezone)
+	})
 	if err != nil {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
@@ -147,4 +185,59 @@ func (app *App) serverInit() {
 	} else {
 		app.reconfigureServer()
 	}
+}
+
+func (app *App) filterInit(config *filter.Config) {
+	if app == nil {
+		golog.Fatalf("failed to run filter: gorest is not running. message: Ensure the gorest is running in your app.")
+	}
+
+	if app.log == nil {
+		golog.Fatalf("failed initializing filter: logger is not running. " +
+			"message: Ensure the logger is running before initializing the filter, or run filter.Run(filter.Config{...}) in your app")
+	}
+
+	if config == nil {
+		app.config.filter = nil
+		app.filter = nil
+		app.Log(nil, true).Info("filter is not run by the client. Filter is ignored. " +
+			"If you want to enable Filter, you can run filter.Run(filter.Config{...}) in your app")
+
+		return
+	}
+
+	filterConfig := filter.Run(*config)
+	if filterConfig.SignatureKey == nil || *filterConfig.SignatureKey == "" {
+		app.Log(map[string]any{
+			LogFieldKeyError:   "signature key in invalid or empty",
+			LogFieldKeyMessage: "filter cannot run without a valid signature key or empty",
+		}, true).Info("Filter is ignored")
+
+		app.config.filter = nil
+		app.filter = nil
+
+		return
+	}
+
+	filterConfig.Issuer = app.config.AppName
+
+	jwtInitialized, message, err := filter.New(&filterConfig)
+	if err != nil {
+		app.Log(map[string]any{
+			LogFieldKeyError:   err,
+			LogFieldKeyMessage: message,
+		}, true).Error("failed initializing filter")
+
+		app.config.filter = nil
+		app.filter = nil
+
+		return
+	}
+
+	app.config.filter = &filterConfig
+	app.filter = &filter.Filter{
+		JWT:    jwtInitialized,
+		Config: &filterConfig,
+	}
+	app.registerService("Filter")
 }

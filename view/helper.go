@@ -66,6 +66,7 @@ func asError(value any) error {
 	return nil
 }
 
+//nolint:revive
 func (res *JSON) MarshalJSON() ([]byte, error) {
 	mappingObj := make(map[string]any)
 
@@ -113,11 +114,10 @@ func (*JSON) NewResponse(fields map[string]any) *JSON {
 	})
 }
 
+//nolint:revive
 func (*JSON) SendJSON(ctx *gorest.Context, response *JSON, err error) error {
-	getErr := err
-
-	if getErr = ctx.Status(response.HTTPCode).JSON(response); getErr != nil {
-		return fmt.Errorf("failed to send JSON Response: %w", getErr)
+	if err := ctx.Status(response.HTTPCode).JSON(response); err != nil {
+		return fmt.Errorf("failed to send JSON Response: %w", err)
 	}
 
 	return nil

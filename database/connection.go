@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -76,6 +78,14 @@ func mongoConnection(ctx context.Context, cfg *Config, driver string) (*mongo.Cl
 
 		return nil, message, fmt.Errorf("%s connection error: app configuration is uninitialized", driver)
 	}
+	if (cfg.SSLCertPath == "") != (cfg.SSLKeyPath == "") {
+		const message = "configure both MongoDB client certificate and key for mTLS"
+		return nil, message, fmt.Errorf("%s connection error: SSLCertPath and SSLKeyPath must both be set for mutual TLS", driver)
+	}
+	if cfg.SSLCertPath != "" && !strings.EqualFold(cfg.TLS, "true") {
+		const message = `enable MongoDB TLS with TLS: "true" when using a client certificate`
+		return nil, message, fmt.Errorf("%s connection error: MongoDB client certificates require TLS", driver)
+	}
 
 	dsn := mongoDSN(cfg)
 
@@ -114,10 +124,17 @@ func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error
 
 		return nil, message, fmt.Errorf("%s connection error: app configuration is uninitialized", driver)
 	}
+	if cfg.TLS != "" && cfg.TLS != TLSDisabled && cfg.TLS != TLSEnabled {
+		const message = `ScyllaDB TLS mode must be "enable" or "disable"`
+
+		return nil, message, fmt.Errorf("%s connection error: unsupported TLS mode %q", driver, cfg.TLS)
+	}
 
 	// Create cluster configuration for gocql
 	cluster := gocql.NewCluster(cfg.Host)
 	cluster.Port = stringToInt(cfg.Port)
+	// Server-assigned timestamps avoid client clock skew making writes stale after LWT operations.
+	cluster.DefaultTimestamp = false
 
 	// Set timeout
 	cluster.Timeout = cfg.Timeout
@@ -136,13 +153,53 @@ func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error
 		cluster.Keyspace = cfg.Name
 	}
 
+	// Configuring TLS for ScyllaDB connection.
+	if cfg.TLS == "enable" {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: false,
+		}
+
+		if cfg.SSLCAPath != "" {
+			caCert, err := os.ReadFile(cfg.SSLCAPath)
+			if err != nil {
+				return nil, "failed to read CA certificate", fmt.Errorf("%s connection error: - read CA cert: %w", driver, err)
+			}
+
+			caCertPool := x509.NewCertPool()
+
+			if !caCertPool.AppendCertsFromPEM(caCert) {
+				return nil, "failed to append CA certificate", fmt.Errorf("%s connection error: - append CA cert failed", driver)
+			}
+
+			tlsConfig.RootCAs = caCertPool
+		}
+
+		if (cfg.SSLCertPath == "") != (cfg.SSLKeyPath == "") {
+			return nil, "client certificate and key must be configured together", errors.New("SCYLLA connection error: SSLCertPath and SSLKeyPath must both be set for mutual TLS")
+		}
+		if cfg.SSLCertPath != "" {
+			cert, err := tls.LoadX509KeyPair(cfg.SSLCertPath, cfg.SSLKeyPath)
+			if err != nil {
+				return nil, "failed to load client certificate and key", fmt.Errorf("%s connection error: - load client keys: %w", driver, err)
+			}
+
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		}
+
+		tlsConfig.ServerName = cfg.Host
+		cluster.SslOpts = &gocql.SslOptions{
+			Config:                 tlsConfig,
+			EnableHostVerification: true,
+		}
+	}
+
 	// Open session connection to ScyllaDB
 	session, err := cluster.CreateSession()
 	if err != nil {
 		const message = "verify if ScyllaDB service/daemon is running, " +
 			"check host and port settings (default Scylla port is 9042), and ensure network connectivity is stable"
 
-		return nil, message, fmt.Errorf("SCYLLAConnection - open session: %w", err)
+		return nil, message, fmt.Errorf("%s connection error: - open session: %w", driver, err)
 	}
 
 	return session, "", nil
@@ -171,7 +228,8 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 		err      error
 	)
 
-	if driver == MYSQL {
+	switch {
+	case driver == MYSQL:
 		driverConfig, configErr := mysqlDriverConfig(cfg, timezone)
 		if configErr != nil {
 			err = configErr
@@ -183,16 +241,16 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 				database = sql.OpenDB(connector)
 			}
 		}
-	} else if driver == ORACLE {
+	case driver == ORACLE:
 		dsn, configErr := oracleDSN(cfg, timezone)
 		if configErr != nil {
 			err = configErr
 		} else {
 			database, err = sql.Open(sqlDriver, dsn)
 		}
-	} else if dsnBuilder == nil {
+	case dsnBuilder == nil:
 		err = fmt.Errorf("missing DSN builder for %s", driver)
-	} else {
+	default:
 		database, err = sql.Open(sqlDriver, dsnBuilder(cfg, timezone))
 	}
 

@@ -1,122 +1,252 @@
 # Integration tests
 
-This directory contains three kinds of integration checks. They exercise
-GOREST against real services, but they do not replace tests for an application's
-own schema, handlers, authorization rules, or deployment configuration.
+Select the suite that matches the required verification scope:
 
-For a manual CRUD walkthrough that connects to a database you configure, use
-the [`main.go` sample in the ORM tutorial](../docs/guide/orm-tutorial.md#2-run-one-manual-crud-flow).
-Use the automated suites below when you want repeatable assertions and a
-recorded run report.
+| Suite | Command | Requirements |
+| --- | --- | --- |
+| Driver APIs and ORM | `go test -tags=integration ./integration_test/<driver> -count=1 -v` | Configured service and `GOREST_IT_*` variables; SQLite is temporary |
+| HTTP end-to-end | `make integration-test-<driver>-e2e` | Docker for remote drivers; Oracle also needs host Instant Client |
+| App, filter, logger | `make integration-test-app-filter-log` | No external service |
+| Redis, managed disposable | `make integration-test-redis-e2e` | Docker; starts and removes a disposable `redis:7-alpine` container |
+| Redis, external endpoint | `go test -tags=integration ./integration_test/redis -count=1 -v` | Configured Redis service; use for TLS endpoint validation |
 
-| Test layer | Build tag / command | What it runs | External setup |
-| --- | --- | --- | --- |
-| Driver integration suites | `integration`; `go test -tags=integration ./integration_test/<driver> -count=1 -v` | ORM and database API scenarios against a configured service; SQLite uses a temporary file | A service and `GOREST_IT_*` settings for remote drivers; Redis tests are a separate package |
-| Managed HTTP end-to-end runners | `integration,integrationcontainers`; `make integration-test-<driver>-e2e` | A small GOREST HTTP server, example handlers, real database, HTTP requests, response assertions, and persisted-state checks | Docker for six containerized drivers; SQLite runs without Docker; Oracle also needs host Oracle Instant Client |
-| App, logger, and Redis suites | `integration`; package-specific commands below | Application startup/shutdown, logger output, and Redis operations/pool/TLS behavior | App/logger need no external service; Redis requires a Redis endpoint |
+These suites verify framework and driver behavior. They do not validate an
+application's schema, business logic, authorization policy, or deployment.
+For a manual CRUD walkthrough, see the
+[`main.go` ORM tutorial](../docs/guide/orm-tutorial.md#2-run-one-manual-crud-flow).
+Recorded endpoint-specific verification results are maintained in the
+[database testing results](../docs/testing-result.md).
 
 ## Managed HTTP end-to-end runners
 
-Each runner starts with an isolated test database or collection, creates its
-own schema, starts a small HTTP server in-process, sends requests through the
-HTTP routes, verifies response codes and persisted data, and cleans up. The
-shared SQL scenario covers Create, an injection-shaped search value passed as
-a bound parameter, required-field rejection (`400`), duplicate unique-key
-rejection (`409`), Update, GET verification, Delete, and not-found (`404`).
-After those checks, every runner also sends 12 Create, 12 GET, and 12 Delete
-requests concurrently, then verifies that no test rows remain. MongoDB and
-ScyllaDB use driver-specific schemas and assertions described in their rows
-below. Each seven-driver runner also writes a temporary migration and seeder
-fixture in that driver's supported format, runs them through
-`app.RunDatabaseStartupTasks()`, verifies the seeded record, then runs the
-startup tasks again and verifies that the record remains singular. This checks
-file discovery/execution, history and state recording, and successful rerun
-behavior against the configured database. The scenario also sends two
-simultaneous claims for the same database startup lock, expects one winner and
-one conflict, verifies that startup rejects the remaining lock, then removes
-that simulated stale lock and verifies startup can run again. Each driver test
-also starts independent OS migration-runner processes against a two-file
-fixture. The first process pauses after file one is applied and file two is
-marked `running`; a second process must be rejected by the lock. A separate
-child process is killed at that point, then the test verifies persisted state
-and lock, confirms startup remains blocked, performs operator recovery, and
-reruns successfully. For the six container-backed drivers, another scenario
-force-stops the database container with zero-second stop grace while a
-migration process holds the startup lock between files, restarts that same
-container, checks that state and lock persisted, then verifies recovery and
-rerun. PostgreSQL, MySQL, and SQL Server also run a deliberately slow
-migration statement, query the database's activity view until that statement
-is confirmed active, kill the migration process, then verify the unfinished
-state and operator recovery path. Oracle, MongoDB, and ScyllaDB currently use
-the forced server-restart-at-file-boundary scenario; they do not claim an
-in-flight statement interruption test. SQLite has no separate database
-server; its killed-process recovery scenario covers the embedded database
-case. These are GOREST integration checks, not tests of a consuming
-application's routes, business logic, or authorization.
+Each runner creates an isolated database/schema, exercises a GOREST example
+handler over HTTP, verifies responses and persisted state, then cleans up.
+Coverage includes CRUD, bound-value search, validation, duplicate-key and
+not-found responses, plus 12 concurrent Create/GET/Delete requests. MongoDB
+and ScyllaDB use driver-specific assertions.
 
-The five SQL HTTP runners also start eight independent SQL transactions at the
-same time, insert and commit one row per transaction, then verify all eight
-rows. This makes each managed SQL runner report include both concurrent HTTP
-requests and parallel transaction evidence. The configured SQL package suites
-expose the same transaction scenario as `TestORMParallelTransactions`.
+The managed SQL HTTP runners also execute shared ORM coverage scenarios
+against the same driver: relation preloads and joins, nullable values,
+pagination boundaries, insert atomicity, live query cancellation, Upsert, and
+invalid inputs. MongoDB and ScyllaDB run their driver-specific ORM coverage
+scenarios as part of their managed HTTP runners.
 
-| Driver | Command | Default service | Notes |
-| --- | --- | --- | --- |
-| PostgreSQL | `make integration-test-postgres-e2e` | PostgreSQL container | Shared SQL HTTP, migration, and seeder scenarios |
-| Oracle | `make integration-test-oracle-e2e` | Oracle Database Free container | Host must have Oracle Instant Client; image startup can take several minutes |
-| SQL Server | `GOREST_IT_SQLSERVER_ACCEPT_EULA=Y make integration-test-sqlserver-e2e` | SQL Server 2022 container | Explicit license opt-in; validated on x86-64 Linux Docker hosts |
-| MySQL | `make integration-test-mysql-e2e` | `mysql:8.4` | Shared SQL HTTP, migration, and seeder scenarios |
-| SQLite | `make integration-test-sqlite-e2e` | Temporary SQLite database | No container or external service |
-| MongoDB | `make integration-test-mongo-e2e` | `mongo:7.0` | Uses JSON migration/seeder files; maps seed `_id` to MongoDB's primary key |
-| ScyllaDB | `make integration-test-scylla-e2e` | `scylladb/scylla:2025.1` | Single-node developer-mode test; uses CQL migration/seeder files |
+Each driver also tests migration/seeder execution and repeat runs, lock
+contention, and recovery after a migration process is killed. Container-backed
+drivers additionally test a forced database restart. PostgreSQL, MySQL, and
+SQL Server test interruption during an active migration statement; other
+drivers test recovery at a file boundary. SQLite tests killed-process recovery
+without a separate server. These tests do not simulate host power loss,
+storage corruption, or production deployment ordering.
+The ScyllaDB managed HTTP runner also verifies outage and recovery using the
+same open GOREST database session.
+The managed ScyllaDB runner also verifies mTLS: the server rejects a
+connection without a client certificate and accepts a trusted client
+certificate.
+The managed MongoDB runner performs the same client-certificate rejection and
+acceptance checks over TLS.
 
-Run one driver at a time. There is not currently a single all-driver matrix
-command. Docker images are downloaded on first use. Image overrides are
-available for containerized drivers through `GOREST_IT_<DRIVER>_IMAGE`; SQLite
-does not use an image. SQL Server also requires the explicit EULA setting
-shown above. Oracle's Go process needs Instant Client on
-the host even though Oracle Database itself runs in a container. SQL Server's
-container runner is not validated on ARM64 or emulated x86 hosts.
+The five SQL runners also verify eight concurrent SQL transactions. MongoDB
+and ScyllaDB do not claim SQL-like transaction atomicity.
 
-To run a managed HTTP scenario with Go's race detector enabled, set `GOFLAGS`:
+| Driver | Command | Default setup |
+| --- | --- | --- |
+| PostgreSQL | `make integration-test-postgres-e2e` | Disposable PostgreSQL container |
+| Oracle | `make integration-test-oracle-e2e` | Oracle Free container; host Instant Client required. Set `GOREST_IT_ORACLE_HOST`, `GOREST_IT_ORACLE_PORT`, `GOREST_IT_ORACLE_NAME`, `GOREST_IT_ORACLE_USERNAME`, `GOREST_IT_ORACLE_PASSWORD`, and `GOREST_IT_ORACLE_TLS` to use an existing test database instead |
+| SQL Server | `GOREST_IT_SQLSERVER_ACCEPT_EULA=Y make integration-test-sqlserver-e2e` | SQL Server 2022 container; license opt-in required |
+| MySQL | `make integration-test-mysql-e2e` | `mysql:8.4` container |
+| SQLite | `make integration-test-sqlite-e2e` | Temporary database; no container |
+| MongoDB | `make integration-test-mongo-e2e` | `mongo:7.0` container; JSON migrations/seeders |
+| ScyllaDB | `make integration-test-scylla-e2e` | `scylladb/scylla:2025.1`; single-node developer mode |
+
+Run driver suites individually when isolating a driver-specific issue. Required
+container images are downloaded on first use.
+Override container images with `GOREST_IT_<DRIVER>_IMAGE`.
+SQL Server is validated on x86-64 Linux, not ARM64 or emulation. Oracle
+initialization may take several minutes.
+
+For an external MySQL TLS endpoint, the driver suite checks successful
+system-root and hostname validation and rejection of an untrusted CA and
+hostname. It also logs the server-reported `@@version_comment` alongside
+`VERSION()`; these are server claims, not cryptographic vendor attestation.
+The optional MySQL mTLS test requires a separate disposable account and
+endpoint configured to require a client certificate (for example, account
+`REQUIRE X509`). Set `GOREST_IT_MYSQL_MTLS_HOST`, `_PORT`, `_NAME`,
+`_USERNAME`, `_PASSWORD`, `_TLS`, `_SSL_CA`, `_CLIENT_CERT`, and `_CLIENT_KEY`.
+The test verifies that the server rejects the account without a client
+certificate, then connects with the configured client certificate and checks
+that TLS was negotiated. Use a separate test account; changing the regular
+integration account to require a certificate could affect other tests or
+applications.
+
+For PostgreSQL mTLS, configure a separate disposable endpoint and account
+whose server-side TLS/authentication policy requires a trusted client
+certificate. Set `GOREST_IT_POSTGRES_MTLS_HOST`, `_PORT`, `_NAME`, `_USERNAME`,
+`_PASSWORD`, `_SSL_CA`, `_SSL_CERT`, and `_SSL_KEY`. The integration test uses
+`verify-full`, confirms the server reports the client certificate for the
+session, and verifies that the same account cannot connect when the client
+certificate is omitted. Client certificate and key files must be readable by
+the test process; do not use a production account.
+
+### Preparing a disposable PostgreSQL mTLS endpoint
+
+For a Docker-based endpoint, keep the current server certificate and key if
+they already provide valid TLS for the endpoint hostname. Add the following
+server configuration using the deployment's existing configuration mechanism:
+
+- Enable PostgreSQL TLS and configure its server certificate and private key.
+- Set `ssl_ca_file` to a PEM CA certificate that signs the test client
+  certificate. This is the server-side trust used to verify client identity.
+- Add a `hostssl` rule for the disposable database, test account, and test
+  runner source address. Require client-certificate verification with
+  `clientcert=verify-ca` and the selected password authentication method.
+- Ensure no earlier or broader `pg_hba.conf` rule allows this test account to
+  connect without a client certificate. Keep the rule limited to the test
+  database, account, and runner network.
+
+For example, place narrowly scoped rules before any broader matching rules:
+
+```conf
+hostnossl  <test_database> <test_user> <test_runner_cidr> reject
+hostssl    <test_database> <test_user> <test_runner_cidr> scram-sha-256 clientcert=verify-ca
+```
+
+Replace the placeholders with the disposable database, role, and test
+runner's source CIDR. Confirm the rule order does not leave an earlier
+matching rule that permits password-only access.
+
+The test runner's `GOREST_IT_POSTGRES_MTLS_SSL_CA` has a different purpose: it
+must contain the CA that validates the PostgreSQL **server** certificate.
+`_SSL_CERT` and `_SSL_KEY` identify the test client's certificate and private
+key. The server-side `ssl_ca_file` must trust the CA that issued that client
+certificate. These CA files may differ; do not substitute a mixed-purpose CA
+bundle without reviewing its trust scope.
+
+Use a client certificate valid for client authentication and a least-privilege
+test role. Ensure the mounted PostgreSQL server key is readable by the
+PostgreSQL process and is not accessible to other users. Reload or restart the
+disposable service after changing TLS or `pg_hba.conf`, then run:
+
+```sh
+go test -tags=integration -count=1 ./integration_test/postgres \
+  -run '^TestPostgresMutualTLSRequiresClientCertificate$' -v
+```
+
+The scenario must connect with the trusted client certificate and fail without
+it. Do not configure this policy on a shared or production account.
+
+### ScyllaDB mTLS tests
+
+The managed ScyllaDB E2E runner creates a disposable CA and verifies that a
+TLS-enabled server requiring client certificates rejects a connection without
+one, while GOREST connects successfully with a trusted client certificate.
+Run it with:
+
+```sh
+make integration-test-scylla-e2e
+```
+
+To test an external ScyllaDB endpoint, configure a disposable endpoint to
+require client certificates and set `GOREST_IT_SCYLLA_MTLS_HOST`, `_PORT`,
+`_NAME`, `_USERNAME`, `_PASSWORD`, `_SSL_CA`, `_SSL_CERT`, and `_SSL_KEY`.
+`_SSL_CA` must trust the server certificate; the server must separately trust
+the CA that issued `_SSL_CERT`. The endpoint test verifies rejection without
+the client certificate and success with it:
+
+```sh
+go test -tags=integration -count=1 ./integration_test/scylla \
+  -run '^TestScyllaMTLSExternal$' -v
+```
+
+Keep the account, certificates, and keys disposable and private. Do not paste
+credentials or private keys into chat or commit them to the repository.
+
+### MongoDB mTLS tests
+
+The managed MongoDB E2E runner creates a disposable CA and verifies that the
+TLS-required server rejects clients without a certificate and accepts a trusted
+client certificate. Run it with:
+
+```sh
+make integration-test-mongo-e2e
+```
+
+For an external endpoint, configure a disposable MongoDB test endpoint to
+require trusted client certificates. Set `GOREST_IT_MONGO_MTLS_HOST`, `_PORT`,
+`_NAME`, `_USERNAME`, `_PASSWORD`, `_TLS=true`, `_SSL_CA`, `_SSL_CERT`, and
+`_SSL_KEY`; set `_AUTH_SOURCE` if the test account is not authenticated against
+`admin`. The CA path validates the server certificate; MongoDB must separately
+trust the CA that issued the client certificate. The external test checks
+rejection without a client certificate, then verifies a successful
+certificate-authenticated TLS connection:
+
+```sh
+go test -tags=integration -count=1 ./integration_test/mongo \
+  -run '^TestMongoMTLSExternal$' -v
+```
+
+For MongoDB, `_SSL_CERT` and `_SSL_KEY` are separate PEM files; `_SSL_CA` is
+the CA bundle used to verify the server certificate. The client certificate
+CA must be trusted by the MongoDB server independently of that server CA.
+Use a disposable, least-privilege test account and certificate. Keep private
+keys private; do not paste them into chat or commit them to the repository.
+
+When an Oracle host is provided, the HTTP E2E test uses that existing endpoint
+instead of creating a container. It creates uniquely named temporary test
+tables and GOREST migration metadata in the configured schema, cleans up the
+test objects, and does not stop or restart the external database. Use a
+disposable test schema; do not point this test at production.
+
+Use `GOFLAGS=-race` to run Go's race detector, for example:
 
 ```sh
 GOFLAGS=-race make integration-test-postgres-e2e
 ```
 
-Use the matching Make target for another driver; SQL Server still requires
-`GOREST_IT_SQLSERVER_ACCEPT_EULA=Y`. This instruments GOREST and the test
-process for Go memory races. It does not detect database-server isolation or
-replace a sustained load test.
+This detects Go memory races, not database isolation or load behavior.
 
-The runners write a JSON Lines Go test-event stream and a JSON summary to
-`integration_test/reports/` (or `GOREST_IT_REPORT_DIR`). The summary records
-the UTC start time, driver, image or temporary mode, command, result, exit
-code, and event filename. The event stream contains test output, including the
-database server version when available. Credentials and Oracle client paths
-are not included by the runner. Reports are ignored by Git; retain both files
-when attaching evidence to a review or audit. A report only proves the run
-described by its recorded environment and scenarios.
+## Coverage runs
 
-The migration/seeder scenario verifies successful execution and repeat-run
-behavior. Its process test starts two independent runners against a two-file
-fixture, pauses the first after file one is applied and file two is marked
-`running`, and confirms the second process is rejected by the lock. It then
-kills a child runner at that point, checks persisted history/state and the
-retained lock, verifies startup remains blocked, performs manual state/lock
-recovery, and confirms a rerun completes. The synchronization hook is compiled
-only with the `integration` build tag. These scenarios prove process-level
-coordination and recovery at a migration-file boundary. The PostgreSQL,
-MySQL, and SQL Server scenarios additionally kill the migration process while
-the database reports its test statement as active. Other drivers currently
-lack a deterministic in-flight operation probe in this suite, so their restart
-scenario remains at the file boundary. None of these scenarios simulate host
-power loss or storage corruption, or make multiple migration files atomic as a
-batch. They also do not prove production deployment ordering.
-Migration scripts are not guaranteed to be atomic across drivers; inspect the
-database before retrying a failed script. See the
-[migration and seeder guide](../docs/guide.md#4-database-migration--seeder)
-for locking, execution-state, recovery, and deployment guidance.
+Run unit tests with coverage across production packages:
+
+```sh
+make unit-coverage
+```
+
+For the managed all-services integration matrix and one combined production
+coverage profile, start Docker and run:
+
+```sh
+GOREST_IT_SQLSERVER_ACCEPT_EULA=Y make integration-test-coverage
+```
+
+Review and accept Microsoft's SQL Server container license before setting the
+EULA variable. This matrix also needs Oracle host Instant Client. It starts
+managed containers for the HTTP database scenarios and Redis; database
+service-package tests requiring configured `GOREST_IT_*_HOST` endpoints skip
+when no endpoint is configured. The command serializes package execution to
+avoid resource contention and writes both a coverage profile (`.out`) and
+matching HTML report (`.html`) under `integration_test/reports/`. The HTML is
+generated only after the full integration matrix passes. Inspect functions
+with `go tool cover -func=<profile>` or open the generated HTML report in a
+browser.
+
+Coverage shows which statements ran, not whether every behavior is correct.
+Use it to identify branches needing meaningful assertions; do not force 100%
+by invoking internal helpers without checking behavior.
+
+### Run reports
+
+Runners save a JSON Lines event stream and JSON summary in
+`integration_test/reports/` (override with `GOREST_IT_REPORT_DIR`). Reports
+include command, start time, result, exit code, and available server version;
+they exclude credentials and Oracle client paths. Keep both files as evidence
+of the specific environment and scenarios tested.
+
+Migration scripts may not be atomic across drivers. Inspect the database
+before retrying a failed script. See the
+[migration and seeder guide](../docs/guide.md#migration-seeder)
+for recovery guidance.
 
 ## Integration suite map
 
@@ -127,19 +257,26 @@ grammar rejection, transaction rollback,
 pagination/grouping, and extended-coverage helpers where those scenarios are
 implemented for that driver. MongoDB and ScyllaDB use separate NoSQL scenarios.
 
+### External TLS/mTLS tests
+
+The driver suites document the TLS and mTLS scenarios they can exercise and
+how to configure external test endpoints. For endpoint-specific results and
+the exact server profiles tested, see the
+[database testing results](../docs/testing-result.md).
+
 | Package | Main scenarios | Coverage details |
 | --- | --- | --- |
 | [`sqlite/`](./sqlite/) | CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
 | [`mysql/`](./mysql/) | Server version and charset; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Same extended SQL scenarios, including MySQL-specific Upsert behavior |
-| [`postgres/`](./postgres/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping | Join/Preload, nullable mapping, pagination boundaries, multi-row statement atomicity, live-query cancellation, Upsert matrix, PostgreSQL row-level security |
+| [`postgres/`](./postgres/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; optional mTLS endpoint verification | Join/Preload, nullable mapping, pagination boundaries, multi-row statement atomicity, live-query cancellation, Upsert matrix, PostgreSQL row-level security |
 | [`oracle/`](./oracle/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
 | [`sqlserver/`](./sqlserver/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
 | [`mongo/`](./mongo/) | Server version; CRUD and bound values; extended ORM coverage | Alternate-unique-key Upsert, unfiltered-write guards, nullable mapping, canceled-context propagation |
 | [`scylla/`](./scylla/) | Server version; CRUD; extended ORM coverage | Composite-key Upsert validation, unfiltered-write guards, nullable mapping, canceled-context propagation |
-| [`httpapi/`](./httpapi/) | Managed HTTP CRUD, bound-value search, and 12-way concurrent Create/GET/Delete checks per driver | Requires both `integration` and `integrationcontainers` tags; use the Make targets above |
+| [`httpapi/`](./httpapi/) | Managed HTTP CRUD, bound-value search, and 12-way concurrent Create/GET/Delete checks per driver; PostgreSQL additionally verifies TLS encryption, trusted-CA/hostname validation, and untrusted-CA rejection | Requires both `integration` and `integrationcontainers` tags; use the Make targets above |
 | [`app/`](./app/) | App startup and signal-driven graceful shutdown with an in-flight request | Helper-process test of the public `app.Start()` path |
 | [`log/`](./log/) | Configured file output, rotation, and redaction | Uses isolated temporary files |
-| [`redis/`](./redis/) | Operations, concurrent pool use, operation/context timeouts, startup failure, and TLS rejection | Requires a Redis endpoint; TLS checks need a TLS-enabled endpoint |
+| [`redis/`](./redis/) | Operations, concurrent pool use, operation/context timeouts, startup failure, reconnect after server-dropped client connections, and TLS rejection | `make integration-test-redis-e2e` starts and removes disposable Redis; external TLS checks use the configured endpoint |
 
 Run just the parallel SQL transaction scenario after configuring the selected
 driver's `GOREST_IT_*` environment variables:
@@ -149,498 +286,81 @@ GOREST_IT_REQUIRED=1 go test -race -tags=integration \
   ./integration_test/postgres -run '^TestORMParallelTransactions$' -count=1 -v
 ```
 
-Replace `postgres` with `mysql`, `oracle`, `sqlserver`, or `sqlite`. The test
-starts eight independent transactions together, inserts a distinct row in
-each, commits them, and verifies all eight rows. MongoDB and ScyllaDB do not
-run this SQL transaction test because GOREST's transaction methods do not
-provide transaction atomicity for those drivers. The `-race` flag checks Go
-memory accesses exercised by this scenario; it does not measure database
-throughput or prove server-side isolation behavior. Remove `-race` if the
-selected driver environment cannot be built with Go's race detector.
+Replace `postgres` with `mysql`, `oracle`, `sqlserver`, or `sqlite`.
 
-The extended SQL scenarios are not identical to every possible dialect query
-or schema. PostgreSQL has its own named coverage tests, including RLS. The
-multi-row atomicity check covers a single multi-row `INSERT` statement; it does
-not prove all-or-nothing behavior for transactions spanning multiple
-statements or chunks. The NoSQL canceled-context checks use an already-canceled
-context and do not simulate cancellation of a request already executing on a
-server. NoSQL `BeginTx`/`Commit`/`Rollback` behavior is not evidence of SQL-like
-transaction atomicity.
+**Transaction coverage**
+- The test runs eight independent SQL transactions concurrently. Each inserts
+  and commits one row; the test verifies all eight.
+- MongoDB and ScyllaDB are excluded: their transaction APIs do not guarantee
+  SQL-like atomicity. Their HTTP runners still test concurrent CRUD.
+- `-race` checks Go memory access, not database throughput or server-side
+  isolation. Remove it if the selected environment cannot build with it.
 
-The managed HTTP scenarios demonstrate parameter binding for the specific
-search value used by the test. The configured ORM driver suites also exercise
-special characters (`'`, `?`, `--`, and `/* ... */`) as bound values and
-verify that `Where()` rejects SQL literals/comments in the condition text with
-HTTP 400 across all seven drivers. The rejection assertion runs at the ORM
-validation boundary; it does not send the invalid condition to the database.
-These checks do not prove that arbitrary dynamic table,
-column, sort, or clause expressions are safe, and they do not test application
-authorization, secret management, or a full TLS configuration matrix. The
-concurrent HTTP check is bounded to 12 simultaneous requests per operation;
-it is not a sustained load, throughput, or soak test. Parallel SQL transaction
-coverage runs on the five SQL drivers. MongoDB and ScyllaDB receive concurrent
-CRUD requests through the HTTP runners, without a SQL-like transaction
-guarantee.
+**ORM and HTTP coverage limits**
+- Extended SQL tests cover representative cases, not every dialect or schema.
+  PostgreSQL has separate named tests, including RLS.
+- Multi-row atomicity applies to one `INSERT` statement, not transactions across
+  statements or chunks. NoSQL canceled-context tests start with an already
+  canceled context; they do not interrupt an operation already running on the
+  server. NoSQL transaction methods do not establish SQL-like atomicity.
+- HTTP tests demonstrate binding for the tested search value. ORM suites also
+  bind special characters (`'`, `?`, `--`, `/* ... */`) and check that
+  `Where()` rejects SQL literals/comments with HTTP 400 across all seven
+  drivers. Rejected conditions stop at ORM validation and are not sent to the
+  database.
+- These checks do not prove arbitrary dynamic table, column, sort, or clause
+  expressions are safe. They do not test application authorization, secret
+  management, or every TLS configuration.
+- Concurrent HTTP coverage is limited to 12 simultaneous requests per
+  operation; it is not a sustained load, throughput, or soak test.
 
-To run the service-configured database package tests, set the relevant
-`GOREST_IT_*` variables and use `go test -tags=integration`; detailed setup and
-examples follow. The broad command `go test -tags=integration
-./integration_test/...` also includes Redis, so a Redis service must be
-available. Managed HTTP tests are excluded from that command unless the
-`integrationcontainers` tag is added.
+## Running driver integration suites
 
-## PostgreSQL HTTP runner details
-
-The managed end-to-end runner starts a temporary PostgreSQL container,
-registers a small GOREST HTTP handler that uses the ORM, sends HTTP requests,
-checks the responses and persisted rows, and then removes the container. It
-does not require a manually installed PostgreSQL server. Docker must be
-available, and the first run downloads the PostgreSQL image and Go dependencies.
-
-Run it from the repository root:
+Run an individual package with:
 
 ```sh
-make integration-test-postgres-e2e
+go test -tags=integration ./integration_test/<driver> -count=1 -v
 ```
 
-The test covers HTTP Create, search with an injection-shaped bound value,
-required-field validation, duplicate-key conflict handling, Update, Delete,
-and a not-found response. It uses an isolated test database and credentials
-created for the disposable container. It tests the example handler supplied
-by GOREST; it does not test an application's own routes, authorization rules,
-or business logic.
-
-The runner writes a JSON Lines test-event file and a JSON summary under
-`integration_test/reports/`. The summary records the driver, image, command,
-start time, and pass/fail result. The event file includes the test output and
-the PostgreSQL server version; it does not print the database password. These
-files are ignored by Git and can be attached to an audit run report. A source
-test or generated report only describes the environment in which it ran; it
-does not establish behavior for another database version or deployment.
-
-## SQLite HTTP runner details
-
-Run the SQLite handler scenario from the repository root:
-
-```sh
-make integration-test-sqlite-e2e
-```
-
-The runner uses GOREST's SQLite driver and a temporary database file. It needs
-no database server, Docker image, or external database credentials. The shared
-HTTP scenario checks CRUD, parameter binding, required-field validation,
-duplicate-key conflict handling, and not-found behavior. The temporary
-database and application log files are removed with the test's temporary
-directory.
-
-SQLite run evidence is written to `integration_test/reports/` as a JSON Lines
-event log and JSON summary. The summary records the driver, temporary database
-mode, command, start time, and result; the event log includes the SQLite
-library version. This tests GOREST's example handler and does not exercise an
-application's own routes, authorization rules, or business logic.
-
-## MySQL HTTP runner details
-
-Run the MySQL handler scenario from the repository root:
-
-```sh
-make integration-test-mysql-e2e
-```
-
-The runner starts a disposable MySQL container using the official `mysql:8.4`
-image, creates a test database and account, runs the shared HTTP CRUD and
-parameter-binding scenario, and removes the container. Set
-`GOREST_IT_MYSQL_IMAGE` to choose another compatible image. The runner waits
-for the image initialization to finish before connecting, prints image-pull
-progress when Docker is available, and streams the test events to the terminal.
-The image's initialization variables create a database-scoped test account;
-they are for this disposable environment only. See the [official MySQL image
-documentation](https://hub.docker.com/_/mysql/) for its initialization options.
-
-MySQL run evidence is written to `integration_test/reports/` as a JSON Lines
-event log and JSON summary. The summary records the driver, image, command,
-start time, and result; the event log includes the MySQL server version. The
-report does not record the database password. This tests GOREST's example
-handler and does not exercise an application's own routes, authorization
-rules, or business logic.
-
-## MongoDB HTTP runner details
-
-Run the MongoDB handler scenario from the repository root:
-
-```sh
-make integration-test-mongo-e2e
-```
-
-The runner starts a disposable MongoDB container using the official
-`mongo:7.0` image, creates a uniquely named collection and a unique index on
-`email`, runs HTTP CRUD and parameter-binding checks, and removes the
-collection and container afterward. Set `GOREST_IT_MONGO_IMAGE` to choose
-another compatible image. The test model maps its Go `ID` field to MongoDB's
-`_id` through the `gorest` tag while exposing it as `id` in JSON; this matches
-the ORM's MongoDB primary-key validation.
-
-The runner defaults to MongoDB 7.0 because the Docker VM used for validation
-runs a kernel version that prevents MongoDB 8.0 from starting. MongoDB documents
-that versions 6.19 through 7.0.13 are affected and recommends a kernel upgrade
-to 7.0.14 or later. Check the
-[MongoDB 8.0 release notes](https://www.mongodb.com/docs/v8.0/release-notes/8.0/)
-before overriding the image on hosts using those kernel versions.
-
-MongoDB run evidence is written to `integration_test/reports/` as a JSON Lines
-event log and JSON summary. The summary records the driver, image, command,
-start time, and result; the event log includes the MongoDB server version. This
-tests GOREST's example handler and does not cover an application's own routes,
-authorization rules, or business logic.
-
-## ScyllaDB HTTP runner details
-
-Run the ScyllaDB handler scenario from the repository root:
-
-```sh
-make integration-test-scylla-e2e
-```
-
-The runner starts a disposable single-node ScyllaDB container using the
-`scylladb/scylla:2025.1` image, creates a temporary keyspace and table, runs the
-HTTP CRUD and parameter-binding checks, then removes the container. Set
-`GOREST_IT_SCYLLA_IMAGE` to choose another compatible image. The container uses
-developer mode and one CPU shard for local integration testing; this setup does
-not represent a production deployment. The runner waits for the CQL service,
-prints image-pull progress when Docker is available, and streams test events to
-the terminal.
-
-The test filters by the non-primary-key `email` column with `.AllowFiltering()`
-and checks a duplicate full primary key for HTTP 409. ScyllaDB does not enforce
-a unique constraint on `email` in this schema, so duplicate email values with
-different primary keys are not treated as conflicts.
-
-ScyllaDB run evidence is written to `integration_test/reports/` as a JSON Lines
-event log and JSON summary. The summary records the driver, image, command,
-start time, and result; the event log includes the server version. This tests
-GOREST's example handler and does not cover an application's own routes,
-authorization rules, or business logic. See the
-[ScyllaDB Docker image documentation](https://hub.docker.com/r/scylladb/scylla)
-for image startup options and deployment requirements.
-
-## Oracle HTTP runner details
-
-Run the Oracle handler scenario from the repository root:
-
-```sh
-make integration-test-oracle-e2e
-```
-
-The runner starts a disposable Oracle Database Free container, creates the
-`gorest_test` application user in `FREEPDB1`, runs the same HTTP CRUD,
-parameter-binding, required-field, duplicate-key, and not-found checks as the
-PostgreSQL example, and removes the container afterward. It defaults to the
-versioned `gvenzl/oracle-free:23.26.3-slim-faststart` image. Set
-`GOREST_IT_ORACLE_IMAGE` to select another compatible image; the selected image
-is recorded in the run summary. The image is maintained in the
-[`gvenzl/oci-oracle-free` project](https://github.com/gvenzl/oci-oracle-free).
-
-The Oracle server runs in Docker, but the Go test process still uses GOREST's
-`godror` driver and needs Oracle Instant Client on the host. The runner detects
-common Instant Client locations, including `GOREST_IT_ORACLE_LIB_DIR`,
-`ORACLE_HOME`, library-path variables, and `~/oracle/instantclient*`. If it
-cannot find the client library, install Oracle Instant Client or set
-`GOREST_IT_ORACLE_LIB_DIR` to its directory. This container runner does not
-install or bundle Oracle client libraries. The first run downloads the Oracle
-image and can take several minutes to initialize. The runner prints Docker's
-image-pull progress when the Docker CLI is available, then streams test events
-to the terminal while also saving them to the report. Keep the command running
-through image download and database startup.
-
-Oracle run evidence is written to `integration_test/reports/` as a JSON Lines
-event log and JSON summary. The summary records the image, command, start time,
-and pass/fail result; the event log records the Oracle server banner and test
-results. The report avoids recording the Instant Client path and database
-password. As with PostgreSQL, this tests GOREST's example handler and does not
-exercise an application's own routes or authorization logic.
-
-These tests run against GOREST's public application and ORM APIs with real database
-services. They are separate from the default unit-test run and require the
-`integration` build tag:
-
-```sh
-go test -tags=integration ./integration_test/...
-```
-
-SQLite uses an isolated temporary directory and runs without external setup.
-MySQL, PostgreSQL, SQL Server, Oracle, MongoDB, and ScyllaDB tests are skipped
-when their host setting is absent. Set `GOREST_IT_REQUIRED=1` in CI to make a
-missing remote-driver configuration fail instead of skip.
-
-Each remote driver uses the following environment variables, where `DRIVER` is
-`MYSQL`, `POSTGRES`, `SQLSERVER`, `ORACLE`, `MONGO`, or `SCYLLA`:
-
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `GOREST_IT_<DRIVER>_HOST` | Yes | Database server hostname |
-| `GOREST_IT_<DRIVER>_PORT` | No | Server port; GOREST chooses its configured default when empty |
-| `GOREST_IT_<DRIVER>_NAME` | Yes | Database/schema, Mongo database, or Scylla keyspace |
-| `GOREST_IT_<DRIVER>_USERNAME` | No | Database username |
-| `GOREST_IT_<DRIVER>_PASSWORD` | No | Database password |
-| `GOREST_IT_<DRIVER>_TLS` | No | Driver-specific GOREST TLS mode |
-| `GOREST_IT_<DRIVER>_SSL_CERT` | No | Client certificate path |
-| `GOREST_IT_<DRIVER>_SSL_KEY` | No | Client key path |
-| `GOREST_IT_<DRIVER>_SSL_CA` | No | CA certificate or Oracle wallet path |
-| `GOREST_IT_<DRIVER>_LIB_DIR` | No | Oracle Instant Client library directory |
-| `GOREST_IT_<DRIVER>_TRUST_SERVER_CERTIFICATE` | No | SQL Server certificate trust setting |
-
-The configured account must be allowed to create and drop uniquely named test
-tables or collections in the selected database/keyspace. Do not point the tests
-at production data. ScyllaDB's configured keyspace must already exist.
-
-## PostgreSQL
-
-Start a PostgreSQL service and provide the `GOREST_IT_POSTGRES_*`
-environment variables listed above. To use certificate verification with
-`verify-full`, run:
-
-```sh
-GOREST_IT_REQUIRED=1 \
-GOREST_IT_POSTGRES_HOST=HOST_ADDRESS \
-GOREST_IT_POSTGRES_PORT=HOST_PORT \
-GOREST_IT_POSTGRES_NAME=DB_NAME \
-GOREST_IT_POSTGRES_USERNAME=USERNAME_DB \
-GOREST_IT_POSTGRES_PASSWORD=PASSWORD_DB \
-GOREST_IT_POSTGRES_TLS=verify-full \
-GOREST_IT_POSTGRES_SSL_CA=CA_CERT_PATH \
-go test -tags=integration ./integration_test/postgres -count=1 -v
-```
-
-For `verify-full`, `GOREST_IT_POSTGRES_SSL_CA` should point to the CA
-certificate that verifies the PostgreSQL server certificate, and the host
-value must match a name in that server certificate. `GOREST_IT_POSTGRES_SSL_CERT`
-and `GOREST_IT_POSTGRES_SSL_KEY` are client certificate and key paths; set
-both only when the server requires client-certificate authentication (mTLS).
-They do not replace the server CA certificate.
-
-Set `GOREST_IT_POSTGRES_TLS` and applicable certificate variables for the TLS
-mode used by your PostgreSQL service. Each test run uses one configured TLS
-mode; the suite does not provision certificates or iterate over a TLS matrix.
-If TLS is omitted, the database driver's configured default applies. See the
-database configuration guide for driver TLS options and limitations. Keep
-`GOREST_IT_REQUIRED=1` in the command to fail on missing host configuration
-instead of skipping the remote database tests.
-
-See [ORM scenarios by driver](#orm-scenarios-by-driver) for test coverage and
-driver-specific differences.
-
-The PostgreSQL RLS scenario is
-`TestPostgresRowLevelSecurityEnforcesTenantPolicy` in
-[`postgres/coverage_test.go`](./postgres/coverage_test.go). It checks
-tenant-filtered reads for two tenants, an allowed same-tenant insert, rejection
-of a cross-tenant insert, and that a transaction-local tenant setting is cleared
-after commit/rollback. It limits the SQL pool to one connection and checks the
-PostgreSQL backend PID to confirm the pooled connection is reused across those
-transactions.
-
-Run it with `GOREST_IT_POSTGRES_USERNAME` set to the application role you want
-to validate, and use an isolated test database. The test logs PostgreSQL's
-`current_user` (not its password) and requires a role that is neither a
-superuser nor has the `BYPASSRLS` attribute; PostgreSQL bypasses row-security
-policies for those roles, so the test explicitly skips when connected with one.
-For evidence about the production application role, run the guide using that
-same role in the isolated database, or document any differences in role
-attributes and grants; a run with a different integration account does not
-establish production-role behavior. The test creates and drops its own table,
-so the configured role also needs the necessary DDL privileges in that test
-database/schema.
-
-## MySQL
-
-Set `GOREST_IT_MYSQL_*` according to the shared environment-variable table.
-The MySQL driver connection configures charset, time parsing, timezone, and
-TLS using its driver-specific options. For details about configuring TLS with
-a custom CA or client certificate, see the database configuration guide.
-Run the suite with:
-
-```sh
-GOREST_IT_REQUIRED=1 \
-GOREST_IT_MYSQL_HOST=HOST_ADDRESS \
-GOREST_IT_MYSQL_PORT=3306 \
-GOREST_IT_MYSQL_NAME=DB_NAME \
-GOREST_IT_MYSQL_USERNAME=USERNAME_DB \
-GOREST_IT_MYSQL_PASSWORD=PASSWORD_DB \
-GOREST_IT_MYSQL_TLS=disable \
-go test -tags=integration ./integration_test/mysql -count=1 -v
-```
-
-Configure the test account with permission to create and drop tables in the
-selected database. See [ORM scenarios by driver](#orm-scenarios-by-driver)
-for test coverage and driver-specific differences.
-
-## Oracle
-
-Set `GOREST_IT_ORACLE_NAME` to the Oracle service name. If Oracle Instant
-Client libraries are not available through the system library path, set
-`GOREST_IT_ORACLE_LIB_DIR` to their directory. For TCPS, configure the Oracle
-wallet path using `GOREST_IT_ORACLE_SSL_CA` and set the driver TLS mode as
-described in the database configuration guide.
-
-```sh
-GOREST_IT_REQUIRED=1 \
-GOREST_IT_ORACLE_HOST=HOST_ADDRESS \
-GOREST_IT_ORACLE_PORT=1521 \
-GOREST_IT_ORACLE_NAME=SERVICE_NAME \
-GOREST_IT_ORACLE_USERNAME=USERNAME_DB \
-GOREST_IT_ORACLE_PASSWORD=PASSWORD_DB \
-GOREST_IT_ORACLE_TLS=disable \
-GOREST_IT_ORACLE_LIB_DIR=INSTANT_CLIENT_DIRECTORY \
-go test -tags=integration ./integration_test/oracle -count=1 -v
-```
-
-Ensure the configured account can create and drop tables.
-`GOREST_IT_ORACLE_LIB_DIR` may be omitted if Oracle Instant Client libraries
-are already available through the system library path. For TCPS, change TLS
-to `enable` and set `GOREST_IT_ORACLE_SSL_CA` to the Oracle wallet directory.
-See [ORM scenarios by driver](#orm-scenarios-by-driver) for test coverage.
-
-## SQL Server HTTP runner details
-
-The SQL Server HTTP runner uses the Microsoft SQL Server 2022 Developer
-container image, starts a disposable instance, runs the shared HTTP CRUD and
-parameter-binding scenario, then removes the container. It defaults to
-`mcr.microsoft.com/mssql/server:2022-latest`; set
-`GOREST_IT_SQLSERVER_IMAGE` to choose a compatible image.
-
-Microsoft requires acceptance of the SQL Server container license. Review the
-[Microsoft SQL Server licensing terms](https://www.microsoft.com/licensing/terms/productoffering/SQLServer/all)
-and explicitly opt in when starting the runner:
-
-```sh
-GOREST_IT_SQLSERVER_ACCEPT_EULA=Y make integration-test-sqlserver-e2e
-```
-
-The runner prints image-pull progress when the Docker CLI is available and
-streams test events to the terminal. It waits for an authenticated `sqlcmd`
-query inside the container before initializing GOREST; an open TCP port alone
-does not guarantee that SQL Server has finished preparing the `sa` login. It
-also writes a JSON Lines event log and JSON summary to
-`integration_test/reports/`; the report records the driver, image, command,
-start time, and result without recording the database password. The test uses
-the `sa` account only inside the disposable container and a test-only password.
-
-Microsoft documents SQL Server Linux containers for x86-64 Linux hosts.
-Apple silicon, other ARM64 hosts, and emulated x86 containers are not validated
-by this runner. SQL Server also needs sufficient memory and disk space; the
-first image pull and database initialization may take several minutes. The Go
-test connects with TLS disabled to this isolated local test container; do not
-use that setting for a remote or production SQL Server.
-
-This exercises GOREST's example handler and does not cover an application's
-own routes, authorization rules, or business logic.
-
-## SQL Server remote integration tests
-
-Set the SQL Server connection variables from the shared table. Configure
-`GOREST_IT_SQLSERVER_TLS` and
-`GOREST_IT_SQLSERVER_TRUST_SERVER_CERTIFICATE` for the certificate policy
-required by your server. For production-like verification, use a server
-certificate trusted by the client rather than trusting an unverified
-certificate.
-
-```sh
-GOREST_IT_REQUIRED=1 \
-GOREST_IT_SQLSERVER_HOST=HOST_ADDRESS \
-GOREST_IT_SQLSERVER_PORT=1433 \
-GOREST_IT_SQLSERVER_NAME=DB_NAME \
-GOREST_IT_SQLSERVER_USERNAME=USERNAME_DB \
-GOREST_IT_SQLSERVER_PASSWORD=PASSWORD_DB \
-GOREST_IT_SQLSERVER_TLS=disable \
-GOREST_IT_SQLSERVER_TRUST_SERVER_CERTIFICATE=false \
-go test -tags=integration ./integration_test/sqlserver -count=1 -v
-```
-
-The configured account needs permission to create and drop tables. See
-[ORM scenarios by driver](#orm-scenarios-by-driver) for test coverage and
-driver-specific differences.
-
-## MongoDB
-
-Set `GOREST_IT_MONGO_*` using the shared environment-variable table. The
-configured database account must be able to create and drop collections; the
-audit checks also create a unique index.
-
-```sh
-GOREST_IT_REQUIRED=1 \
-GOREST_IT_MONGO_HOST=HOST_ADDRESS \
-GOREST_IT_MONGO_PORT=27017 \
-GOREST_IT_MONGO_NAME=DB_NAME \
-GOREST_IT_MONGO_USERNAME=USERNAME_DB \
-GOREST_IT_MONGO_PASSWORD=PASSWORD_DB \
-GOREST_IT_MONGO_TLS=false \
-go test -tags=integration ./integration_test/mongo -count=1 -v
-```
-
-See [ORM scenarios by driver](#orm-scenarios-by-driver) for MongoDB coverage
-and SQL-only scenarios that do not apply. Its context check uses an
-already-canceled context; it does not model cancellation of an operation
-already executing on the server.
-
-## ScyllaDB
-
-Create the keyspace before running the tests, then set
-`GOREST_IT_SCYLLA_HOST`, `GOREST_IT_SCYLLA_NAME` (keyspace), and any required
-port or authentication values. The account needs permission to create and
-drop tables in that keyspace.
-
-```sh
-GOREST_IT_REQUIRED=1 \
-GOREST_IT_SCYLLA_HOST=HOST_ADDRESS \
-GOREST_IT_SCYLLA_PORT=9042 \
-GOREST_IT_SCYLLA_NAME=KEYSPACE_NAME \
-GOREST_IT_SCYLLA_USERNAME=USERNAME_DB \
-GOREST_IT_SCYLLA_PASSWORD=PASSWORD_DB \
-go test -tags=integration ./integration_test/scylla -count=1 -v
-```
-
-Conditional Upsert is not implemented by GOREST's ScyllaDB ORM path; use
-native CQL lightweight transactions when conditional writes are required.
-GOREST's database TLS setting does not currently configure ScyllaDB transport
-TLS. See [ORM scenarios by driver](#orm-scenarios-by-driver) for coverage and
-SQL-only scenarios that do not apply.
-
-## SQLite
-
-SQLite tests use a temporary database directory created for each test; no
-external service or connection variables are required. Run the full SQLite
-integration package with:
-
-```sh
-go test -tags=integration ./integration_test/sqlite -count=1 -v
-```
-
-The package includes CRUD, transaction rollback, pagination/grouping, and the
-shared ORM scenarios described below.
+The broad command `go test -tags=integration ./integration_test/...` also
+runs Redis and requires a Redis service. For managed Redis, use
+`go test -tags=integration,integrationcontainers ./integration_test/redis`.
+Remote driver suites skip when
+unconfigured; set `GOREST_IT_REQUIRED=1` in CI to make missing configuration
+fail. SQLite uses a temporary database. Other drivers use
+`GOREST_IT_<DRIVER>_HOST`, `PORT`,
+`NAME`, `USERNAME`, `PASSWORD`, and optional `TLS`, `SSL_CERT`, `SSL_KEY`,
+`SSL_CA`, `AUTH_SOURCE` (MongoDB; defaults to `admin`), `LIB_DIR`, or
+`TRUST_SERVER_CERTIFICATE` settings. The selected
+database account must be able to create and drop test tables or collections;
+never use production data. See the
+[database configuration guide](../docs/configuration.md) for TLS options.
+Oracle needs host Instant Client; ScyllaDB needs an existing keyspace. Its ORM
+does not support conditional Upsert. ScyllaDB transport TLS is configured with
+`TLS=enable`; use `SSL_CA`, `SSL_CERT`, and `SSL_KEY` (cert/key together for
+mTLS) to configure verified certificates.
+
+PostgreSQL's `TestPostgresRowLevelSecurityEnforcesTenantPolicy` checks
+tenant-scoped reads/writes and transaction-local settings on a reused pooled
+connection. Use an isolated database and a non-superuser role without
+`BYPASSRLS`; it needs table create/drop privileges. A test role does not prove
+the production role's behavior.
 
 ## ORM scenarios by driver
 
-This section describes which ORM scenarios are exercised by each driver and
-how to run the shared SQL audit subset separately. The full per-driver
-commands above run the complete package, including the scenarios applicable
-to that driver.
-
-Run only the shared SQL ORM scenarios against MySQL, Oracle, SQL Server, or
-SQLite with:
+Run shared SQL coverage against MySQL, Oracle, SQL Server, and SQLite:
 
 ```sh
 GOREST_IT_REQUIRED=1 go test -tags=integration ./integration_test/mysql ./integration_test/oracle ./integration_test/sqlserver -run TestORMCoverage -count=1 -v
 go test -tags=integration ./integration_test/sqlite -run TestORMCoverage -count=1 -v
 ```
 
-The SQL scenarios cover explicit joins, belongs-to/has-many preload mapping,
-nullable results, pagination boundaries, single-statement multi-row insert
-failure, live-query cancellation, representative Upsert behavior, and invalid
-ORM input rejection. Upsert behavior varies by driver; the tests cover
-supported ORM behavior, including MySQL's rejection of conditional Upsert,
-not every constraint and dialect combination. SQL cancellation uses a
-driver-specific delay mechanism and depends on server permissions and driver
-cancellation behavior. The batch scenario concerns one multi-row statement,
-not transactions spanning multiple statements or chunks.
+Shared SQL scenarios cover joins/preloads, nullable results, pagination,
+multi-row insert failure, live-query cancellation, Upsert, and invalid ORM
+input. Upsert support varies by driver; this is not an exhaustive dialect or
+constraint matrix. Cancellation depends on driver behavior and server
+permissions. Multi-row failure tests one statement, not a transaction across
+multiple statements or chunks.
 
 PostgreSQL uses separate tests in [`postgres/coverage_test.go`](./postgres/coverage_test.go):
 
@@ -653,55 +373,47 @@ PostgreSQL uses separate tests in [`postgres/coverage_test.go`](./postgres/cover
 | Live-query context cancellation | `TestPostgresContextCancellationStopsLiveQuery` |
 | Primary-key, alternate-unique-key, and conditional Upsert | `TestPostgresUpsertBehaviorMatrix` |
 
-There is currently no dedicated PostgreSQL integration test for invalid ORM
-input rejection. That scenario is covered by the shared `TestORMCoverage` in
-the MySQL, Oracle, SQL Server, and SQLite packages, not by the PostgreSQL
-package.
+Invalid ORM input rejection is covered by `TestORMCoverage` for MySQL, Oracle,
+SQL Server, and SQLite; PostgreSQL has no dedicated test for it.
 
-MongoDB checks include nullable document mapping, alternate-unique-key Upsert,
-unfiltered-write rejection, and propagation of an already-canceled context.
-ScyllaDB checks include composite-primary-key Upsert validation, nullable
-column mapping, unfiltered-write rejection, and propagation of an
-already-canceled context. Relational joins/preloads and SQL pagination have no
-direct equivalents for MongoDB or ScyllaDB. The NoSQL context checks do not
-represent cancellation of a server operation already in progress.
+MongoDB tests nullable mapping, alternate-key Upsert, unfiltered-write guards,
+and canceled-context propagation. ScyllaDB tests nullable mapping,
+composite-key Upsert validation, unfiltered-write guards, and canceled-context
+propagation. Joins/preloads and SQL pagination do not apply to these drivers.
 
-## Application and logger integration tests
+## Application, JWT filter, and logger integration tests
 
-These tests use GOREST's public app and logger APIs and isolated temporary
-directories; they do not require external database or Redis services. Run them
-with:
+These suites need no external database or Redis service. Run the report-enabled
+target:
 
 ```sh
-go test -tags=integration ./integration_test/app ./integration_test/log -count=1
+make integration-test-app-filter-log
 ```
 
-The application test starts `app.Start()` in a helper process, sends it
-`SIGTERM`, and verifies that an in-flight HTTP request completes before the app
-reports shutdown. This exercises signal handling, Fiber graceful shutdown, and
-the application shutdown path together. The logger test writes through the
-configured Zap/Lumberjack sink, forces size-based rotation, checks the backup
-limit, and scans active and rotated files to verify recognized sensitive
-values are redacted. These tests validate representative local lifecycle and
-file-output behavior, not every deployment signal environment, logger sink,
-filesystem, or application-specific sensitive-data pattern.
+It prints each test result and saves a JSON summary plus JSON Lines test events
+under `integration_test/reports/` (or `GOREST_IT_REPORT_DIR`). To run Go's
+test command directly without report files:
 
-The separate unit test `TestAppCloseGracefullyShutsDownHTTPServer` in
-`app_lifecycle_test.go` constructs a Fiber server directly and calls
-`app.Close()`. It verifies that GOREST waits for an active request and stops
-the listener, but it does not exercise the public `app.Start()` signal-waiting
-path. Use the helper-process integration test to exercise that path. A test
-cannot fully reproduce a consuming application's runtime:
-process supervisors and containers may deliver or forward signals differently,
-and real traffic, handlers, dependencies, reverse proxies, and deployment
-timeouts vary by environment. Application owners should validate shutdown in
-their own deployment setup and ensure the orchestrator's termination grace
-period is compatible with GOREST's 30-second graceful-shutdown window.
+```sh
+go test -tags=integration ./integration_test/app ./integration_test/filter ./integration_test/log -count=1 -v
+```
+
+- **App:** `app.Start()` handles `SIGTERM` and completes an in-flight request.
+  Validate the 30-second shutdown grace period with your process supervisor.
+- **Filter:** token issuance, signature/claim checks, cookie settings, and HTTP
+  authentication/refresh. Does not test application login, account status,
+  authorization, revocation, or CSRF policy.
+- **Logger:** file output, rotation limits, and redaction of recognized
+  sensitive values.
+
+The separate unit test `TestAppCloseGracefullyShutsDownHTTPServer` checks
+`app.Close()` directly. The helper-process integration test above exercises
+the public `app.Start()` signal-handling path.
 
 ## Redis integration tests
 
-The Redis integration suite uses the local service at `127.0.0.1:6379` by
-default and requires the service to be running. Override its connection with:
+Redis tests use `127.0.0.1:6379` by default and require a running service.
+Override the connection with:
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
@@ -709,6 +421,7 @@ default and requires the service to be running. Override its connection with:
 | `GOREST_IT_REDIS_PORT` | No | Redis port; defaults to `6379` |
 | `GOREST_IT_REDIS_USERNAME` | No | Redis ACL username |
 | `GOREST_IT_REDIS_PASSWORD` | No | Redis password |
+| `GOREST_IT_REDIS_TIMEOUT` | No | Per-operation timeout; defaults to `300ms`, configurable up to `5s` for remote latency |
 | `GOREST_IT_REDIS_DATABASE` | No | Redis logical database index |
 | `GOREST_IT_REDIS_TLS` | No | Enable TLS (`true`/`false`; defaults to `false`) |
 | `GOREST_IT_REDIS_SSL_CA` | No | CA certificate path used for server verification |
@@ -727,17 +440,15 @@ GOREST_IT_REDIS_TLS=false \
 go test -tags=integration ./integration_test/redis -count=1 -v
 ```
 
-The Redis tests exercise app registration and shutdown, SET/GET/DEL using
-unique keys, concurrent use under the configured connection-pool limit,
-operation and parent-context timeouts, and initialization failure against an
-unavailable local endpoint. TLS connection and certificate-validation checks
-require a TLS-enabled Redis endpoint and the corresponding environment
-configuration. The tests do not stop or interrupt a running Redis service;
-test recovery behavior against the outage conditions relevant to your
-deployment separately.
+Coverage includes app registration/shutdown, unique-key SET/GET/DEL,
+concurrent pool use, timeouts, initialization failure, and reconnection after
+the managed Redis server drops existing client connections. This does not stop
+the Redis service or prove recovery from a full outage, failover, or topology
+change. TLS and certificate checks need a TLS-enabled endpoint.
+For remote endpoints, set `GOREST_IT_REDIS_TIMEOUT=5s` if the default
+`300ms` operation timeout is too short; the test maximum is `5s` so its
+timeout assertions remain bounded.
 
-Coverage differs by database driver; the scenarios and non-equivalent NoSQL
-checks are listed above. Integration tests are not a substitute for
-application-handler E2E tests. Run the applicable suites against the same
-database versions, schema, TLS, and permissions used by the consuming
-application when validating deployment-specific behavior.
+Use these suites as framework-level checks, not substitutes for application
+E2E tests. For deployment evidence, match the application's database versions,
+schema, TLS settings, and permissions.

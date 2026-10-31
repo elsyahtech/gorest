@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	dockercontainer "github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	gorest "github.com/elsyahtech/gorest"
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/integration_test/internaltest"
@@ -48,11 +51,17 @@ func TestScyllaHTTPCRUDAndParameterBinding(t *testing.T) {
 	if image == "" {
 		image = scyllaImageDefault
 	}
+	hostPort := availableLoopbackPort(t)
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        image,
 			Cmd:          []string{"--smp", "1", "--memory", "1G", "--overprovisioned", "1"},
 			ExposedPorts: []string{"9042/tcp"},
+			HostConfigModifier: func(config *dockercontainer.HostConfig) {
+				config.PortBindings = nat.PortMap{
+					"9042/tcp": {{HostIP: "127.0.0.1", HostPort: hostPort}},
+				}
+			},
 			WaitingFor: wait.ForAll(
 				wait.ForLog("Starting listening for CQL clients").WithStartupTimeout(12*time.Minute),
 				wait.ForListeningPort("9042/tcp").WithStartupTimeout(2*time.Minute),
@@ -112,7 +121,25 @@ func TestScyllaHTTPCRUDAndParameterBinding(t *testing.T) {
 		}
 	})
 
+	runScyllaRuntimeRecovery(t, app, container, table)
 	runScyllaCRUDHTTPScenario(t, app.Database(), table)
+	internaltest.ScyllaORMCoverage(t)
+}
+
+func availableLoopbackPort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve a local port for ScyllaDB test container: %v", err)
+	}
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatalf("read reserved ScyllaDB host port: %v", err)
+	}
+	if err := listener.Close(); err != nil {
+		t.Fatalf("release reserved ScyllaDB host port: %v", err)
+	}
+	return port
 }
 
 func createScyllaKeyspace(t *testing.T, ctx context.Context, container testcontainers.Container) {
@@ -128,8 +155,150 @@ func createScyllaKeyspace(t *testing.T, ctx context.Context, container testconta
 	}
 }
 
+func flushScyllaKeyspace(t *testing.T, container testcontainers.Container) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	exitCode, output, err := container.Exec(ctx, []string{"nodetool", "flush", scyllaKeyspace})
+	body, readErr := io.ReadAll(output)
+	if err != nil {
+		t.Fatalf("flush ScyllaDB keyspace before forced restart: %v (output: %s)", err, body)
+	}
+	if readErr != nil {
+		t.Fatalf("read ScyllaDB flush output: %v", readErr)
+	}
+	if exitCode != 0 {
+		t.Fatalf("flush ScyllaDB keyspace exited %d: %s", exitCode, body)
+	}
+}
+
+func runScyllaRuntimeRecovery(t *testing.T, app *gorest.App, container testcontainers.Container, table string) {
+	t.Helper()
+
+	db := app.Database()
+	beforeRestart := scyllaUser{
+		ID:    "runtime-before-restart",
+		Email: "before-restart@example.test",
+		Name:  "Before restart",
+	}
+	internaltest.RequireNoORMError(t, db.Table(table).Create(&beforeRestart))
+	flushScyllaKeyspace(t, container)
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	zeroGrace := time.Duration(0)
+	err := container.Stop(stopCtx, &zeroGrace)
+	stopCancel()
+	if err != nil {
+		t.Fatalf("stop ScyllaDB during runtime recovery test: %v", err)
+	}
+
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), 3*time.Second)
+	_, err = db.Ping(pingCtx)
+	cancelPing()
+	if err == nil {
+		t.Fatal("ScyllaDB health check succeeded while the database container was stopped")
+	}
+
+	outageCtx, cancelOutage := context.WithTimeout(context.Background(), 3*time.Second)
+	outageStarted := time.Now()
+	_, _, err = db.ExecCQL(outageCtx,
+		"INSERT INTO "+table+" (id, email, name) VALUES (?, ?, ?)",
+		"runtime-during-outage", "during-outage@example.test", "During outage",
+	)
+	cancelOutage()
+	if err == nil {
+		t.Fatal("ScyllaDB write succeeded while the database container was stopped")
+	}
+	if elapsed := time.Since(outageStarted); elapsed > 4*time.Second {
+		t.Fatalf("ScyllaDB write took %s to fail during outage; want it bounded by its 3-second context", elapsed)
+	}
+
+	startCtx, startCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	err = container.Start(startCtx)
+	startCancel()
+	if err != nil {
+		t.Fatalf("restart ScyllaDB during runtime recovery test: %v", err)
+	}
+	refreshContainerEndpoint(t, database.SCYLLA, container)
+	waitForContainerPort(t, database.SCYLLA, container)
+	waitForScyllaDatabase(t, db)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	iter, _, _, err := db.QueryCQL(ctx,
+		"SELECT email, name FROM "+table+" WHERE id = ?", beforeRestart.ID)
+	if err != nil {
+		t.Fatalf("read ScyllaDB row after runtime recovery: %v", err)
+	}
+	var email, name string
+	if !iter.Scan(&email, &name) {
+		t.Fatalf("scan ScyllaDB row after runtime recovery: %v", iter.Close())
+	}
+	if err := iter.Close(); err != nil {
+		t.Fatalf("close ScyllaDB recovery read: %v", err)
+	}
+	if email != beforeRestart.Email || name != beforeRestart.Name {
+		t.Fatalf("ScyllaDB row after runtime recovery = (%q, %q), want (%q, %q)",
+			email, name, beforeRestart.Email, beforeRestart.Name)
+	}
+
+	afterRestart := scyllaUser{
+		ID:    "runtime-after-restart",
+		Email: "after-restart@example.test",
+		Name:  "After restart",
+	}
+	internaltest.RequireNoORMError(t, db.Table(table).Create(&afterRestart))
+	for _, id := range []string{beforeRestart.ID, afterRestart.ID} {
+		if _, _, err := db.ExecCQL(ctx, "DELETE FROM "+table+" WHERE id = ?", id); err != nil {
+			t.Fatalf("remove ScyllaDB runtime recovery row %s: %v", id, err)
+		}
+	}
+	t.Log("ScyllaDB runtime recovery: health check and bounded CQL write failed while stopped; persisted data and new ORM writes succeeded after restart")
+}
+
+func waitForScyllaDatabase(t *testing.T, db *gorest.DBSession) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var lastErr error
+	for {
+		pingCtx, cancelPing := context.WithTimeout(ctx, 3*time.Second)
+		_, lastErr = db.Ping(pingCtx)
+		cancelPing()
+		if lastErr == nil {
+			return
+		}
+
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			t.Fatalf("ScyllaDB did not recover within the runtime test deadline: %v (last ping error: %v)", ctx.Err(), lastErr)
+		case <-timer.C:
+		}
+	}
+}
+
 func runScyllaCRUDHTTPScenario(t *testing.T, db *gorest.DBSession, table string) {
 	t.Helper()
+	message, status, err := db.ExecBatchCQL(context.Background(), []string{
+		fmt.Sprintf("INSERT INTO %s (id, email, name) VALUES (?, ?, ?)", table),
+		fmt.Sprintf("INSERT INTO %s (id, email, name) VALUES (?, ?, ?)", table),
+	}, [][]any{
+		{"batch-1", "batch1@example.test", "Batch One"},
+		{"batch-2", "batch2@example.test", "Batch Two"},
+	})
+	if err != nil {
+		t.Fatalf("execute ScyllaDB batch CQL (HTTP %d, %s): %v", status, message, err)
+	}
+	for _, id := range []string{"batch-1", "batch-2"} {
+		if _, _, err := db.ExecCQL(context.Background(), fmt.Sprintf("DELETE FROM %s WHERE id = ?", table), id); err != nil {
+			t.Fatalf("remove ScyllaDB batch row %s: %v", id, err)
+		}
+	}
+
 	httpServer, _, err := server.New(&server.Config{
 		Limiter: &limiter.Config{Max: 1000, Expiration: time.Minute},
 	})

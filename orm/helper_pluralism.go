@@ -164,7 +164,7 @@ func pluralizeForm(singular string) string {
 	}
 
 	if len(lower) > 1 && strings.HasSuffix(lower, "y") {
-		lower = yToIesPluralizeForm(lower)
+		return yToIesPluralizeForm(lower)
 	}
 
 	if strings.HasSuffix(lower, "s") ||
@@ -185,7 +185,7 @@ func pluralizeForm(singular string) string {
 	}
 
 	if len(lower) > 1 && strings.HasSuffix(lower, "o") {
-		lower = oToIesPluralizeForm(lower)
+		return oToIesPluralizeForm(lower)
 	}
 
 	// Default: just add s, no overthinking, right?

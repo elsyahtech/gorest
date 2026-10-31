@@ -3,12 +3,8 @@ package gorest
 import (
 	"context"
 	"os"
-	"os/signal"
-	"syscall"
 
 	golog "log"
-
-	"github.com/elsyahtech/gorest/database"
 )
 
 func New(config ...Config) *App {
@@ -30,51 +26,46 @@ func New(config ...Config) *App {
 
 	// initialize the server
 	app.serverInit()
+	app.registerOperationalRoutes()
+
+	// initialize the filter
+	app.filterInit(app.config.filter)
 
 	return app
 }
 
 func (app *App) Start() *App {
+	if app == nil {
+		golog.Fatal("application startup aborted: app is nil")
+		return nil
+	}
+
 	app.Log(nil, true).Info("starting gorest")
 
-	if isProductionEnvironment(app.config.Environment) {
-		if warning, shouldWarn := productionDatabaseTLSWarning(app.config.database); shouldWarn {
-			app.Log(Map{
-				"environment": app.config.Environment,
-				"driver":      database.NormalizeDatabaseDriver(app.config.database.Driver),
-				"tls_mode":    app.config.database.TLS,
-				"message":     warning,
-			}, true).Warn("database transport encryption (TLS/SSL) is disabled or not guaranteed in a production environment")
-		}
-	}
+	app.logProductionWarnings()
+	app.startLifecycle()
 
-	startServer, err := prepareStartup(app.runMigration, nil, app.startServer)
-	if err != nil {
-		app.Log(map[string]any{LogFieldKeyError: err}, true).Error("database startup tasks failed")
+	return app
+}
 
-		golog.Fatalf("application startup aborted: %v", err)
-	}
+func (app *App) abortStartup(err error) {
+	app.Log(map[string]any{LogFieldKeyError: err}, true).Error("application startup aborted")
 
-	quit := make(chan os.Signal, 1)
+	app.closeAndReport()
 
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(quit)
+	golog.Fatalf("application startup aborted: %v", err)
+}
 
-	if !app.config.Debug && app.server != nil && app.config.server != nil {
-		app.server.ExpectListen()
-	}
-
-	startServer()
-
-	sig := <-quit
-
+func (app *App) shutdownAfterSignal(sig os.Signal) {
 	app.Log(map[string]any{"signal": sig.String()}, true).Info("Application received shutdown signal...")
 
+	app.closeAndReport()
+}
+
+func (app *App) closeAndReport() {
 	if message, _, err := app.Close(); err != nil {
 		golog.Printf("application shutdown failed: %s: %v", message, err)
 	} else {
 		golog.Print(message)
 	}
-
-	return app
 }

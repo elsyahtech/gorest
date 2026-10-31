@@ -30,10 +30,35 @@ func TestGetPlaceholderUsesDriverSyntax(t *testing.T) {
 	}
 }
 
+func TestAssignReflectValuePreservesNullablePointers(t *testing.T) {
+	type record struct {
+		Optional *string
+	}
+
+	var value record
+	target := reflect.ValueOf(&value).Elem().Field(0)
+	var nullValue *string
+
+	if err := assignReflectValue(target, nullValue); err != nil {
+		t.Fatalf("assignReflectValue(nil pointer) error = %v", err)
+	}
+	if value.Optional != nil {
+		t.Fatalf("nullable pointer = %v, want nil", value.Optional)
+	}
+
+	present := "present"
+	if err := assignReflectValue(target, &present); err != nil {
+		t.Fatalf("assignReflectValue(non-nil pointer) error = %v", err)
+	}
+	if value.Optional == nil || *value.Optional != present {
+		t.Fatalf("nullable pointer = %v, want %q", value.Optional, present)
+	}
+}
+
 func TestCreateValuesRemainBoundArguments(t *testing.T) {
 	type testRow struct {
-		ID      int    `gorest:"id, primary_key"`
 		Payload string `gorest:"payload"`
+		ID      int    `gorest:"id, primary_key"`
 	}
 
 	const maliciousValue = `x'); DROP TABLE users; --`
@@ -54,7 +79,7 @@ func TestCreateValuesRemainBoundArguments(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.driver, func(t *testing.T) {
-			built := buildValueArgCreateSQL(rows, []int{0, 1}, test.driver)
+			built := buildValueArgCreateSQL(rows, []int{1, 0}, test.driver)
 			statement := "INSERT INTO users (id, payload) VALUES " + strings.Join(built.placeholders, ", ")
 
 			if statement != "INSERT INTO users (id, payload) VALUES "+test.want {
@@ -222,8 +247,8 @@ func TestCreateAndUpdateRejectInvalidPayloadAndMetadata(t *testing.T) {
 		ID int `gorest:"id, primary_key"`
 	}
 	type updatable struct {
-		ID   int    `gorest:"id, primary_key"`
 		Name string `gorest:"name"`
+		ID   int    `gorest:"id, primary_key"`
 	}
 
 	orm := &ORM{}
@@ -294,10 +319,10 @@ func TestDeletePayloadRequiresWhereOrPrimaryKey(t *testing.T) {
 
 func TestPrepareUpsertSQLValidatesDriverColumnsAndArguments(t *testing.T) {
 	tests := []struct {
-		name   string
 		orm    *ORM
-		meta   columnMetaData
+		name   string
 		driver string
+		meta   columnMetaData
 	}{
 		{
 			name:   "unsupported driver",
@@ -403,6 +428,33 @@ func TestPaginationBuildsDriverSpecificSQLAndArgs(t *testing.T) {
 				t.Errorf("pagination arguments = %#v, want %#v", args, test.wantArgs)
 			}
 		})
+	}
+}
+
+func TestSQLServerZeroLimitReturnsNoRows(t *testing.T) {
+	query := &ORM{
+		StringBuilder:  &strings.Builder{},
+		DatabaseConfig: &database.Config{Driver: database.SQLSERVER},
+		limitSet:       true,
+	}
+	query.buildQueryStringFindSQL([]string{"users.*"}, "users", nil)
+	if _, err := query.buildWhereClauseFindSQL(&reqBuildWhereClauseFindSQL{
+		activeDriver: database.SQLSERVER,
+		isSlice:      true,
+	}); err != nil {
+		t.Fatalf("buildWhereClauseFindSQL() error = %v", err)
+	}
+	args := query.buildLimitOffsetFindSQL(&structBuildLimitOffsetFindSQL{
+		activeDriver: database.SQLSERVER,
+		limitVal:     0,
+		argCounter:   1,
+	})
+
+	if got, want := query.StringBuilder.String(), "SELECT users.* FROM users WHERE 1 = 0"; got != want {
+		t.Fatalf("zero-limit SQL = %q, want %q", got, want)
+	}
+	if len(args) != 0 {
+		t.Fatalf("zero-limit arguments = %#v, want no arguments", args)
 	}
 }
 
@@ -513,7 +565,9 @@ func TestIndependentORMQueriesAreSafeToBuildConcurrently(t *testing.T) {
 	}
 
 	wait.Wait()
+
 	close(errors)
+
 	for err := range errors {
 		t.Errorf("concurrent independent query build failed: %s", err)
 	}

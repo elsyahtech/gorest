@@ -50,7 +50,9 @@ func (orm *ORM) updateSingleMongo(execCtx context.Context, collection *mongo.Col
 		return orm.setNotFound("update")
 	}
 
-	orm.Message = "Data updated successfully"
+	const message = "Data updated successfully"
+
+	orm.Message = message
 	orm.RowsAffected = modified
 	orm.Result = map[string]any{
 		isSuccess:     true,
@@ -110,7 +112,9 @@ func (orm *ORM) updateBulkMongo(execCtx context.Context, collection *mongo.Colle
 		return orm.setNotFound("update")
 	}
 
-	orm.Message = "Data updated successfully"
+	const message = "Data updated successfully"
+
+	orm.Message = message
 	orm.RowsAffected = totalModified
 	orm.Result = map[string]any{
 		isSuccess:     true,

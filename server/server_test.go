@@ -2,22 +2,33 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	gorestlog "github.com/elsyahtech/gorest/log"
 	"github.com/gofiber/fiber/v3"
 )
 
+func routeNameTestHandler() {}
+
+func TestRouteNameReturnsRegisteredFunctionName(t *testing.T) {
+	if got := routeName(routeNameTestHandler); !strings.HasSuffix(got, "routeNameTestHandler") {
+		t.Fatalf("routeName() = %q, want function name suffix", got)
+	}
+}
+
 func TestNewAppliesDefaultsForNilAndEmptyConfig(t *testing.T) {
 	for _, test := range []struct {
-		name   string
 		config *Config
+		name   string
 	}{
 		{name: "nil config"},
 		{name: "empty config", config: &Config{}},
@@ -99,6 +110,28 @@ func TestConfigDefaultPreservesExplicitCoreTimeouts(t *testing.T) {
 	}
 	if config.Core.IdleTimeout != core.IdleTimeout {
 		t.Errorf("IdleTimeout = %s, want %s", config.Core.IdleTimeout, core.IdleTimeout)
+	}
+}
+
+func TestRunAndStartServerInputValidation(t *testing.T) {
+	if got := Run(); got.Port != DefaultServerPort || got.Host != DefaultServerHost {
+		t.Fatalf("Run() = %#v, want default host and port", got)
+	}
+	config := Config{Port: 8081, Host: "0.0.0.0"}
+	if got := Run(config); got.Port != config.Port || got.Host != config.Host {
+		t.Fatalf("Run(config) = %#v, want configured host and port", got)
+	}
+
+	if message, err := StartServer(nil, &config, nil, "", "", "", "", nil); err == nil || message == "" {
+		t.Fatalf("StartServer(nil) = (%q, %v), want an initialization error", message, err)
+	}
+
+	server, _, err := New(&config)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if message, err := StartServer(server, &config, nil, "", "", "", "", nil); err == nil || message == "" {
+		t.Fatalf("StartServer(nil logger) = (%q, %v), want a logger error", message, err)
 	}
 }
 
@@ -220,8 +253,8 @@ func TestServerAddress(t *testing.T) {
 	tests := []struct {
 		name string
 		host string
-		port int
 		want string
+		port int
 	}{
 		{
 			name: "default host",
@@ -248,5 +281,89 @@ func TestServerAddress(t *testing.T) {
 				t.Fatalf("serverAddress(%q, %d) = %q, want %q", test.host, test.port, got, test.want)
 			}
 		})
+	}
+}
+
+func TestWaitForListeningReportsListenerFailure(t *testing.T) {
+	server, _, err := New(nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	defer listener.Close()
+
+	listenDone := make(chan error, 1)
+	go func() {
+		listenDone <- server.Listen(listener.Addr().String(), fiber.ListenConfig{DisableStartupMessage: true})
+	}()
+
+	if err := server.WaitForListening(context.Background()); err == nil {
+		t.Fatal("WaitForListening() succeeded despite listener failure")
+	}
+
+	select {
+	case err := <-listenDone:
+		if err == nil {
+			t.Fatal("Listen() succeeded despite occupied address")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Listen() did not return after bind failure")
+	}
+}
+
+func TestWaitForListeningRequiresScheduledListener(t *testing.T) {
+	server, _, err := New(nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	if err := server.WaitForListening(context.Background()); err == nil {
+		t.Fatal("WaitForListening() succeeded before listener was scheduled")
+	}
+}
+
+func TestStartServerReportsBindFailureAndCompletesListenerLifecycle(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	defer listener.Close()
+
+	_, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatalf("SplitHostPort() error = %v", err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatalf("Atoi(%q) error = %v", portText, err)
+	}
+	config := &Config{Host: "127.0.0.1", Port: port}
+	httpServer, _, err := New(config)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	logger, message, err := gorestlog.New(&gorestlog.Config{
+		LogDir:  t.TempDir(),
+		LogFile: "server-test.log",
+	}, "server-test")
+	if err != nil {
+		t.Fatalf("log.New() error = %v, message = %q", err, message)
+	}
+	t.Cleanup(func() {
+		if _, _, err := logger.Close(); err != nil {
+			t.Errorf("closing test logger: %v", err)
+		}
+	})
+
+	message, err = StartServer(httpServer, config, logger, "test", "1.0", "UTC", "testing", nil)
+	if err == nil || !strings.Contains(message, portText) {
+		t.Fatalf("StartServer() = (%q, %v), want a bind error naming port %s", message, err, portText)
+	}
+	if err := httpServer.WaitForListening(context.Background()); err == nil {
+		t.Fatal("WaitForListening() succeeded after StartServer failed to bind")
 	}
 }

@@ -17,5 +17,6 @@ func (orm *ORM) validateTableIdentifier(table string) error {
 			http.StatusBadRequest,
 		)
 	}
+
 	return nil
 }

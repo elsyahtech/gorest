@@ -41,9 +41,12 @@ func (orm *ORM) updateSingleScylla(execCtx context.Context, tableName string, ro
 		return orm.setNotFound("update")
 	}
 
-	const note = "note"
+	const (
+		note    = "note"
+		message = "Data updated successfully"
+	)
 
-	orm.Message = "Data updated successfully"
+	orm.Message = message
 	orm.RowsAffected = 1
 	orm.Result = map[string]any{
 		isSuccess: true,
@@ -64,42 +67,8 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 
 	// Scylla only permits IN for specific partition-key shapes. Probe each full
 	// primary key before issuing any conditional updates so composite keys work too.
-	var missing []string
-	seenMissing := map[string]bool{}
-	for _, row := range rowsVal {
-		var terms []string
-		args := make([]any, 0, len(meta.primaryKeyIndex))
-		for i, fieldIdx := range meta.primaryKeyIndex {
-			terms = append(terms, meta.primaryKeyColumns[i]+" = ?")
-			args = append(args, row.Field(fieldIdx).Interface())
-		}
-		query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(meta.primaryKeyColumns, ", "), tableName, strings.Join(terms, " AND "))
-		iter, _, _, err := orm.Database.QueryCQL(execCtx, orm.DatabaseConfig, query, args...)
-		if err != nil {
-			return orm.setScyllaWriteError("Update", err)
-		}
-		values := make([]any, len(meta.primaryKeyIndex))
-		for i := range values {
-			values[i] = new(any)
-		}
-		found := iter.Scan(values...)
-		if err := iter.Close(); err != nil {
-			return orm.setScyllaWriteError("Update", err)
-		}
-		if !found {
-			key := make([]any, len(meta.primaryKeyIndex))
-			for i, idx := range meta.primaryKeyIndex {
-				key[i] = row.Field(idx).Interface()
-			}
-			keyLabel := primaryKeyTuple(key)
-			if !seenMissing[keyLabel] {
-				missing = append(missing, primaryKeyLabel(key))
-				seenMissing[keyLabel] = true
-			}
-		}
-	}
-	if len(missing) > 0 {
-		return orm.setError("The requested records were not found. Check these primary keys: "+strings.Join(missing, ", ")+". Reference: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract", errors.New("update: records not found: "+strings.Join(missing, ", ")), http.StatusNotFound)
+	if err := orm.probeScyllaRecordsExist(execCtx, rowsVal, meta, tableName); err != nil {
+		return err
 	}
 
 	var (
@@ -123,11 +92,12 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 
 		whereClauses, err := orm.buildBulkWhereClause(
 			&reqBuildBulkWhereClause{
-				query:             &query,
-				primaryKeyIndex:   meta.primaryKeyIndex,
-				primaryKeyColumns: meta.primaryKeyColumns,
-				rows:              []reflect.Value{row},
-				driver:            activeDriver,
+				query:                     &query,
+				primaryKeyIndex:           meta.primaryKeyIndex,
+				primaryKeyColumns:         meta.primaryKeyColumns,
+				rows:                      []reflect.Value{row},
+				driver:                    activeDriver,
+				singleRowPrimaryKeyClause: true,
 			},
 		)
 		if err != nil {
@@ -143,6 +113,7 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 		applied, _, _, err := orm.Database.MapScanCAS(execCtx, orm.DatabaseConfig, queryStr, query.args...)
 		if err != nil {
 			databaseErr := orm.setScyllaWriteError("Update", err)
+
 			return orm.enrichBulkUpdateUniqueViolation(databaseErr, []reflect.Value{row}, meta, activeDriver)
 		}
 
@@ -155,11 +126,82 @@ func (orm *ORM) updateBulkScylla(execCtx context.Context, tableName string, rows
 		return orm.setNotFound("update")
 	}
 
-	orm.Message = "Data updated successfully"
+	const message = "Data updated successfully"
+
+	orm.Message = message
 	orm.RowsAffected = totalRowsAffected
 	orm.Result = map[string]any{
 		isSuccess:    true,
 		rowsAffected: totalRowsAffected,
+	}
+
+	return nil
+}
+
+func (orm *ORM) probeScyllaRecordsExist(
+	execCtx context.Context,
+	rowsVal []reflect.Value,
+	meta columnMetaData,
+	tableName string,
+) error {
+	var missing []string
+
+	seenMissing := make(map[string]bool)
+
+	for _, row := range rowsVal {
+		terms := make([]string, 0, len(meta.primaryKeyIndex))
+
+		args := make([]any, 0, len(meta.primaryKeyIndex))
+
+		for i, fieldIdx := range meta.primaryKeyIndex {
+			terms = append(terms, meta.primaryKeyColumns[i]+" = ?")
+			args = append(args, row.Field(fieldIdx).Interface())
+		}
+
+		query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(meta.primaryKeyColumns, ", "), tableName, strings.Join(terms, " AND "))
+
+		iter, _, _, err := orm.Database.QueryCQL(execCtx, orm.DatabaseConfig, query, args...)
+		if err != nil {
+			return orm.setScyllaWriteError("Update", err)
+		}
+
+		values := make([]any, len(meta.primaryKeyIndex))
+
+		for i := range values {
+			values[i] = new(any)
+		}
+
+		found := iter.Scan(values...)
+
+		if err := iter.Close(); err != nil {
+			return orm.setScyllaWriteError("Update", err)
+		}
+
+		if found {
+			continue
+		}
+
+		key := make([]any, len(meta.primaryKeyIndex))
+
+		for i, idx := range meta.primaryKeyIndex {
+			key[i] = row.Field(idx).Interface()
+		}
+
+		keyLabel := primaryKeyTuple(key)
+
+		if !seenMissing[keyLabel] {
+			missing = append(missing, primaryKeyLabel(key))
+			seenMissing[keyLabel] = true
+		}
+	}
+
+	if len(missing) > 0 {
+		return orm.setError("The requested records were not found. "+
+			"Check these primary keys: "+strings.Join(missing, ", ")+". Reference: "+
+			"https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#shared-database-error-contract",
+			errors.New("update: records not found: "+strings.Join(missing, ", ")),
+			http.StatusNotFound,
+		)
 	}
 
 	return nil

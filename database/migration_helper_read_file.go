@@ -19,41 +19,18 @@ func readFiles(driver, dir string) ([]File, string, error) {
 		return nil, message, err
 	}
 
-	entries, err := os.ReadDir(dir)
+	entries, message, err := readMigrationDirectory(dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, "", nil // no directory = no files, not an error
-		}
-
-		message := fmt.Sprintf("Ensure the directory %s has proper read permissions", dir)
-
-		return nil, message, fmt.Errorf("read directory %s: %w", dir, err)
+		return nil, message, err
 	}
 
-	files := make([]File, 0, len(entries))
+	files, downFiles, message, err := readMigrationEntries(entries, dir, ext)
+	if err != nil {
+		return nil, message, err
+	}
 
-	// Process each file in directory
-	for _, entry := range entries {
-		// Case-insensitive match so ".SQL" is also read.
-		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ext) {
-			continue
-		}
-
-		filePath := filepath.Join(dir, entry.Name())
-
-		content, err := os.ReadFile(filePath)
-		if err != nil {
-			message := fmt.Sprintf("Check file %s read permissions or if the file is locked", filePath)
-
-			return nil, message, fmt.Errorf("read file %s: %w", filePath, err)
-		}
-
-		files = append(files, File{
-			Name:    entry.Name(),
-			Path:    filePath,
-			Content: string(content),
-			Number:  extractNumber(ext, entry.Name()),
-		})
+	if message, err := pairCompensationFiles(files, downFiles, ext); err != nil {
+		return nil, message, err
 	}
 
 	// Sort by number, then by name so duplicate numbers have a deterministic order.
@@ -66,6 +43,120 @@ func readFiles(driver, dir string) ([]File, string, error) {
 	})
 
 	return files, "", nil
+}
+
+func readMigrationDirectory(dir string) ([]os.DirEntry, string, error) {
+	entries, err := os.ReadDir(dir)
+	if err == nil {
+		return entries, "", nil
+	}
+
+	if os.IsNotExist(err) {
+		return nil, "", nil
+	}
+
+	message := fmt.Sprintf("Ensure the directory %s has proper read permissions", dir)
+
+	return nil, message, fmt.Errorf("read directory %s: %w", dir, err)
+}
+
+func readMigrationEntries(entries []os.DirEntry, dir, ext string) ([]File, map[string]string, string, error) {
+	files := make([]File, 0, len(entries))
+	upFiles := make(map[string]struct{}, len(entries))
+	downFiles := make(map[string]string)
+
+	for _, entry := range entries {
+		if !isMigrationFile(entry, ext) {
+			continue
+		}
+
+		file, baseName, isCompensation, message, err := readMigrationEntry(entry, dir, ext)
+		if err != nil {
+			return nil, nil, message, err
+		}
+
+		if isCompensation {
+			if _, exists := downFiles[baseName]; exists {
+				message := fmt.Sprintf("Keep only one compensation file for %s.", baseName)
+
+				return nil, nil, message, fmt.Errorf("duplicate compensation file for %s", baseName)
+			}
+
+			downFiles[baseName] = file.Content
+
+			continue
+		}
+
+		if _, exists := upFiles[baseName]; exists {
+			name := strings.TrimSuffix(file.Name, filepath.Ext(file.Name))
+			message := fmt.Sprintf("Use unique migration/seeder filenames; %s is duplicated ignoring case.", name)
+
+			return nil, nil, message, fmt.Errorf("duplicate migration or seeder filename %q", name)
+		}
+
+		upFiles[baseName] = struct{}{}
+
+		files = append(files, file)
+	}
+
+	return files, downFiles, "", nil
+}
+
+func isMigrationFile(entry os.DirEntry, ext string) bool {
+	return !entry.IsDir() && strings.EqualFold(filepath.Ext(entry.Name()), ext)
+}
+
+func readMigrationEntry(entry os.DirEntry, dir, ext string) (File, string, bool, string, error) {
+	filePath := filepath.Join(dir, entry.Name())
+
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		message := fmt.Sprintf("Check file %s read permissions or if the file is locked", filePath)
+
+		return File{}, "", false, message, fmt.Errorf("read file %s: %w", filePath, err)
+	}
+
+	nameWithoutExt := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+	baseName := strings.ToLower(nameWithoutExt)
+
+	isCompensation := strings.HasSuffix(baseName, ".down")
+	if isCompensation {
+		baseName = strings.TrimSuffix(baseName, ".down")
+	}
+
+	return File{
+		Name:    entry.Name(),
+		Path:    filePath,
+		Content: string(content),
+		Number:  extractNumber(ext, entry.Name()),
+	}, baseName, isCompensation, "", nil
+}
+
+func pairCompensationFiles(files []File, downFiles map[string]string, ext string) (string, error) {
+	upFiles := make(map[string]struct{}, len(files))
+
+	for _, file := range files {
+		baseName := strings.ToLower(strings.TrimSuffix(file.Name, filepath.Ext(file.Name)))
+		upFiles[baseName] = struct{}{}
+	}
+
+	for baseName := range downFiles {
+		if _, exists := upFiles[baseName]; !exists {
+			message := fmt.Sprintf(
+				"Remove the orphan compensation file for %s or add its matching migration/seeder file.",
+				baseName,
+			)
+
+			return message, fmt.Errorf("compensation file has no matching migration or seeder: %s.down%s", baseName, ext)
+		}
+	}
+
+	for index := range files {
+		baseName := strings.ToLower(strings.TrimSuffix(files[index].Name, filepath.Ext(files[index].Name)))
+		files[index].CompensationContent = downFiles[baseName]
+	}
+
+	return "", nil
 }
 
 // fileExtension returns the migration file extension for a driver.

@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,17 @@ func (redis *Redis) Redis() (*redis.Client, string, int, error) {
 	}
 
 	return redis.client, "", http.StatusOK, nil
+}
+
+func (redis *Redis) Ping(ctx context.Context) error {
+	if redis == nil || redis.client == nil {
+		return errors.New("redis service is not running")
+	}
+	if ctx == nil {
+		return errors.New("redis ping context is nil")
+	}
+
+	return redis.client.Ping(ctx).Err()
 }
 
 func (redis *Redis) Close() (string, error) {
