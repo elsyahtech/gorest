@@ -32,5 +32,6 @@ func (orm *ORM) validateUpsertCondition(clause string) error {
 			http.StatusBadRequest,
 		)
 	}
+
 	return nil
 }

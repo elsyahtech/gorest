@@ -4,10 +4,18 @@ import "strings"
 
 // qualifyUpsertClause adds a table prefix to columns to prevent ambiguity in
 // ON CONFLICT / MERGE clauses (Postgres & SQL Server).
-func (*ORM) upsertClause(clause, table string) string {
-	last := 0
+func (orm *ORM) upsertClause(clause, table string) string {
+	// Keep the qualified clause separate from SQL already accumulated by the caller.
+	query := orm.StringBuilder.String()
 
-	var builder strings.Builder
+	orm.StringBuilder.Reset()
+
+	defer func() {
+		orm.StringBuilder.Reset()
+		orm.safeWriteString(query)
+	}()
+
+	last := 0
 
 	for _, loc := range upsertColRe.FindAllStringSubmatchIndex(clause, -1) {
 		start, end := loc[2], loc[3] // grup 1 = nama kolom
@@ -22,15 +30,15 @@ func (*ORM) upsertClause(clause, table string) string {
 			continue
 		}
 
-		builder.WriteString(clause[last:start])
-		builder.WriteString(table)
-		builder.WriteByte('.')
-		builder.WriteString(word)
+		orm.safeWriteString(clause[last:start])
+		orm.safeWriteString(table)
+		orm.safeWriteByte('.')
+		orm.safeWriteString(word)
 
 		last = end
 	}
 
-	builder.WriteString(clause[last:])
+	orm.safeWriteString(clause[last:])
 
-	return builder.String()
+	return orm.StringBuilder.String()
 }

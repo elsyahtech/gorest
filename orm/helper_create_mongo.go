@@ -56,10 +56,13 @@ func (orm *ORM) execCreateMongoNormal(ctx context.Context, rowsVal []any, coll *
 		res, err := coll.InsertMany(ctx, rowsVal, options.InsertMany().SetOrdered(false))
 		if res != nil {
 			orm.RowsAffected = int64(len(res.InsertedIDs))
+
 			var idStrs []string
+
 			for _, id := range res.InsertedIDs {
 				idStrs = append(idStrs, fmt.Sprintf("%v", id))
 			}
+
 			orm.LastInsertId = strings.Join(idStrs, ",")
 		}
 
@@ -127,7 +130,9 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 			upsertedID:   orm.LastInsertId,
 		}
 
-		orm.Message = "Data updated successfully"
+		const message = "Data updated successfully"
+
+		orm.Message = message
 		orm.HTTPCode = http.StatusOK
 
 		return nil
@@ -152,7 +157,9 @@ func (orm *ORM) execCreateMongoUpsert(ctx context.Context, rowsVal []any, coll *
 		upsertedID:   orm.LastInsertId,
 	}
 
-	orm.Message = "Data created successfully"
+	const message = "Data created successfully"
+
+	orm.Message = message
 	orm.HTTPCode = http.StatusOK
 
 	return nil

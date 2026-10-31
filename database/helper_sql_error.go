@@ -14,17 +14,22 @@ import (
 func IsDuplicateKeyError(err error) bool {
 	var mysqlErr *mysql.MySQLError
 
-	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
-		return true
+	if errors.As(err, &mysqlErr) {
+		if mysqlErr.Number == 1062 {
+			return true
+		}
 	}
 
 	var postgresErr *pq.Error
 
-	if errors.As(err, &postgresErr) && postgresErr.Code == "23505" {
-		return true
+	if errors.As(err, &postgresErr) {
+		if postgresErr.Code == "23505" {
+			return true
+		}
 	}
 
 	var sqlServerErr interface{ SQLErrorNumber() int32 }
+
 	if errors.As(err, &sqlServerErr) && (sqlServerErr.SQLErrorNumber() == 2601 || sqlServerErr.SQLErrorNumber() == 2627) {
 		return true
 	}

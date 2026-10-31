@@ -463,11 +463,20 @@ func (orm *ORM) buildScyllaInQuery(table, col, currentSelectCols string, keys []
 	return cql, args
 }
 
-func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each func(row map[string]any) error) error {
+func (orm *ORM) eachScyllaRow(
+	ctx context.Context,
+	cql string,
+	args []any,
+	structType reflect.Type,
+	lookup map[string]*structFieldInfo,
+	each func(row map[string]any) error,
+) error {
 	iter, _, _, err := orm.Database.QueryCQL(ctx, orm.DatabaseConfig, cql, args...)
 	if err != nil {
 		return orm.setDatabaseOperationError("Find", err)
 	}
+
+	columns := iter.Columns()
 
 	defer func() {
 		if err := iter.Close(); err != nil {
@@ -476,7 +485,7 @@ func (orm *ORM) eachScyllaRow(ctx context.Context, cql string, args []any, each 
 	}()
 
 	for {
-		row := make(map[string]any)
+		row := scyllaScanRow(columns, structType, lookup)
 		if !iter.MapScan(row) {
 			break
 		}
@@ -530,7 +539,7 @@ func (orm *ORM) loadScyllaHasMany(ctx context.Context, parents []reflect.Value, 
 	grouped := make(map[string][]reflect.Value)
 
 	for start := 0; start < len(keys); start += scyllaInChunkSize {
-		if err = orm.loadQueryScyllaHasMany(&structLoadQueryScyllaHasMany{
+		err = orm.loadQueryScyllaHasMany(&structLoadQueryScyllaHasMany{
 			ctx:         ctx,
 			start:       start,
 			keys:        keys,
@@ -539,7 +548,8 @@ func (orm *ORM) loadScyllaHasMany(ctx context.Context, parents []reflect.Value, 
 			childLookup: childLookup,
 			grouped:     grouped,
 			selectCols:  selectCols,
-		}); err != nil {
+		})
+		if err != nil {
 			return orm.Error
 		}
 	}
@@ -607,7 +617,7 @@ func (orm *ORM) loadQueryScyllaHasMany(req *structLoadQueryScyllaHasMany) error 
 
 	cql, args := orm.buildScyllaInQuery(req.rel.table, req.rel.childFKCol, req.selectCols, req.keys[req.start:end], req.hashMany.cond)
 
-	err := orm.eachScyllaRow(req.ctx, cql, args, func(row map[string]any) error {
+	err := orm.eachScyllaRow(req.ctx, cql, args, req.rel.elemType, req.childLookup, func(row map[string]any) error {
 		elemPtr, err := orm.mapScyllaRow(row, req.rel.elemType, req.childLookup)
 		if err != nil {
 			return orm.Error
@@ -681,7 +691,7 @@ func (orm *ORM) loadScyllaBelongsTo(ctx context.Context, parents []reflect.Value
 	selectCols := strings.Join(belong.selectCols, ", ")
 
 	for start := 0; start < len(keys); start += scyllaInChunkSize {
-		if err := orm.loadQueryScyllaBelongsTo(&structLoadQueryScyllaBelongsTo{
+		err := orm.loadQueryScyllaBelongsTo(&structLoadQueryScyllaBelongsTo{
 			ctx:           ctx,
 			start:         start,
 			keys:          keys,
@@ -690,7 +700,8 @@ func (orm *ORM) loadScyllaBelongsTo(ctx context.Context, parents []reflect.Value
 			found:         found,
 			relatedLookup: relatedLookup,
 			selectCols:    selectCols,
-		}); err != nil {
+		})
+		if err != nil {
 			return orm.Error
 		}
 	}
@@ -722,7 +733,7 @@ func (orm *ORM) loadQueryScyllaBelongsTo(req *structLoadQueryScyllaBelongsTo) er
 
 	cql, args := orm.buildScyllaInQuery(req.core.collection, req.core.targetCol, req.selectCols, req.keys[req.start:end], req.belong.cond)
 
-	err := orm.eachScyllaRow(req.ctx, cql, args, func(row map[string]any) error {
+	err := orm.eachScyllaRow(req.ctx, cql, args, req.core.relatedType, req.relatedLookup, func(row map[string]any) error {
 		ptr, err := orm.mapScyllaRow(row, req.core.relatedType, req.relatedLookup)
 		if err != nil {
 			orm.Message = "ensure that column types can be converted to struct field types"

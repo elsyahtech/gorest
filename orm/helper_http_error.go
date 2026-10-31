@@ -5,8 +5,8 @@ import (
 )
 
 type httpCodeError struct {
-	code int
 	err  error
+	code int
 }
 
 func (err *httpCodeError) Error() string {
@@ -17,7 +17,7 @@ func (err *httpCodeError) Unwrap() error { return err.err }
 
 func (err *httpCodeError) HTTPStatusCode() int { return err.code }
 
-func withHTTPCode(err error, code int, driver ...string) error {
+func withHTTPCode(err error, code int) error {
 	if err == nil {
 		return nil
 	}

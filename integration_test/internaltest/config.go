@@ -25,13 +25,29 @@ func OpenApp(t *testing.T, driver string) *gorest.App {
 }
 
 func OpenAppWithConfig(t *testing.T, driver string, configure func(*database.Config)) *gorest.App {
+	return openAppWithConfig(t, driver, configure, true)
+}
+
+func OpenAppWithConfigWithoutCleanup(t *testing.T, driver string, configure func(*database.Config)) *gorest.App {
+	return openAppWithConfig(t, driver, configure, false)
+}
+
+func openAppWithConfig(
+	t *testing.T,
+	driver string,
+	configure func(*database.Config),
+	registerCleanup bool,
+) *gorest.App {
 	t.Helper()
 
 	prefix := "GOREST_IT_" + strings.ToUpper(driver)
+	timeout := 10 * time.Second
+	if driver == database.ORACLE {
+		timeout = 2 * time.Minute
+	}
 	config := database.Config{
 		Driver:    driver,
-		Enabled:   true,
-		Timeout:   10 * time.Second,
+		Timeout:   timeout,
 		Migration: false,
 		Seeder:    false,
 	}
@@ -45,6 +61,7 @@ func OpenAppWithConfig(t *testing.T, driver string, configure func(*database.Con
 		config.Name = requiredEnvironmentValue(t, prefix+"_NAME")
 		config.Username = os.Getenv(prefix + "_USERNAME")
 		config.Password = os.Getenv(prefix + "_PASSWORD")
+		config.AuthSource = os.Getenv(prefix + "_AUTH_SOURCE")
 		config.Port = os.Getenv(prefix + "_PORT")
 		config.TLS = os.Getenv(prefix + "_TLS")
 		config.SSLCertPath = os.Getenv(prefix + "_SSL_CERT")
@@ -61,12 +78,14 @@ func OpenAppWithConfig(t *testing.T, driver string, configure func(*database.Con
 	normalized := database.Run(config)
 	app := gorest.New()
 	app.Use(normalized)
-	t.Cleanup(func() {
-		_, _, err := app.Close()
-		if err != nil {
-			t.Errorf("close integration application: %v", err)
-		}
-	})
+	if registerCleanup {
+		t.Cleanup(func() {
+			_, _, err := app.Close()
+			if err != nil {
+				t.Errorf("close integration application: %v", err)
+			}
+		})
+	}
 
 	return app
 }

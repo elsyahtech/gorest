@@ -67,9 +67,11 @@ func (app *App) RunDatabaseStartupTasks() error {
 	if app == nil {
 		return errors.New("run database startup tasks: app is nil")
 	}
+
 	if app.config.database == nil || app.database == nil {
 		return errors.New("run database startup tasks: database is not initialized; register an enabled database config with app.Use")
 	}
+
 	return app.runMigration()
 }
 
@@ -87,64 +89,38 @@ func runMigrationStartup(migration, seeder func() error) error {
 	return nil
 }
 
-func prepareStartup(migration, seeder func() error, startServer func()) (func(), error) {
-	if err := runMigrationStartup(migration, seeder); err != nil {
-		return nil, err
-	}
-
-	return func() {
-		go startServer()
-	}, nil
-}
-
-func (app *App) startServer() {
+func (app *App) startServer() error {
 	if app.log == nil {
-		golog.Fatalf("failed to start server: logger is not running. message: " +
-			"Ensure the logger is running before start the server. Run log.Run(log.Config{...}) in your app")
+		return errors.New("failed to start server: logger is not running")
 	}
 
 	app.Log(nil, true).Info("starting server")
 
 	if app.config.server == nil || app.server == nil {
-		return
+		return errors.New("failed to start server: server is not initialized")
 	}
 
-	if !app.config.Debug {
-		publicRoutes := RegisterDefaultRoutes
-		modulesRunning := app.modules
+	publicRoutes := RegisterDefaultRoutes
+	app.services.routers = append(app.services.routers, publicRoutes)
 
-		app.services.routers = append(app.services.routers, publicRoutes)
-
-		_, message, err := app.routerRegistry(publicRoutes)
-		if err != nil {
-			app.Log(map[string]any{
-				LogFieldKeyError:   err,
-				LogFieldKeyMessage: message,
-			}, true).Error("failed to start server")
-
-			golog.Fatalf("%v", err)
-		}
-
-		message, err = server.StartServer(
-			app.server,
-			app.config.server,
-			app.log,
-			app.config.AppName,
-			app.config.Version,
-			app.config.Timezone,
-			app.config.Environment,
-			modulesRunning,
-			app.services.routers,
-		)
-		if err != nil {
-			app.Log(map[string]any{
-				LogFieldKeyError:   err,
-				LogFieldKeyMessage: message,
-			}, true).Error("starting server is failed")
-
-			golog.Fatalf("starting server is failed: %v. message: %v", err, message)
-		}
+	_, message, err := app.routerRegistry(publicRoutes)
+	if err != nil {
+		return fmt.Errorf("register default routes: %s: %w", message, err)
 	}
 
-	app.Log(nil, true).Info("gorest is running")
+	message, err = server.StartServer(
+		app.server,
+		app.config.server,
+		app.log,
+		app.config.AppName,
+		app.config.Version,
+		app.config.Timezone,
+		app.config.Environment,
+		app.modules,
+	)
+	if err != nil {
+		return fmt.Errorf("starting server failed: %s: %w", message, err)
+	}
+
+	return nil
 }

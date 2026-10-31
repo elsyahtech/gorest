@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/filter"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
@@ -26,63 +27,23 @@ func (app *App) Use(args ...any) *App {
 		switch arg := args[idx].(type) {
 		// LOG
 		case log.Config, *log.Config:
-			if argType, logOk := args[idx].(log.Config); logOk {
-				app.config.log = &argType
-			} else if argPtr, logOk := args[idx].(*log.Config); logOk {
-				app.config.log = argPtr
-			}
-
-			app.logInit()
+			app.useCaseLog(args, idx)
 
 		// REDIS
 		case redis.Config, *redis.Config:
-			app.redis = &redis.Redis{}
-
-			if argType, redisOk := args[idx].(redis.Config); redisOk {
-				app.config.redis = &argType
-			} else if argPtr, redisOk := args[idx].(*redis.Config); redisOk {
-				app.config.redis = argPtr
-			}
-
-			if !app.config.redis.Disable {
-				app.registerService("Redis")
-
-				app.redisInit()
-			} else {
-				app.config.redis = nil
-				app.redis = nil
-			}
+			app.useCaseRedis(args, idx)
 
 		// DATABASE
 		case database.Config, *database.Config:
-			app.database = &database.Database{}
-
-			if argType, dbOk := args[idx].(database.Config); dbOk {
-				app.config.database = &argType
-			} else if argPtr, dbOk := args[idx].(*database.Config); dbOk {
-				app.config.database = argPtr
-			}
-
-			if !app.config.database.Disable {
-				msg := fmt.Sprintf("Database (%s)", database.NormalizeDatabaseDriver(app.config.database.Driver))
-
-				app.registerService(msg)
-
-				app.databaseInit()
-			} else {
-				app.config.database = nil
-				app.database = nil
-			}
+			app.useCaseDatabase(args, idx)
 
 		// SERVER
 		case server.Config, *server.Config:
-			if argType, serverOk := args[idx].(server.Config); serverOk {
-				app.config.server = &argType
-			} else if argPtr, serverOk := args[idx].(*server.Config); serverOk {
-				app.config.server = argPtr
-			}
+			app.useCaseServer(args, idx)
 
-			app.serverInit()
+		// FILTER
+		case filter.Config, *filter.Config:
+			app.useCaseFilter(args, idx)
 
 		default:
 			golog.Fatalf(
@@ -100,6 +61,74 @@ func (app *App) Use(args ...any) *App {
 	}
 
 	return app
+}
+
+func (app *App) useCaseLog(args []any, idx int) {
+	if argType, logOk := args[idx].(log.Config); logOk {
+		app.config.log = &argType
+	} else if argPtr, logOk := args[idx].(*log.Config); logOk {
+		app.config.log = argPtr
+	}
+
+	app.logInit()
+}
+
+func (app *App) useCaseRedis(args []any, idx int) {
+	app.redis = &redis.Redis{}
+
+	if argType, redisOk := args[idx].(redis.Config); redisOk {
+		app.config.redis = &argType
+	} else if argPtr, redisOk := args[idx].(*redis.Config); redisOk {
+		app.config.redis = argPtr
+	}
+
+	if !app.config.redis.Disable {
+		app.registerService("Redis")
+
+		app.redisInit()
+	} else {
+		app.config.redis = nil
+		app.redis = nil
+	}
+}
+
+func (app *App) useCaseDatabase(args []any, idx int) {
+	app.database = &database.Database{}
+
+	if argType, dbOk := args[idx].(database.Config); dbOk {
+		app.config.database = &argType
+	} else if argPtr, dbOk := args[idx].(*database.Config); dbOk {
+		app.config.database = argPtr
+	}
+
+	if !app.config.database.Disable {
+		msg := fmt.Sprintf("Database (%s)", database.NormalizeDatabaseDriver(app.config.database.Driver))
+
+		app.registerService(msg)
+
+		app.databaseInit()
+	} else {
+		app.config.database = nil
+		app.database = nil
+	}
+}
+
+func (app *App) useCaseServer(args []any, idx int) {
+	if argType, serverOk := args[idx].(server.Config); serverOk {
+		app.config.server = &argType
+	} else if argPtr, serverOk := args[idx].(*server.Config); serverOk {
+		app.config.server = argPtr
+	}
+
+	app.serverInit()
+}
+
+func (app *App) useCaseFilter(args []any, idx int) {
+	if argType, filterOk := args[idx].(filter.Config); filterOk {
+		app.filterInit(&argType)
+	} else if argPtr, filterOk := args[idx].(*filter.Config); filterOk {
+		app.filterInit(argPtr)
+	}
 }
 
 //nolint:unparam

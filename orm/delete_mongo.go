@@ -93,7 +93,9 @@ func (orm *ORM) deleteMongo(data any) error {
 		rowsAffected: deletedCount,
 	}
 
-	orm.Message = "Data deleted successfully"
+	const message = "Data deleted successfully"
+
+	orm.Message = message
 
 	return nil
 }

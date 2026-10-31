@@ -9,137 +9,159 @@ import (
 func normalizeWherePlaceholders(clause string, activeDriver string, startArgCounter int) (string, int) {
 	var normalized strings.Builder
 
+	writer := &ORM{StringBuilder: &normalized}
+
 	normalized.Grow(len(clause))
 
 	counter := startArgCounter
 
 	for idx := 0; idx < len(clause); {
-		if activeDriver == database.ORACLE && idx+1 < len(clause) &&
-			(clause[idx] == 'q' || clause[idx] == 'Q') && clause[idx+1] == '\'' {
-			end := skipOracleQuotedString(clause, idx)
-
-			normalized.WriteString(clause[idx:end])
-
-			idx = end
-
+		if next, handled := normalizeSQLSyntaxAt(clause, idx, activeDriver, writer); handled {
+			idx = next
 			continue
-		}
-
-		if end, ok := skipSQLQuotedSection(clause, idx, activeDriver); ok {
-			normalized.WriteString(clause[idx:end])
-
-			idx = end
-
-			continue
-		}
-
-		if startsSQLLineComment(clause, idx, activeDriver) {
-			end := strings.IndexByte(clause[idx:], '\n')
-			if end < 0 {
-				normalized.WriteString(clause[idx:])
-
-				break
-			}
-
-			end += idx
-
-			normalized.WriteString(clause[idx:end])
-
-			idx = end
-
-			continue
-		}
-
-		if strings.HasPrefix(clause[idx:], "/*") {
-			end := skipSQLBlockComment(clause, idx, activeDriver)
-
-			normalized.WriteString(clause[idx:end])
-
-			idx = end
-
-			continue
-		}
-
-		if clause[idx] == '?' && idx+1 < len(clause) && clause[idx+1] == '?' {
-			end := idx + 2
-			if end < len(clause) && (clause[end] == '|' || clause[end] == '&') {
-				end++
-			}
-
-			normalized.WriteByte('?')
-			normalized.WriteString(clause[idx+2 : end])
-
-			idx = end
-
-			continue
-		}
-
-		if clause[idx] == '$' && activeDriver == database.POSTGRES {
-			if delimiter, ok := postgresDollarQuoteDelimiter(clause, idx); ok {
-				end := strings.Index(clause[idx+len(delimiter):], delimiter)
-				if end < 0 {
-					normalized.WriteString(clause[idx:])
-					break
-				}
-
-				end += idx + len(delimiter)*2
-
-				normalized.WriteString(clause[idx:end])
-
-				idx = end
-
-				continue
-			}
 		}
 
 		if end, ok := sqlPlaceholderEnd(clause, idx); ok {
-			normalized.WriteString(getPlaceholder(activeDriver, counter))
-
+			writer.safeWriteString(getPlaceholder(activeDriver, counter))
 			counter++
-
 			idx = end
 
 			continue
 		}
 
-		normalized.WriteByte(clause[idx])
-
+		writer.safeWriteByte(clause[idx])
 		idx++
 	}
 
 	return normalized.String(), counter
 }
 
-func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, bool) {
-	quote := clause[start]
+func normalizeSQLSyntaxAt(clause string, idx int, activeDriver string, writer *ORM) (int, bool) {
+	if end, ok := oracleQuotedStringEnd(clause, idx, activeDriver); ok {
+		writer.safeWriteString(clause[idx:end])
 
-	var closing byte
+		return end, true
+	}
 
-	switch quote {
-	case '\'', '"':
-		closing = quote
-	case '`':
-		if activeDriver != database.MYSQL && activeDriver != database.SQLITE {
-			return start, false
-		}
+	if end, ok := skipSQLQuotedSection(clause, idx, activeDriver); ok {
+		writer.safeWriteString(clause[idx:end])
 
-		closing = quote
-	case '[':
-		if activeDriver != database.SQLSERVER {
-			return start, false
-		}
+		return end, true
+	}
 
-		closing = ']'
-	default:
+	if end, ok := sqlLineCommentEnd(clause, idx, activeDriver); ok {
+		writer.safeWriteString(clause[idx:end])
+
+		return end, true
+	}
+
+	if strings.HasPrefix(clause[idx:], "/*") {
+		end := skipSQLBlockComment(clause, idx, activeDriver)
+		writer.safeWriteString(clause[idx:end])
+
+		return end, true
+	}
+
+	if end, ok := escapedQuestionOperatorEnd(clause, idx); ok {
+		writer.safeWriteByte('?')
+		writer.safeWriteString(clause[idx+2 : end])
+
+		return end, true
+	}
+
+	if end, ok := postgresDollarQuotedSectionEnd(clause, idx, activeDriver); ok {
+		writer.safeWriteString(clause[idx:end])
+
+		return end, true
+	}
+
+	return idx, false
+}
+
+func oracleQuotedStringEnd(clause string, idx int, activeDriver string) (int, bool) {
+	if activeDriver != database.ORACLE || idx+1 >= len(clause) ||
+		(clause[idx] != 'q' && clause[idx] != 'Q') || clause[idx+1] != '\'' {
+		return idx, false
+	}
+
+	return skipOracleQuotedString(clause, idx), true
+}
+
+func sqlLineCommentEnd(clause string, idx int, activeDriver string) (int, bool) {
+	if !startsSQLLineComment(clause, idx, activeDriver) {
+		return idx, false
+	}
+
+	end := strings.IndexByte(clause[idx:], '\n')
+	if end < 0 {
+		return len(clause), true
+	}
+
+	return idx + end, true
+}
+
+func escapedQuestionOperatorEnd(clause string, idx int) (int, bool) {
+	if idx+1 >= len(clause) || clause[idx] != '?' || clause[idx+1] != '?' {
+		return idx, false
+	}
+
+	end := idx + 2
+	if end < len(clause) && (clause[end] == '|' || clause[end] == '&') {
+		end++
+	}
+
+	return end, true
+}
+
+func postgresDollarQuotedSectionEnd(clause string, start int, activeDriver string) (int, bool) {
+	if activeDriver != database.POSTGRES {
 		return start, false
 	}
 
-	backslashEscapes := activeDriver == database.MYSQL && (quote == '\'' || quote == '"')
-	if activeDriver == database.POSTGRES && quote == '\'' && start > 0 &&
-		(clause[start-1] == 'e' || clause[start-1] == 'E') &&
-		(start == 1 || !isSQLIdentifierByte(clause[start-2])) {
-		backslashEscapes = true
+	delimiter, ok := postgresDollarQuoteDelimiter(clause, start)
+	if !ok {
+		return start, false
 	}
+
+	closingOffset := strings.Index(clause[start+len(delimiter):], delimiter)
+	if closingOffset < 0 {
+		return len(clause), true
+	}
+
+	return start + len(delimiter)*2 + closingOffset, true
+}
+
+func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, bool) {
+	quote, closing, ok := quoteAndClosingOnSkipSQLQuotedSection(clause, start, activeDriver)
+	if !ok {
+		return start, false
+	}
+
+	return scanSQLQuotedSection(clause, start, quote, closing, activeDriver), true
+}
+
+func sqlQuotedSectionUsesBackslashEscapes(clause string, start int, quote byte, activeDriver string) bool {
+	if activeDriver == database.MYSQL && (quote == '\'' || quote == '"') {
+		return true
+	}
+
+	return isPostgresEscapeString(clause, start, quote, activeDriver)
+}
+
+func isPostgresEscapeString(clause string, start int, quote byte, activeDriver string) bool {
+	if activeDriver != database.POSTGRES || quote != '\'' || start == 0 {
+		return false
+	}
+
+	if clause[start-1] != 'e' && clause[start-1] != 'E' {
+		return false
+	}
+
+	return start == 1 || !isSQLIdentifierByte(clause[start-2])
+}
+
+func scanSQLQuotedSection(clause string, start int, quote, closing byte, activeDriver string) int {
+	backslashEscapes := sqlQuotedSectionUsesBackslashEscapes(clause, start, quote, activeDriver)
 
 	for idx := start + 1; idx < len(clause); idx++ {
 		if backslashEscapes && clause[idx] == '\\' {
@@ -148,20 +170,47 @@ func skipSQLQuotedSection(clause string, start int, activeDriver string) (int, b
 			continue
 		}
 
-		if clause[idx] != closing {
-			continue
-		}
-
-		if idx+1 < len(clause) && clause[idx+1] == closing {
+		if clause[idx] == closing && isDoubledSQLQuote(clause, idx, closing) {
 			idx++
 
 			continue
 		}
 
-		return idx + 1, true
+		if clause[idx] == closing {
+			return idx + 1
+		}
 	}
 
-	return len(clause), true
+	return len(clause)
+}
+
+func isDoubledSQLQuote(clause string, idx int, closing byte) bool {
+	return idx+1 < len(clause) && clause[idx+1] == closing
+}
+
+func quoteAndClosingOnSkipSQLQuotedSection(clause string, start int, activeDriver string) (quote byte, closing byte, isOk bool) {
+	quote = clause[start]
+
+	switch quote {
+	case '\'', '"':
+		closing = quote
+	case '`':
+		if activeDriver != database.MYSQL && activeDriver != database.SQLITE {
+			return quote, closing, false
+		}
+
+		closing = quote
+	case '[':
+		if activeDriver != database.SQLSERVER {
+			return quote, closing, false
+		}
+
+		closing = ']'
+	default:
+		return quote, closing, false
+	}
+
+	return quote, closing, true
 }
 
 func startsSQLLineComment(clause string, idx int, activeDriver string) bool {
@@ -198,6 +247,7 @@ func skipSQLBlockComment(clause string, start int, activeDriver string) int {
 			if depth == 0 {
 				return idx + 1
 			}
+		default:
 		}
 	}
 
@@ -284,6 +334,7 @@ func skipOracleQuotedString(clause string, start int) int {
 		closing = ')'
 	case '<':
 		closing = '>'
+	default:
 	}
 
 	for idx := start + 3; idx+1 < len(clause); idx++ {

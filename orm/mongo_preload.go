@@ -361,6 +361,13 @@ func (orm *ORM) execParseMongoCondition(
 	field string,
 	objectIDCols map[string]bool,
 ) (result bson.M, err error) {
+	if argIndex == nil {
+		return nil, errors.New("MongoDB condition argument index is nil")
+	}
+	if *argIndex < 0 || countSbm < 1 || *argIndex > len(args)-countSbm {
+		return nil, fmt.Errorf("MongoDB condition arguments out of range: index=%d count=%d available=%d", *argIndex, countSbm, len(args))
+	}
+
 	condArgs := args[*argIndex : *argIndex+countSbm]
 
 	*argIndex += countSbm
@@ -371,23 +378,23 @@ func (orm *ORM) execParseMongoCondition(
 
 		return result, nil
 	case "!=", "<>":
-		result = bson.M{field: bson.M{"$ne": mongoValue(field, condArgs[0], objectIDCols)}}
+		result = bson.M{field: bson.M{dolarNe: mongoValue(field, condArgs[0], objectIDCols)}}
 
 		return result, nil
 	case ">":
-		result = bson.M{field: bson.M{"$gt": mongoValue(field, condArgs[0], objectIDCols)}}
+		result = bson.M{field: bson.M{dolarGt: mongoValue(field, condArgs[0], objectIDCols)}}
 
 		return result, nil
 	case ">=":
-		result = bson.M{field: bson.M{"$gte": mongoValue(field, condArgs[0], objectIDCols)}}
+		result = bson.M{field: bson.M{dolarGte: mongoValue(field, condArgs[0], objectIDCols)}}
 
 		return result, nil
 	case "<":
-		result = bson.M{field: bson.M{"$lt": mongoValue(field, condArgs[0], objectIDCols)}}
+		result = bson.M{field: bson.M{dolarLt: mongoValue(field, condArgs[0], objectIDCols)}}
 
 		return result, nil
 	case "<=":
-		result = bson.M{field: bson.M{"$lte": mongoValue(field, condArgs[0], objectIDCols)}}
+		result = bson.M{field: bson.M{dolarLte: mongoValue(field, condArgs[0], objectIDCols)}}
 
 		return result, nil
 	case like, notLike:
@@ -545,10 +552,12 @@ func (orm *ORM) eachMongoDoc(ctx context.Context, collection string, filter any,
 	}
 
 	defer func() {
-		if err := cursor.Close(ctx); err != nil {
-			if orm.Error == nil {
-				orm.setDatabaseOperationError("Find", err)
-			}
+		if err := cursor.Close(ctx); err == nil {
+			return
+		}
+
+		if orm.Error == nil {
+			orm.setDatabaseOperationError("Find", err) //nolint:errcheck,revive
 		}
 	}()
 
@@ -725,14 +734,15 @@ func (orm *ORM) loadMongoBelongsTo(ctx context.Context, parents []reflect.Value,
 	found := make(map[string]reflect.Value)
 
 	for start := 0; start < len(keys); start += hasManyChunkSize {
-		if err := orm.loadFilterMongoBelongsTo(
+		err := orm.loadFilterMongoBelongsTo(
 			ctx,
 			start,
 			keys,
 			belong,
 			relatedLookup,
 			found,
-		); err != nil {
+		)
+		if err != nil {
 			return orm.Error
 		}
 	}

@@ -91,6 +91,36 @@ func (server *Server) markListenDone() {
 	server.listenDoneOnce.Do(func() { close(server.listenDone) })
 }
 
+// WaitForListening waits until the server listener is ready or exits.
+func (server *Server) WaitForListening(ctx context.Context) error {
+	if server == nil || server.SRV == nil {
+		return errors.New("wait for server listener: server is not initialized")
+	}
+
+	if ctx == nil {
+		return errors.New("wait for server listener: context is nil")
+	}
+
+	server.lifecycleMu.Lock()
+	scheduled := server.listenScheduled
+	listening := server.listening
+	listenDone := server.listenDone
+	server.lifecycleMu.Unlock()
+
+	if !scheduled {
+		return errors.New("wait for server listener: listener has not been scheduled")
+	}
+
+	select {
+	case <-listening:
+		return nil
+	case <-listenDone:
+		return errors.New("server listener stopped before becoming ready")
+	case <-ctx.Done():
+		return fmt.Errorf("wait for server listener: %w", ctx.Err())
+	}
+}
+
 // Shutdown gracefully stops Fiber and waits for its listener to return.
 func (server *Server) Shutdown(ctx context.Context) error {
 	if server == nil || server.SRV == nil {
@@ -177,9 +207,11 @@ func StartServer(
 }
 
 func serverAddress(host string, port int) string {
-	if host == "" {
-		host = DefaultServerHost
+	hst := host
+
+	if hst == "" {
+		hst = DefaultServerHost
 	}
 
-	return net.JoinHostPort(host, strconv.Itoa(port))
+	return net.JoinHostPort(hst, strconv.Itoa(port))
 }

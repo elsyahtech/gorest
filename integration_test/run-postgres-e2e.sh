@@ -11,9 +11,9 @@ started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 mkdir -p "$report_dir"
 cd "$repo_root"
 
-test_command='go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run ^TestPostgresHandlerCRUDAndParameterBinding$ -count=1'
+test_command='go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run ^(TestPostgresHandlerCRUDAndParameterBinding|TestPostgresTLSCertificateVerification)$ -count=1'
 set +e
-go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run '^TestPostgresHandlerCRUDAndParameterBinding$' -count=1 >"$events_report" 2>&1
+go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run '^(TestPostgresHandlerCRUDAndParameterBinding|TestPostgresTLSCertificateVerification)$' -count=1 >"$events_report" 2>&1
 exit_code=$?
 set -e
 

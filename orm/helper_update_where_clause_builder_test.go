@@ -91,3 +91,29 @@ func TestBuildBulkWhereClauseAcceptsExactWhereArgs(t *testing.T) {
 		t.Fatalf("unexpected arguments: %#v", query.args)
 	}
 }
+
+func TestBuildBulkWhereClauseAllowsUnwrappedSingleRowKey(t *testing.T) {
+	row := reflect.ValueOf(struct {
+		TenantID string
+		ItemID   string
+	}{TenantID: "tenant-1", ItemID: "item-1"})
+	query := &resBuildQueryUpdateSQL{argCounter: 1}
+
+	clauses, err := (&ORM{}).buildBulkWhereClause(&reqBuildBulkWhereClause{
+		query:                     query,
+		driver:                    "scylla",
+		primaryKeyIndex:           []int{0, 1},
+		primaryKeyColumns:         []string{"tenant_id", "item_id"},
+		rows:                      []reflect.Value{row},
+		singleRowPrimaryKeyClause: true,
+	})
+	if err != nil {
+		t.Fatalf("build single-row ScyllaDB WHERE clause: %v", err)
+	}
+	if len(clauses) != 1 || clauses[0] != "tenant_id = ? AND item_id = ?" {
+		t.Fatalf("ScyllaDB WHERE clauses = %#v, want an unwrapped composite-key predicate", clauses)
+	}
+	if !reflect.DeepEqual(query.args, []any{"tenant-1", "item-1"}) {
+		t.Fatalf("ScyllaDB WHERE args = %#v", query.args)
+	}
+}

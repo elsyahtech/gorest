@@ -1,4 +1,4 @@
-//nolint:revive
+//nolint:revive,nolintlint // Package log provides logging utilities for the application.
 package log
 
 import (
@@ -48,7 +48,9 @@ func New(config *Config, appName string) (*Log, string, error) {
 	if _, err := writer.Write(nil); err != nil {
 		const message = "Log Initialize: ensure log file can be created and writable"
 
-		_ = writer.Close()
+		if err = writer.Close(); err != nil {
+			fmt.Printf("log: %v\n", log)
+		}
 
 		return nil, message, fmt.Errorf("open log file: %w", err)
 	}

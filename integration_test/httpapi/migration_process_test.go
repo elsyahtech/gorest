@@ -5,6 +5,8 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -18,6 +20,7 @@ import (
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/integration_test/internaltest"
 	"github.com/testcontainers/testcontainers-go"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const migrationProcessHelperTest = "TestMigrationProcessHelper"
@@ -49,6 +52,9 @@ func TestMigrationProcessHelper(t *testing.T) {
 
 func runMigrationProcessScenarios(t *testing.T, driver string, container testcontainers.Container) {
 	t.Helper()
+	if driver == database.MONGO {
+		runMongoMigrationRollbackScenario(t, driver)
+	}
 	runIndependentMigrationRunners(t, driver)
 	runKilledMigrationRunnerRecovery(t, driver)
 	if supportsObservableLongSQL(driver) {
@@ -59,7 +65,50 @@ func runMigrationProcessScenarios(t *testing.T, driver string, container testcon
 		t.Logf("%s migration recovery: concurrent runners, killed process recovery, and database restart recovery passed", driver)
 		return
 	}
-	t.Logf("%s migration recovery: concurrent runners and killed process recovery passed; server restart does not apply to embedded SQLite", driver)
+	t.Logf("%s migration recovery: concurrent runners and killed process recovery passed; database restart recovery was skipped for the external endpoint", driver)
+}
+
+func runMongoMigrationRollbackScenario(t *testing.T, driver string) {
+	t.Helper()
+	fixture := internaltest.NewMigrationProcessFixture(t, driver)
+	fixture.SetSecondMigrationContent(t, "{")
+	app := openMigrationProcessApp(t, driver, fixture)
+	defer fixture.Cleanup(t, app)
+	if err := app.RunDatabaseStartupTasks(); err == nil {
+		t.Fatal("MongoDB migration with malformed JSON unexpectedly succeeded")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, collectionName := range []string{fixture.FirstObject, fixture.SecondObject} {
+		collection, _, _, err := app.Database().MongoCollection(collectionName)
+		if err != nil {
+			continue
+		}
+		count, err := collection.EstimatedDocumentCount(ctx)
+		if err == nil && count != 0 {
+			continue
+		}
+		nameExists, err := collectionNameExists(ctx, app.Database(), collectionName)
+		if err != nil {
+			t.Fatalf("check rolled back MongoDB collection %s: %v", collectionName, err)
+		}
+		if nameExists {
+			t.Fatalf("MongoDB collection %s remained after migration compensation", collectionName)
+		}
+	}
+	fixture.Recover(t, app)
+}
+
+func collectionNameExists(ctx context.Context, db *gorest.DBSession, collectionName string) (bool, error) {
+	collection, _, _, err := db.MongoCollection(collectionName)
+	if err != nil {
+		return false, err
+	}
+	collections, err := collection.Database().ListCollectionNames(ctx, bson.M{"name": collectionName})
+	if err != nil {
+		return false, err
+	}
+	return len(collections) != 0, nil
 }
 
 func supportsObservableLongSQL(driver string) bool {
@@ -164,11 +213,15 @@ func waitForSQLMigrationStatement(t *testing.T, driver string, app *gorest.App, 
 func runDatabaseRestartMigrationRecovery(t *testing.T, driver string, container testcontainers.Container) {
 	t.Helper()
 	fixture := internaltest.NewMigrationProcessFixture(t, driver)
-	app := openMigrationProcessApp(t, driver, fixture)
+	app := internaltest.OpenAppWithConfigWithoutCleanup(t, driver, fixture.Configure)
 	marker := filepath.Join(fixture.Directory, "runner-paused-for-db-restart")
 	release := filepath.Join(fixture.Directory, "runner-release-unused")
 	process, output, done := startMigrationProcess(t, driver, fixture.Directory, "migration:"+fixture.SecondName, marker, release)
 	waitForMigrationMarker(t, marker, done, output)
+
+	if driver == database.SCYLLA {
+		flushScyllaKeyspace(t, container)
+	}
 
 	// Close the observer's pool before stopping the server. The migration
 	// subprocess remains alive and owns the database-backed startup lock.
@@ -271,6 +324,9 @@ func waitForContainerPort(t *testing.T, driver string, container testcontainers.
 		conn, dialErr := net.DialTimeout("tcp", address, time.Second)
 		if dialErr == nil {
 			_ = conn.Close()
+			if driver == database.ORACLE {
+				waitForOracleService(t, container)
+			}
 			// Give the database time to finish crash recovery after opening its
 			// listener before the fresh GOREST client initializes.
 			time.Sleep(time.Second)
@@ -280,6 +336,41 @@ func waitForContainerPort(t *testing.T, driver string, container testcontainers.
 		time.Sleep(250 * time.Millisecond)
 	}
 	t.Fatalf("%s listener did not return after container restart at %s: %v", driver, address, lastErr)
+}
+
+func waitForOracleService(t *testing.T, container testcontainers.Container) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Minute)
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		command := fmt.Sprintf(
+			`printf '%%s\n' "set heading off feedback off" "select 'GOREST_ORACLE_READY' from dual;" "exit" | sqlplus -L -s %s/%s@//127.0.0.1:1521/%s`,
+			oracleAppUser,
+			oracleAppPassword,
+			oracleService,
+		)
+		exitCode, output, err := container.Exec(ctx, []string{"bash", "-lc", command})
+		if err == nil {
+			var status []byte
+			status, err = io.ReadAll(output)
+			if err == nil && exitCode == 0 && strings.Contains(string(status), "GOREST_ORACLE_READY") {
+				cancel()
+
+				return
+			}
+			if err == nil {
+				err = fmt.Errorf("application connection probe did not succeed (exit code %d): %s", exitCode, strings.TrimSpace(string(status)))
+			}
+		}
+		cancel()
+		lastErr = err
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	t.Fatalf("Oracle FREEPDB1 service did not register after container restart: %v", lastErr)
 }
 
 func runIndependentMigrationRunners(t *testing.T, driver string) {

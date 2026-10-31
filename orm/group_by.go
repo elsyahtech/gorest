@@ -9,6 +9,7 @@ func (orm *ORM) GroupBy(cols ...string) *ORM {
 				orm.groupByInvalid = true
 				return orm
 			}
+
 			orm.GroupByClauses = append(orm.GroupByClauses, col)
 		}
 	}

@@ -298,12 +298,12 @@ func buildKeysInLoadHasMany(parents []reflect.Value, rel *hasManyRelation) (keys
 func (orm *ORM) execLoadHasMany(
 	ctx context.Context,
 	query string,
-	args []any,
+	argsParam []any,
 	rel *hasManyRelation,
 	childLookup map[string]*structFieldInfo,
 	grouped map[string][]reflect.Value,
 ) error {
-	args = orm.sanitizeArgs(args)
+	args := orm.sanitizeArgs(argsParam)
 
 	rows, _, _, err := orm.Database.QuerySQL(ctx, orm.DatabaseConfig, query, args...)
 	if err != nil {
@@ -312,7 +312,7 @@ func (orm *ORM) execLoadHasMany(
 
 	defer func() {
 		if err := rows.Close(); err != nil && orm.Error == nil {
-			orm.setDatabaseOperationError("Find", err)
+			orm.setDatabaseOperationError("Find", err) //nolint:errcheck,revive
 		}
 	}()
 
@@ -588,6 +588,7 @@ func (orm *ORM) parsePreloadCondition(relation string, args []any, activeDriver 
 			fmt.Errorf("preload error: first extra argument of Preload(%q, ...) must be a non-empty condition string", relation),
 		)
 	}
+
 	if err := orm.validatePreloadCondition(clause); err != nil {
 		return "", nil, orm.Error
 	}

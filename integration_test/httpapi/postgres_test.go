@@ -74,6 +74,7 @@ func TestPostgresHandlerCRUDAndParameterBinding(t *testing.T) {
 		fmt.Sprintf("CREATE TABLE %s (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL)", table),
 		"DROP TABLE IF EXISTS "+table,
 	)
+	internaltest.SQLORMCoverage(t, database.POSTGRES)
 	internaltest.SQLParallelTransactions(t, database.POSTGRES)
 }
 

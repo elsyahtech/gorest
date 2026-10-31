@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,18 @@ func NewMigrationProcessFixture(t *testing.T, driver string) *MigrationProcessFi
 	}
 	if err := os.WriteFile(filepath.Join(dir, fixture.SecondName), []byte(fixture.content(fixture.SecondObject)), 0o600); err != nil {
 		t.Fatalf("write second process migration: %v", err)
+	}
+	for _, item := range []struct {
+		name   string
+		object string
+	}{
+		{name: fixture.FirstName, object: fixture.FirstObject},
+		{name: fixture.SecondName, object: fixture.SecondObject},
+	} {
+		downName := strings.TrimSuffix(item.name, filepath.Ext(item.name)) + ".down" + filepath.Ext(item.name)
+		if err := os.WriteFile(filepath.Join(dir, downName), []byte(fixture.compensation(item.object)), 0o600); err != nil {
+			t.Fatalf("write process migration compensation: %v", err)
+		}
 	}
 	return fixture
 }
@@ -187,8 +200,28 @@ func (fixture *MigrationProcessFixture) Recover(t *testing.T, app *gorest.App) {
 		if _, message, code, err := db.ExecSQL(ctx, stateQuery, "migration:"+fixture.SecondName); err != nil {
 			t.Fatalf("clear %s unfinished state (HTTP %d, %s): %v", fixture.Driver, code, message, err)
 		}
-		if _, message, code, err := db.ExecSQL(ctx, lockQuery, "database_startup"); err != nil {
-			t.Fatalf("clear %s stale lock (HTTP %d, %s): %v", fixture.Driver, code, message, err)
+
+		lockDeadline := time.Now().Add(30 * time.Second)
+		var lockMessage string
+		var lockCode int
+		var lockErr error
+		for {
+			attemptCtx, attemptCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			lockMessage, lockCode, lockErr = func() (string, int, error) {
+				defer attemptCancel()
+				_, message, code, err := db.ExecSQL(attemptCtx, lockQuery, "database_startup")
+				return message, code, err
+			}()
+			if lockErr == nil {
+				break
+			}
+			if time.Now().After(lockDeadline) {
+				break
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		if lockErr != nil {
+			t.Fatalf("clear %s stale lock (HTTP %d, %s): %v", fixture.Driver, lockCode, lockMessage, lockErr)
 		}
 	}
 }
@@ -224,7 +257,7 @@ func (fixture *MigrationProcessFixture) Cleanup(t *testing.T, app *gorest.App) {
 	}
 	if fixture.Driver == database.SCYLLA {
 		for _, name := range []string{fixture.SecondObject, fixture.FirstObject} {
-			if message, code, err := db.ExecCQL(ctx, "DROP TABLE "+name); err != nil {
+			if message, code, err := db.ExecCQL(ctx, "DROP TABLE IF EXISTS "+name); err != nil {
 				t.Errorf("drop ScyllaDB process migration table (HTTP %d, %s): %v", code, message, err)
 			}
 		}
@@ -295,7 +328,22 @@ func (fixture *MigrationProcessFixture) requireHistory(t *testing.T, app *gorest
 			t.Fatalf("close ScyllaDB history iterator: %v", err)
 		}
 		if found != want {
-			t.Fatalf("ScyllaDB migration history %q present=%v, want %v", name, found, want)
+			allRecords, _, _, queryErr := app.Database().QueryCQL(ctx, "SELECT migration_name FROM gorest_migration")
+			if queryErr != nil {
+				t.Fatalf("ScyllaDB migration history %q present=%v, want %v; query all history records: %v",
+					name, found, want, queryErr)
+			}
+			var names []string
+			for row := map[string]any{}; allRecords.MapScan(row); row = map[string]any{} {
+				if recordName, ok := row["migration_name"].(string); ok {
+					names = append(names, recordName)
+				}
+			}
+			if err := allRecords.Close(); err != nil {
+				t.Fatalf("close ScyllaDB all-history iterator: %v", err)
+			}
+			t.Fatalf("ScyllaDB migration history %q present=%v, want %v; recorded migrations: %v",
+				name, found, want, names)
 		}
 		return
 	}
@@ -356,7 +404,15 @@ func (fixture *MigrationProcessFixture) requireState(t *testing.T, app *gorest.A
 func (fixture *MigrationProcessFixture) content(object string) string {
 	switch fixture.Driver {
 	case database.MONGO:
-		payload, _ := json.Marshal(map[string]any{"collection": object})
+		payload, _ := json.Marshal(map[string]any{
+			"collection": object,
+			"validator":  map[string]any{"value_text": map[string]any{"$type": "string"}},
+			"indexes": []map[string]any{{
+				"name":   object + "_value_text_idx",
+				"key":    map[string]any{"value_text": 1},
+				"unique": false,
+			}},
+		})
 		return string(payload)
 	case database.SCYLLA:
 		return fmt.Sprintf("CREATE TABLE %s (id text PRIMARY KEY, value_text text);", object)
@@ -364,6 +420,29 @@ func (fixture *MigrationProcessFixture) content(object string) string {
 		return fmt.Sprintf("CREATE TABLE %s (id VARCHAR2(64) NOT NULL PRIMARY KEY, value_text VARCHAR2(100) NOT NULL)", object)
 	default:
 		return fmt.Sprintf("CREATE TABLE %s (id VARCHAR(64) NOT NULL PRIMARY KEY, value_text VARCHAR(100) NOT NULL)", object)
+	}
+}
+
+func (fixture *MigrationProcessFixture) compensation(object string) string {
+	switch fixture.Driver {
+	case database.MONGO:
+		content, _ := json.Marshal(map[string]any{
+			"dropIndexes": []map[string]any{{
+				"collection": object,
+				"name":       object + "_value_text_idx",
+			}},
+			"dropCollections": []string{object},
+		})
+		return string(content)
+	case database.SCYLLA:
+		return fmt.Sprintf("DROP TABLE IF EXISTS %s;", object)
+	case database.ORACLE:
+		return fmt.Sprintf(
+			"BEGIN EXECUTE IMMEDIATE 'DROP TABLE %s PURGE'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;",
+			object,
+		)
+	default:
+		return fmt.Sprintf("DROP TABLE IF EXISTS %s;", object)
 	}
 }
 

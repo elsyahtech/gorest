@@ -2,6 +2,7 @@ package database
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,9 +131,127 @@ func TestOracleConnectionParamsUseConfiguredTimezone(t *testing.T) {
 	}
 }
 
+func TestOracleConnectionParamsUseTCPSAndWalletWhenTLSIsEnabled(t *testing.T) {
+	cfg := testDSNConfig()
+	cfg.Host = "db.example.test"
+	cfg.Port = "2484"
+	cfg.Name = "XEPDB1"
+	cfg.TLS = TLSEnabled
+	cfg.SSLCAPath = "/tmp/oracle-wallet"
+	cfg.Timeout = 15 * time.Second
+
+	params, err := oracleConnectionParams(cfg, "UTC")
+	if err != nil {
+		t.Fatalf("oracleConnectionParams() error = %v", err)
+	}
+
+	if want := "tcps://db.example.test:2484/XEPDB1?connect_timeout=15"; params.ConnectString != want {
+		t.Errorf("connect string = %q, want %q", params.ConnectString, want)
+	}
+	if params.ConfigDir != cfg.SSLCAPath {
+		t.Errorf("config directory = %q, want wallet directory %q", params.ConfigDir, cfg.SSLCAPath)
+	}
+}
+
 func TestOracleConnectionParamsRejectInvalidTimezone(t *testing.T) {
 	if _, err := oracleConnectionParams(testDSNConfig(), "Invalid/Timezone"); err == nil {
 		t.Fatal("oracleConnectionParams() unexpectedly accepted an invalid timezone")
+	}
+}
+
+func TestOracleDSNIncludesConnectionSettings(t *testing.T) {
+	cfg := testDSNConfig()
+	cfg.TLS = TLSEnabled
+	cfg.Timeout = 15 * time.Second
+
+	dsn, err := oracleDSN(cfg, "UTC")
+	if err != nil {
+		t.Fatalf("oracleDSN() error = %v", err)
+	}
+	for _, expected := range []string{"localhost:1433/db", "tcps://", "connect_timeout=15"} {
+		if !strings.Contains(dsn, expected) {
+			t.Errorf("Oracle DSN %q does not contain %q", dsn, expected)
+		}
+	}
+}
+
+func TestMongoDSNRoundTripsAuthenticationAndTLS(t *testing.T) {
+	cfg := testDSNConfig()
+	cfg.Port = "27017"
+	cfg.TLS = "true"
+	cfg.SSLCAPath = "/tmp/mongo ca.pem"
+	cfg.SSLCertPath = "/tmp/client cert.pem"
+	cfg.AuthSource = "gorest"
+
+	dsn := mongoDSN(cfg)
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("url.Parse(Mongo DSN) error = %v", err)
+	}
+	username := parsed.User.Username()
+	password, hasPassword := parsed.User.Password()
+	if parsed.Scheme != "mongodb" || parsed.Hostname() != cfg.Host || parsed.Port() != cfg.Port {
+		t.Fatalf("Mongo endpoint = %q, want %s:%s", parsed.Host, cfg.Host, cfg.Port)
+	}
+	if username != cfg.Username || !hasPassword || password != cfg.Password {
+		t.Fatalf("Mongo credentials = %q / %q (present %t)", username, password, hasPassword)
+	}
+	if parsed.Path != "/"+cfg.Name {
+		t.Fatalf("Mongo database = %q, want %q", parsed.Path, "/"+cfg.Name)
+	}
+	query := parsed.Query()
+	if query.Get("authSource") != "gorest" || query.Get("tls") != "true" ||
+		query.Get("tlsCaFile") != cfg.SSLCAPath || query.Get("tlsCertificateKeyFile") != cfg.SSLCertPath {
+		t.Fatalf("Mongo connection options = %v", query)
+	}
+}
+
+func TestMongoDSNDefaultsAuthenticationDatabaseToAdmin(t *testing.T) {
+	cfg := testDSNConfig()
+	parsed, err := url.Parse(mongoDSN(cfg))
+	if err != nil {
+		t.Fatalf("url.Parse(Mongo DSN) error = %v", err)
+	}
+	if got := parsed.Query().Get("authSource"); got != "admin" {
+		t.Fatalf("Mongo authentication database = %q, want admin", got)
+	}
+}
+
+func TestMongoDSNUsesSeparateClientCertificateAndKey(t *testing.T) {
+	cfg := testDSNConfig()
+	cfg.SSLCertPath = "/tmp/client.crt"
+	cfg.SSLKeyPath = "/tmp/client.key"
+
+	parsed, err := url.Parse(mongoDSN(cfg))
+	if err != nil {
+		t.Fatalf("url.Parse(Mongo DSN) error = %v", err)
+	}
+	query := parsed.Query()
+	if query.Get("tlsCertificateFile") != cfg.SSLCertPath ||
+		query.Get("tlsPrivateKeyFile") != cfg.SSLKeyPath ||
+		query.Has("tlsCertificateKeyFile") {
+		t.Fatalf("Mongo client certificate options = %v", query)
+	}
+}
+
+func TestMongoDSNWithoutCredentialsAndNilConfig(t *testing.T) {
+	cfg := &Config{Host: "::1", Name: "gorest"}
+	parsed, err := url.Parse(mongoDSN(cfg))
+	if err != nil {
+		t.Fatalf("url.Parse(unauthenticated Mongo DSN) error = %v", err)
+	}
+	if parsed.Hostname() != "::1" || parsed.User != nil || parsed.Path != "/gorest" {
+		t.Fatalf("unauthenticated Mongo URI = %#v", parsed)
+	}
+	if got := mongoDSN(nil); got != "" {
+		t.Fatalf("mongoDSN(nil) = %q, want empty", got)
+	}
+
+	if got := databaseURLHost("::1", "27017"); got != "[::1]:27017" {
+		t.Fatalf("databaseURLHost(IPv6, port) = %q", got)
+	}
+	if got := databaseURLHost("::1", ""); got != "[::1]" {
+		t.Fatalf("databaseURLHost(IPv6, no port) = %q", got)
 	}
 }
 

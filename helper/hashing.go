@@ -24,22 +24,22 @@ const bcryptCost = 12
 // and a 500 Internal Server Error if hashing fails.
 func GenerateBcrypt(value string) (res string, msg string, code int, err error) {
 	if value == "" {
-		return "", "Password must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to generate bcrypt hash: password cannot be empty")
+		const message = "Password must not be empty"
+
+		return "", message, http.StatusBadRequest, errors.New("failed to generate bcrypt hash: password cannot be empty")
 	}
 
 	hashBytes, err := bcrypt.GenerateFromPassword([]byte(value), bcryptCost)
 	if err != nil {
 		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
-			return "", "Password must not be longer than 72 bytes",
-				http.StatusBadRequest,
-				fmt.Errorf("failed to generate bcrypt hash: %w", err)
+			const message = "Password must not be longer than 72 bytes"
+
+			return "", message, http.StatusBadRequest, fmt.Errorf("failed to generate bcrypt hash: %w", err)
 		}
 
-		return "", "Failed to process password",
-			http.StatusInternalServerError,
-			fmt.Errorf("failed to generate bcrypt hash: %w", err)
+		const message = "Failed to process password"
+
+		return "", message, http.StatusInternalServerError, fmt.Errorf("failed to generate bcrypt hash: %w", err)
 	}
 
 	return string(hashBytes), "", http.StatusOK, nil
@@ -54,9 +54,9 @@ func GenerateBcrypt(value string) (res string, msg string, code int, err error) 
 // compatibility; use a modern, purpose-appropriate hash or MAC for new code.
 func GenerateMD5(value string) (res string, msg string, code int, err error) {
 	if value == "" {
-		return "", "Data must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to generate md5 hash: data cannot be empty")
+		const message = "Data must not be empty"
+
+		return "", message, http.StatusBadRequest, errors.New("failed to generate md5 hash: data cannot be empty")
 	}
 
 	sum := md5.Sum([]byte(value))
@@ -73,9 +73,9 @@ func GenerateMD5(value string) (res string, msg string, code int, err error) {
 // Returns a 400 Bad Request if the input is empty.
 func GenerateSHA512(value string) (res string, msg string, code int, err error) {
 	if value == "" {
-		return "", "Data must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to generate sha512 hash: data cannot be empty")
+		const message = "Data must not be empty"
+
+		return "", message, http.StatusBadRequest, errors.New("failed to generate sha512 hash: data cannot be empty")
 	}
 
 	sum := sha512.Sum512([]byte(value))
@@ -97,16 +97,16 @@ const (
 // Returns a 400 Bad Request if the password is empty, and a 500 Internal Server Error if salt generation fails.
 func GenerateArgon(value string) (res string, msg string, code int, err error) {
 	if value == "" {
-		return "", "Password must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to generate argon2id hash: password cannot be empty")
+		const message = "Password must not be empty"
+
+		return "", message, http.StatusBadRequest, errors.New("failed to generate argon2id hash: password cannot be empty")
 	}
 
 	saltBytes := make([]byte, argonSaltLen)
 	if _, err := rand.Read(saltBytes); err != nil {
-		return "", "Check access to /dev/urandom (or getrandom syscall) in the runtime environment",
-			http.StatusInternalServerError,
-			fmt.Errorf("failed to generate argon2id salt: %w", err)
+		const message = "Check access to /dev/urandom (or getrandom syscall) in the runtime environment"
+
+		return "", message, http.StatusInternalServerError, fmt.Errorf("failed to generate argon2id salt: %w", err)
 	}
 
 	hash := argon2.IDKey([]byte(value), saltBytes, argonTime, argonMemory, argonThreads, argonKeyLen)
@@ -127,9 +127,9 @@ const msgInvalidCredentials = "Invalid credentials"
 // Returns a 400 Bad Request if an input is empty, and a 500 Internal Server Error if the stored hash is malformed.
 func VerifyBcrypt(value, hash string) (res bool, msg string, code int, err error) {
 	if value == "" || hash == "" {
-		return false, "Password must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to verify bcrypt hash: password and hash cannot be empty")
+		const message = "Password must not be empty"
+
+		return false, message, http.StatusBadRequest, errors.New("failed to verify bcrypt hash: password and hash cannot be empty")
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(value))
@@ -140,9 +140,9 @@ func VerifyBcrypt(value, hash string) (res bool, msg string, code int, err error
 		}
 
 		// Stored hash is malformed or has an invalid cost: server-side data problem.
-		return false, "Failed to process password",
-			http.StatusInternalServerError,
-			fmt.Errorf("failed to verify bcrypt hash: %w", err)
+		const message = "Failed to process password"
+
+		return false, message, http.StatusInternalServerError, fmt.Errorf("failed to verify bcrypt hash: %w", err)
 	}
 
 	return true, "", http.StatusOK, nil
@@ -156,9 +156,9 @@ func VerifyBcrypt(value, hash string) (res bool, msg string, code int, err error
 // compatibility; use a modern, purpose-appropriate hash or MAC for new code.
 func VerifyMD5(value, hash string) (res bool, msg string, code int, err error) {
 	if hash == "" {
-		return false, "Hash must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to verify md5 hash: hash cannot be empty")
+		const message = "Hash must not be empty"
+
+		return false, message, http.StatusBadRequest, errors.New("failed to verify md5 hash: hash cannot be empty")
 	}
 
 	computed, msg, code, err := GenerateMD5(value)
@@ -180,9 +180,9 @@ func VerifyMD5(value, hash string) (res bool, msg string, code int, err error) {
 // Returns false with a 401 Unauthorized if the digest does not match (err is nil in this case).
 func VerifySHA512(value, hash string) (res bool, msg string, code int, err error) {
 	if hash == "" {
-		return false, "Hash must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to verify sha512 hash: hash cannot be empty")
+		const message = "Hash must not be empty"
+
+		return false, message, http.StatusBadRequest, errors.New("failed to verify sha512 hash: hash cannot be empty")
 	}
 
 	computed, msg, code, err := GenerateSHA512(value)
@@ -230,62 +230,21 @@ func parseArgonUint(field, key string, bitSize int) (uint64, error) {
 // Returns a 400 Bad Request if an input is empty, and a 500 Internal Server Error if the stored hash is invalid.
 func VerifyArgon(value, encodedHash string) (res bool, msg string, code int, err error) {
 	if value == "" || encodedHash == "" {
-		return false, "Password must not be empty",
-			http.StatusBadRequest,
-			errors.New("failed to verify argon2id hash: password and hash cannot be empty")
-	}
+		const message = "Password must not be empty"
 
-	fail := func(cause error) (bool, string, int, error) {
-		return false, "Failed to process password",
-			http.StatusInternalServerError,
-			fmt.Errorf("failed to verify argon2id hash: %w", cause)
+		return false, message, http.StatusBadRequest, errors.New("failed to verify argon2id hash: password and hash cannot be empty")
 	}
 
 	// Expected: "", "argon2id", "v=19", "m=65536,t=3,p=4", "<salt>", "<hash>"
-	parts := strings.Split(encodedHash, "$")
-	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
-		return fail(errors.New("invalid hash format"))
-	}
-
-	// Version must be exactly "v=19".
-	if parts[2] != fmt.Sprintf("v=%d", argon2.Version) {
-		return fail(fmt.Errorf("unsupported argon2 version: %q", parts[2]))
-	}
-
-	// Parameters must be exactly three fields in order: m, t, p (no duplicates, no extras).
-	params := strings.Split(parts[3], ",")
-	if len(params) != 3 {
-		return fail(errors.New("invalid parameters format"))
-	}
-
-	emm, err := parseArgonUint(params[0], "m", 32)
+	parts, emm, tee, pee, err := parts(encodedHash)
 	if err != nil {
-		return fail(fmt.Errorf("invalid memory: %w", err))
-	}
-
-	tee, err := parseArgonUint(params[1], "t", 32)
-	if err != nil {
-		return fail(fmt.Errorf("invalid time: %w", err))
-	}
-
-	pee, err := parseArgonUint(params[2], "p", 8)
-	if err != nil {
-		return fail(fmt.Errorf("invalid threads: %w", err))
+		return fail(err)
 	}
 
 	memory, iterations, threads := uint32(emm), uint32(tee), uint8(pee)
 
-	// Policy limits (reject zero, too small, and too large).
-	if iterations == 0 || iterations > argonMaxTime {
-		return fail(fmt.Errorf("time out of range: %d", iterations))
-	}
-
-	if threads == 0 || threads > argonMaxThreads {
-		return fail(fmt.Errorf("threads out of range: %d", threads))
-	}
-
-	if memory < argonMinMemory || memory > argonMaxMemory || memory < 8*uint32(threads) {
-		return fail(fmt.Errorf("memory out of range: %d", memory))
+	if err := validation(iterations, threads, memory); err != nil {
+		return fail(err)
 	}
 
 	// Strict base64 decoding, with fixed expected lengths.
@@ -309,3 +268,63 @@ func VerifyArgon(value, encodedHash string) (res bool, msg string, code int, err
 
 	return true, "", http.StatusOK, nil
 }
+
+func fail(cause error) (bool, string, int, error) {
+	return false, "Failed to process password",
+		http.StatusInternalServerError,
+		fmt.Errorf("failed to verify argon2id hash: %w", cause)
+}
+
+func parts(encodedHash string) (
+	parts []string, emm uint64, tee uint64, pee uint64, err error,
+) {
+	parts = strings.Split(encodedHash, "$")
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "argon2id" {
+		return nil, 0, 0, 0, errors.New("invalid hash format")
+	}
+
+	// Version must be exactly "v=19".
+	if parts[2] != fmt.Sprintf("v=%d", argon2.Version) {
+		return nil, 0, 0, 0, fmt.Errorf("unsupported argon2 version: %q", parts[2])
+	}
+
+	// Parameters must be exactly three fields in order: m, t, p (no duplicates, no extras).
+	params := strings.Split(parts[3], ",")
+	if len(params) != 3 {
+		return nil, 0, 0, 0, errors.New("invalid parameters format")
+	}
+
+	emm, err = parseArgonUint(params[0], "m", 32)
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("invalid memory: %w", err)
+	}
+
+	tee, err = parseArgonUint(params[1], "t", 32)
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("invalid time: %w", err)
+	}
+
+	pee, err = parseArgonUint(params[2], "p", 8)
+	if err != nil {
+		return nil, 0, 0, 0, fmt.Errorf("invalid threads: %w", err)
+	}
+
+	return parts, emm, tee, pee, nil
+}
+
+func validation(iterations uint32, threads uint8, memory uint32) error {
+	// Policy limits (reject zero, too small, and too large).
+	if iterations == 0 || iterations > argonMaxTime {
+		return fmt.Errorf("time out of range: %d", iterations)
+	}
+
+	if threads == 0 || threads > argonMaxThreads {
+		return fmt.Errorf("threads out of range: %d", threads)
+	}
+
+	if memory < argonMinMemory || memory > argonMaxMemory || memory < 8*uint32(threads) {
+		return fmt.Errorf("memory out of range: %d", memory)
+	}
+
+	return nil
+} //nolint:revive

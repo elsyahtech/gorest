@@ -1,6 +1,8 @@
 package database
 
 // filterPendingSQLSeeders returns only seeders not yet executed.
+//
+//nolint:unused
 func filterPendingMigrationExec(files []File, executed []string) []File {
 	executedMap := make(map[string]bool)
 	for _, name := range executed {

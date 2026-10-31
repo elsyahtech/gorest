@@ -77,6 +77,10 @@ type Config struct {
 	// Default: false
 	TLS bool
 
+	// AllowInsecureProduction explicitly records client approval to run Redis
+	// without transport encryption in production. GOREST logs this choice.
+	AllowInsecureProduction bool
+
 	// Disable controls whether app.Use initializes the Redis connection.
 	// The default false value enables Redis initialization.
 	// Default: false

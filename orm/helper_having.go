@@ -17,8 +17,9 @@ var (
 // validateHavingClause allows only simple column/aggregate comparisons with a
 // bound value. Multiple predicates may be joined with AND. Keeping this grammar
 // small prevents raw SQL fragments from being appended to SQL HAVING clauses.
-func (orm *ORM) validateHavingClause(clause string) error {
-	clause = strings.TrimSpace(clause)
+func (orm *ORM) validateHavingClause(clauseParam string) error {
+	clause := strings.TrimSpace(clauseParam)
+
 	if clause == "" {
 		return orm.invalidHaving("condition cannot be empty")
 	}

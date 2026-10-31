@@ -12,7 +12,7 @@ scylla_image="${GOREST_IT_SCYLLA_IMAGE:-scylladb/scylla:2025.1}"
 mkdir -p "$report_dir"
 cd "$repo_root"
 
-test_command='go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run ^TestScyllaHTTPCRUDAndParameterBinding$ -count=1'
+test_command='go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run ^(TestScyllaHTTPCRUDAndParameterBinding|TestScyllaMTLSManaged)$ -count=1'
 printf 'ScyllaDB integration image: %s\n' "$scylla_image"
 if command -v docker >/dev/null 2>&1; then
 	if docker image inspect "$scylla_image" >/dev/null 2>&1; then
@@ -27,10 +27,10 @@ if command -v docker >/dev/null 2>&1; then
 else
 	printf 'Docker CLI not found; Testcontainers will pull the image. The pull may not show progress here.\n'
 fi
-printf 'Starting ScyllaDB HTTP integration test. ScyllaDB startup can take a few minutes.\n'
+printf 'Starting ScyllaDB HTTP and mTLS integration tests. ScyllaDB startup can take a few minutes.\n'
 printf 'Run reports: %s\n' "$report_dir"
 set +e
-GOREST_IT_SCYLLA_IMAGE="$scylla_image" go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run '^TestScyllaHTTPCRUDAndParameterBinding$' -count=1 2>&1 | tee "$events_report"
+GOREST_IT_SCYLLA_IMAGE="$scylla_image" go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run '^(TestScyllaHTTPCRUDAndParameterBinding|TestScyllaMTLSManaged)$' -count=1 2>&1 | tee "$events_report"
 exit_code=$?
 set -e
 

@@ -18,7 +18,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 			"To use ORM, the application must use one of the following databases: " +
 			"ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO or SCYLLA"
 
-		orm.setError(message, fmt.Errorf("%s: database service is not initialized", opName), http.StatusServiceUnavailable)
+		orm.setError(message, fmt.Errorf("%s: database service is not initialized", opName), http.StatusServiceUnavailable) //nolint:errcheck,revive
 
 		return orm
 	}
@@ -26,7 +26,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	if data == nil {
 		orm.Message = fmt.Sprintf("%s: ensure the payload data passed is a struct, slice of structs (array), or pointers", opName)
 		orm.HTTPCode = http.StatusBadRequest
-		orm.Error = withHTTPCode(fmt.Errorf("%s: struct not found/nil", opName), orm.HTTPCode, orm.DatabaseConfig.Driver)
+		orm.Error = withHTTPCode(fmt.Errorf("%s: struct not found/nil", opName), orm.HTTPCode)
 
 		return orm
 	}
@@ -41,6 +41,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 	case database.SCYLLA:
 		orm.Error = scyllaFn(data)
 	default:
+		//nolint:errcheck,revive
 		orm.setError(
 			"Use one of the supported database drivers: ORACLE, SQLSERVER, MYSQL, POSTGRES, SQLITE, MONGO, or SCYLLA.",
 			fmt.Errorf("%s: unsupported database driver %q", opName, driver),
@@ -53,7 +54,7 @@ func (orm *ORM) execOrm(data any, opName string, sqlFn, mongoFn, scyllaFn func(a
 			orm.HTTPCode = http.StatusInternalServerError
 		}
 
-		orm.Error = withHTTPCode(orm.Error, orm.HTTPCode, driver)
+		orm.Error = withHTTPCode(orm.Error, orm.HTTPCode)
 	} else if orm.HTTPCode == 0 {
 		orm.HTTPCode = http.StatusOK
 	}

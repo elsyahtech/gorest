@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -27,54 +28,97 @@ func (orm *ORM) parseOrderByTerms(structType reflect.Type, tableName string, cla
 	var terms []orderByTerm
 
 	for _, rawClause := range clauses {
-		for _, rawTerm := range strings.Split(rawClause, ",") {
-			parts := strings.Fields(strings.TrimSpace(rawTerm))
+		var err error
 
-			if len(parts) == 0 || len(parts) > 2 {
-				return nil, orm.invalidOrderBy(fmt.Sprintf("invalid ORDER BY expression %q", rawTerm))
-			}
-
-			direction := ""
-
-			if len(parts) == 2 {
-				direction = strings.ToUpper(parts[1])
-				if direction != asc && direction != desc {
-					return nil, orm.invalidOrderBy(fmt.Sprintf("invalid ORDER BY direction %q", parts[1]))
-				}
-			}
-
-			identifierParts := strings.Split(parts[0], ".")
-
-			columnName := identifierParts[len(identifierParts)-1]
-
-			for _, identifier := range identifierParts {
-				if !isSafeOrderByIdentifier(identifier) {
-					return nil, orm.invalidOrderBy(fmt.Sprintf("invalid ORDER BY column %q", parts[0]))
-				}
-			}
-
-			qualifier := ""
-			if len(identifierParts) > 1 {
-				qualifier = strings.Join(identifierParts[:len(identifierParts)-1], ".")
-				if !strings.EqualFold(qualifier, tableName) {
-					return nil, orm.invalidOrderBy(
-						fmt.Sprintf("ORDER BY qualifier %q does not match table %q", qualifier, tableName),
-					)
-				}
-			}
-
-			canonicalColumn, found := knownColumns[strings.ToLower(columnName)]
-			if !found {
-				return nil, orm.invalidOrderBy(
-					fmt.Sprintf("ORDER BY column %q is not tagged with gorest on %s", columnName, structType.Name()),
-				)
-			}
-
-			terms = append(terms, orderByTerm{Column: canonicalColumn, Direction: direction, Qualifier: qualifier})
+		terms, err = parseOrderByTerms(
+			terms,
+			rawClause,
+			tableName,
+			knownColumns,
+			structType,
+		)
+		if err != nil {
+			return nil, orm.invalidOrderBy(err.Error())
 		}
 	}
 
 	return terms, nil
+}
+
+func parseOrderByTerms(
+	termsParam []orderByTerm,
+	rawClause string,
+	tableName string,
+	knownColumns map[string]string,
+	structType reflect.Type,
+) ([]orderByTerm, error) {
+	terms := termsParam
+
+	for _, rawTerm := range strings.Split(rawClause, ",") {
+		direction, identifierParts, columnName, err := partsOnParseOrderByTerms(rawTerm)
+		if err != nil {
+			return nil, fmt.Errorf("%w", err)
+		}
+
+		qualifier, err := validateOrderByQualifier(identifierParts, tableName)
+		if err != nil {
+			return nil, fmt.Errorf("%w", err)
+		}
+
+		canonicalColumn, found := knownColumns[strings.ToLower(columnName)]
+		if !found {
+			msg := fmt.Sprintf("ORDER BY column %q is not tagged with gorest on %s", columnName, structType.Name())
+
+			return nil, errors.New(msg)
+		}
+
+		terms = append(terms, orderByTerm{Column: canonicalColumn, Direction: direction, Qualifier: qualifier})
+	}
+
+	return terms, nil
+}
+
+func partsOnParseOrderByTerms(rawTerm string) (direction string, identifierParts []string, columnName string, err error) {
+	parts := strings.Fields(strings.TrimSpace(rawTerm))
+
+	if len(parts) == 0 || len(parts) > 2 {
+		return "", nil, "", fmt.Errorf("invalid ORDER BY expression %q", rawTerm)
+	}
+
+	direction = ""
+
+	if len(parts) == 2 {
+		direction = strings.ToUpper(parts[1])
+		if direction != asc && direction != desc {
+			return "", nil, "", fmt.Errorf("invalid ORDER BY direction %q", parts[1])
+		}
+	}
+
+	identifierParts = strings.Split(parts[0], ".")
+
+	columnName = identifierParts[len(identifierParts)-1]
+
+	for _, identifier := range identifierParts {
+		if !isSafeOrderByIdentifier(identifier) {
+			return "", nil, "", fmt.Errorf("invalid ORDER BY column %q", parts[0])
+		}
+	}
+
+	return direction, identifierParts, columnName, nil
+}
+
+func validateOrderByQualifier(identifierParts []string, tableName string) (string, error) {
+	qualifier := ""
+
+	if len(identifierParts) > 1 {
+		qualifier = strings.Join(identifierParts[:len(identifierParts)-1], ".")
+
+		if !strings.EqualFold(qualifier, tableName) {
+			return "", fmt.Errorf("ORDER BY qualifier %q does not match table %q", qualifier, tableName)
+		}
+	}
+
+	return qualifier, nil
 }
 
 func (orm *ORM) buildOrderByClause(structType reflect.Type, tableName string) (string, error) {

@@ -1,6 +1,7 @@
 package gorest
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -47,6 +48,12 @@ func TestAppCloseGracefullyShutsDownHTTPServer(t *testing.T) {
 			fiber.ListenConfig{DisableStartupMessage: true},
 		)
 	}()
+
+	readyCtx, cancelReady := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancelReady()
+	if err := httpServer.WaitForListening(readyCtx); err != nil {
+		t.Fatalf("HTTP listener did not become ready: %v", err)
+	}
 
 	endpoint := fmt.Sprintf("http://%s/slow", net.JoinHostPort(config.Host, strconv.Itoa(config.Port)))
 	client := &http.Client{Timeout: 5 * time.Second}

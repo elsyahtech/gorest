@@ -32,12 +32,11 @@ go.work.sum
 .vscode/
 
 Makefile
+!/Makefile
 
 cmd/
 coba/
 logs/
-
-.golangci.yml
 
 database/gorest.db
 
@@ -49,3 +48,5 @@ server/*.png
 *db
 
 .DS_Store
+
+hanya_referensi.txt

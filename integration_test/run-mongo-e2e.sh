@@ -12,7 +12,7 @@ mongo_image="${GOREST_IT_MONGO_IMAGE:-mongo:7.0}"
 mkdir -p "$report_dir"
 cd "$repo_root"
 
-test_command='go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run ^TestMongoHTTPCRUDAndParameterBinding$ -count=1'
+test_command='go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run ^(TestMongoHTTPCRUDAndParameterBinding|TestMongoMTLSManaged)$ -count=1'
 printf 'MongoDB integration image: %s\n' "$mongo_image"
 if command -v docker >/dev/null 2>&1; then
 	if docker image inspect "$mongo_image" >/dev/null 2>&1; then
@@ -27,10 +27,10 @@ if command -v docker >/dev/null 2>&1; then
 else
 	printf 'Docker CLI not found; Testcontainers will pull the image. The pull may not show progress here.\n'
 fi
-printf 'Starting MongoDB HTTP integration test. Test events will stream below.\n'
+printf 'Starting MongoDB HTTP and mTLS integration tests. Test events will stream below.\n'
 printf 'Run reports: %s\n' "$report_dir"
 set +e
-GOREST_IT_MONGO_IMAGE="$mongo_image" go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run '^TestMongoHTTPCRUDAndParameterBinding$' -count=1 2>&1 | tee "$events_report"
+GOREST_IT_MONGO_IMAGE="$mongo_image" go test -json -tags=integration,integrationcontainers ./integration_test/httpapi -run '^(TestMongoHTTPCRUDAndParameterBinding|TestMongoMTLSManaged)$' -count=1 2>&1 | tee "$events_report"
 exit_code=$?
 set -e
 

@@ -343,22 +343,41 @@ func mongoDataSeederExec(ctx context.Context, database *Database, config *Config
 // Executes the SQL, then inserts record in gorest_migration table
 // If any step fails, returns error (entire migration considered failed).
 func sqlDataMigrationExec(ctx context.Context, database *Database, config *Config, file File, tableName, columnName string) (string, error) {
+	txDatabase, _, _, err := database.BeginTxContext(ctx, config)
+	if err != nil {
+		return "Check database connectivity and transaction support before running the SQL migration or seeder.",
+			&sqlMigrationFailure{cause: err, rolledBack: true}
+	}
+
+	rollback := func(cause error) error {
+		if rollbackErr := txDatabase.Tx.Rollback(); rollbackErr != nil {
+			return &sqlMigrationFailure{
+				cause: errors.Join(cause, fmt.Errorf("rollback SQL migration transaction: %w", rollbackErr)),
+			}
+		}
+
+		return &sqlMigrationFailure{
+			cause:      cause,
+			rolledBack: migrationRollbackIsReliable(NormalizeDatabaseDriver(config.Driver)),
+		}
+	}
+
 	queryPostgres := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES ($1, $2)"
 	queryMssql := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (@p1, @p2)"
 	queryMysql := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (?, ?)"
 	queryOracle := "INSERT INTO " + tableName + " (" + columnName + ", executed_at) VALUES (:1, :2)"
 
-	if _, message, _, err := database.ExecSQL(ctx, config, file.Content); err != nil {
+	if _, message, _, err := txDatabase.ExecSQL(ctx, config, file.Content); err != nil {
 		msg := fmt.Sprintf("execute SQL statements inside migration file '%s' failed. "+
 			"Check the migration script syntax, schema constraints, or "+
 			"potential SQL runtime errors or %s", file.Name, message)
 
-		return msg, fmt.Errorf("execute migration SQL failed: %w", err)
+		return msg, rollback(fmt.Errorf("execute migration SQL failed: %w", err))
 	}
 
 	var insertQuery string
 
-	switch config.Driver {
+	switch NormalizeDatabaseDriver(config.Driver) {
 	case POSTGRES:
 		insertQuery = queryPostgres
 	case SQLSERVER:
@@ -375,14 +394,41 @@ func sqlDataMigrationExec(ctx context.Context, database *Database, config *Confi
 	}
 
 	// Record migration in gorest_migration table (mark as executed)
-	if _, message, _, err := database.ExecSQL(ctx, config, insertQuery, file.Name, time.Now()); err != nil {
+	if _, message, _, err := txDatabase.ExecSQL(ctx, config, insertQuery, file.Name, time.Now()); err != nil {
 		msg := fmt.Sprintf("migration '%s' executed successfully, but failed to record its history into the 'gorest_migration' table. "+
 			"Check database write permissions or unique index constraints or %s", file.Name, message)
 
-		return msg, fmt.Errorf("record migration in history failed: %w", err)
+		return msg, rollback(fmt.Errorf("record migration in history failed: %w", err))
+	}
+
+	if err := txDatabase.Tx.Commit(); err != nil {
+		return "SQL migration transaction commit failed; " +
+			"database changes may require manual inspection.", rollback(fmt.Errorf("commit migration transaction: %w", err))
 	}
 
 	return "", nil
+}
+
+type sqlMigrationFailure struct {
+	cause      error
+	rolledBack bool
+}
+
+func migrationRollbackIsReliable(driver string) bool {
+	switch driver {
+	case POSTGRES, SQLSERVER, SQLITE:
+		return true
+	default:
+		return false
+	}
+}
+
+func (failure *sqlMigrationFailure) Error() string {
+	return failure.cause.Error()
+}
+
+func (failure *sqlMigrationFailure) Unwrap() error {
+	return failure.cause
 }
 
 func scyllaDataMigrationExec(ctx context.Context, database *Database, config *Config, migration File, tableName, columnName string) (string, error) {

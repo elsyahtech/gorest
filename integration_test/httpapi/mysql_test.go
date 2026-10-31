@@ -96,6 +96,7 @@ func TestMySQLHTTPCRUDAndParameterBinding(t *testing.T) {
 		fmt.Sprintf("CREATE TABLE %s (id VARCHAR(80) NOT NULL PRIMARY KEY, email VARCHAR(320) NOT NULL UNIQUE, name VARCHAR(200) NOT NULL)", table),
 		"DROP TABLE IF EXISTS "+table,
 	)
+	internaltest.SQLORMCoverage(t, database.MYSQL)
 	internaltest.SQLParallelTransactions(t, database.MYSQL)
 }
 

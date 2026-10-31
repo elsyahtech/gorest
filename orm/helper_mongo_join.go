@@ -12,7 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-//nolint:revive
+//nolint:revive,lll
 var mongoJoinClausePattern = regexp.MustCompile(`(?i)^\s*(?:(LEFT|INNER)\s+(?:OUTER\s+)?)?JOIN\s+([a-z_][a-z0-9_]*)\s+ON\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*=\s*([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)\s*$`)
 
 func (orm *ORM) buildMongoJoinPipeline(
@@ -65,30 +65,30 @@ func (orm *ORM) buildMongoJoinPipeline(
 		}}},
 	}
 
-	unwind := bson.D{{Key: "path", Value: "$" + joinedCollection}}
+	unwind := bson.D{{Key: "path", Value: dolar + joinedCollection}}
 
 	if joinKind == "LEFT" {
 		unwind = append(unwind, bson.E{Key: "preserveNullAndEmptyArrays", Value: true})
 	}
 
-	pipeline = append(pipeline, bson.D{{Key: "$unwind", Value: unwind}})
+	pipeline = append(pipeline, bson.D{{Key: dolarUnwind, Value: unwind}})
 
 	if len(filter) > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$match", Value: filter}})
+		pipeline = append(pipeline, bson.D{{Key: dolarMatch, Value: filter}})
 	}
 
 	if len(sort) > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$sort", Value: sort}})
+		pipeline = append(pipeline, bson.D{{Key: dolarSort, Value: sort}})
 	}
 
-	pipeline = append(pipeline, bson.D{{Key: "$project", Value: projection}})
+	pipeline = append(pipeline, bson.D{{Key: dolarProject, Value: projection}})
 
 	if orm.OffsetVal > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$skip", Value: orm.OffsetVal}})
+		pipeline = append(pipeline, bson.D{{Key: dolarSkip, Value: orm.OffsetVal}})
 	}
 
 	if orm.LimitVal > 0 {
-		pipeline = append(pipeline, bson.D{{Key: "$limit", Value: orm.LimitVal}})
+		pipeline = append(pipeline, bson.D{{Key: dolarLimit, Value: orm.LimitVal}})
 	}
 
 	return pipeline, nil
@@ -101,33 +101,14 @@ func (orm *ORM) mongoJoinProjection(table string, structType reflect.Type) (bson
 	}
 
 	lookup := buildStructFieldMapByTag(structType)
-	projection := bson.D{{Key: "_id", Value: 0}}
-	seen := map[string]struct{}{}
+	projection := bson.D{{Key: _id, Value: 0}}
+	seen := make(map[string]struct{})
 
 	for _, selection := range orm.SelectedCols {
 		for _, raw := range strings.Split(selection, ",") {
-			tokens := strings.Fields(raw)
-			if len(tokens) == 0 || (len(tokens) != 1 && len(tokens) != 3) || (len(tokens) == 3 && !strings.EqualFold(tokens[1], "AS")) {
-				return nil, orm.mongoJoinError("MongoDB Join() Select() supports `collection.field [AS result_tag]` expressions only.")
-			}
-
-			if tokens[0] == "*" || strings.HasSuffix(tokens[0], ".*") {
-				return nil, orm.mongoJoinError("MongoDB Join() requires explicit selected fields; wildcard projection cannot disambiguate joined documents.")
-			}
-
-			qualified := strings.Split(tokens[0], ".")
-			if len(qualified) != 2 || !mongoIdentifier.MatchString(tokens[0]) {
-				return nil, orm.mongoJoinError("Qualify MongoDB Join() selected fields with their collection name, for example `users.id AS user_id`.")
-			}
-
-			output := qualified[1]
-			if len(tokens) == 3 {
-				output = tokens[2]
-			}
-
-			output = strings.TrimSpace(output)
-			if !mongoIdentifier.MatchString(output) || strings.Contains(output, ".") {
-				return nil, orm.mongoJoinError("MongoDB Join() output aliases must be simple gorest tag names.")
+			qualified, output, err := parseMongoJoinProjection(raw)
+			if err != nil {
+				return nil, orm.mongoJoinError(err.Error())
 			}
 
 			if _, ok := lookup[strings.ToLower(output)]; !ok {
@@ -157,6 +138,43 @@ func (orm *ORM) mongoJoinProjection(table string, structType reflect.Type) (bson
 	return projection, nil
 }
 
+func parseMongoJoinProjection(raw string) ([]string, string, error) {
+	tokens := strings.Fields(raw)
+	if len(tokens) == 0 || (len(tokens) != 1 && len(tokens) != 3) || (len(tokens) == 3 && !strings.EqualFold(tokens[1], "AS")) {
+		msg := fmt.Sprintf("mongoDB Join() Select() supports `collection.field [AS result_tag]` expressions only.%s", "")
+
+		return nil, "", errors.New(msg)
+	}
+
+	if tokens[0] == "*" || strings.HasSuffix(tokens[0], ".*") {
+		msg := fmt.Sprintf("mongoDB Join() requires explicit selected fields; wildcard projection cannot disambiguate joined documents.%s", "")
+
+		return nil, "", errors.New(msg)
+	}
+
+	qualified := strings.Split(tokens[0], ".")
+	if len(qualified) != 2 || !mongoIdentifier.MatchString(tokens[0]) {
+		msg := fmt.Sprintf("qualify mongoDB Join() selected fields with their collection name, for example `users.id AS user_id`.%s", "")
+
+		return nil, "", errors.New(msg)
+	}
+
+	output := qualified[1]
+	if len(tokens) == 3 {
+		output = tokens[2]
+	}
+
+	output = strings.TrimSpace(output)
+
+	if !mongoIdentifier.MatchString(output) || strings.Contains(output, ".") {
+		msg := fmt.Sprintf("mongoDB Join() output aliases must be simple gorest tag names.%s", "")
+
+		return nil, "", errors.New(msg)
+	}
+
+	return qualified, output, nil
+}
+
 func splitMongoQualifiedField(field string) (res string, res2 string) {
 	parts := strings.SplitN(field, ".", 2)
 
@@ -164,5 +182,9 @@ func splitMongoQualifiedField(field string) (res string, res2 string) {
 }
 
 func (orm *ORM) mongoJoinError(message string) error {
-	return orm.setError(message+" Reference: https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/", errors.New("find: unsupported MongoDB Join() shape"), http.StatusBadRequest)
+	return orm.setError(
+		message+" Reference: https://www.mongodb.com/docs/manual/reference/operator/aggregation/lookup/",
+		errors.New("find: unsupported MongoDB Join() shape"),
+		http.StatusBadRequest,
+	)
 }

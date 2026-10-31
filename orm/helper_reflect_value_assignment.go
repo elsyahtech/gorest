@@ -63,6 +63,18 @@ func reflectNonPointerInAssignReflectValue(target, source reflect.Value, raw any
 }
 
 func reflectPointerInAssignReflectValue(target, source reflect.Value, raw any) error {
+	if source.Kind() == reflect.Pointer && source.IsNil() {
+		target.Set(reflect.Zero(target.Type()))
+
+		return nil
+	}
+
+	if source.Type().AssignableTo(target.Type()) {
+		target.Set(source)
+
+		return nil
+	}
+
 	elemType := target.Type().Elem()
 
 	if source.Type().AssignableTo(elemType) {

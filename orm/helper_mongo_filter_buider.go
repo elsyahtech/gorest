@@ -36,7 +36,7 @@ func (orm *ORM) buildBulkMongoFilter(row reflect.Value, meta *columnMetaData) (b
 		)
 	}
 
-	return bson.M{"$and": []bson.M{pkFilter, customFilter}}, nil
+	return bson.M{dolarAnd: []bson.M{pkFilter, customFilter}}, nil
 }
 
 func (orm *ORM) buildSingleMongoFilter(row reflect.Value, meta *columnMetaData) (bson.M, error) {

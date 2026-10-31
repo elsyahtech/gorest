@@ -29,8 +29,6 @@ func (orm *ORM) updateSQL(data any) error {
 
 	// 3. Verify that the processed data list contains at least one valid record to update
 	if len(rowsVal) == 0 {
-		const message = "ensure that the data list is not empty"
-
 		return orm.setError("Ensure the request contains at least one record.", errors.New("update: data list cannot be empty"), http.StatusBadRequest)
 	}
 

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/elsyahtech/gorest/database"
+	gorestdb "github.com/elsyahtech/gorest/database"
 )
 
 func isReturnDest(arg any) bool {
@@ -111,10 +111,11 @@ func derefValue(val reflect.Value) reflect.Value {
 // planReturn specifies the target, the columns to be populated, and the RETURNING/OUTPUT columns.
 func (orm *ORM) planReturn(data any, rowsVal []reflect.Value, meta columnMetaData, driver string) (*returnPlan, error) {
 	switch driver {
-	case database.MYSQL, database.POSTGRES, database.SQLITE, database.SQLSERVER, database.ORACLE:
+	case gorestdb.MYSQL, gorestdb.POSTGRES, gorestdb.SQLITE, gorestdb.SQLSERVER, gorestdb.ORACLE:
 	default:
 		return nil, orm.setError(
-			fmt.Sprintf("Gorest ORM Return() is not implemented for %s. See the driver feature matrix for current support: https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#7-driver-feature-matrix", driver),
+			fmt.Sprintf("Gorest ORM Return() is not implemented for %s. See the driver feature matrix for current support: "+
+				"https://github.com/elsyahtech/gorest/blob/main/docs/guide/orm.md#7-driver-feature-matrix", driver),
 			fmt.Errorf("create: Return is not supported on driver %s", driver),
 		)
 	}
@@ -338,8 +339,10 @@ func (orm *ORM) execReturn(
 		return err
 	}
 
+	const message = "Data created successfully"
+
 	orm.LastInsertId = lastInsertIDFromReturn(plan, scanned, inputRows, meta)
-	orm.Message = "Data created successfully"
+	orm.Message = message
 	orm.HTTPCode = http.StatusOK
 
 	return nil
@@ -352,18 +355,18 @@ func (orm *ORM) queryReturnRows(
 	plan *returnPlan,
 	operation string,
 ) ([]reflect.Value, error) {
-	return orm.queryReturnRowsWithDatabase(orm.Database, execCtx, queryStr, args, plan, operation)
+	return orm.queryReturnRowsWithDatabase(execCtx, orm.Database, queryStr, args, plan, operation)
 }
 
 func (orm *ORM) queryReturnRowsWithDatabase(
-	database *database.Database,
 	execCtx context.Context,
+	database *gorestdb.Database,
 	queryStr string,
-	args []any,
+	argsParam []any,
 	plan *returnPlan,
 	operation string,
 ) ([]reflect.Value, error) {
-	args = orm.sanitizeArgs(args)
+	args := orm.sanitizeArgs(argsParam)
 
 	rows, _, _, err := database.QuerySQL(execCtx, orm.DatabaseConfig, queryStr, args...)
 	if err != nil {
@@ -371,10 +374,12 @@ func (orm *ORM) queryReturnRowsWithDatabase(
 	}
 
 	scanned, scanErr := orm.scanReturnRows(rows, plan)
-	closeErr := rows.Close()
+	closeErr := rows.Close() //nolint:sqlclosecheck
+
 	if scanErr != nil {
 		return nil, scanErr
 	}
+
 	if closeErr != nil {
 		return nil, orm.setDatabaseOperationError(operation, closeErr)
 	}
@@ -397,7 +402,7 @@ func buildUpdateStatement(tableName, setClause, whereClause string, plan *return
 	switch {
 	case plan == nil:
 		return fmt.Sprintf("UPDATE %s SET %s WHERE %s", tableName, setClause, whereClause)
-	case driver == database.SQLSERVER:
+	case driver == gorestdb.SQLSERVER:
 		return fmt.Sprintf("UPDATE %s SET %s %s WHERE %s", tableName, setClause, plan.outputClause(), whereClause)
 	default:
 		return fmt.Sprintf("UPDATE %s SET %s WHERE %s%s", tableName, setClause, whereClause, plan.returningClause())

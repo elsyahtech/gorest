@@ -134,7 +134,9 @@ func (orm *ORM) buildMongoUpsertOp(doc map[string]any, conds []bson.M, primaryKe
 	}
 
 	conflictSet, filter := buildConflictSetInbuildMongoUpsertOp(conflictKeys, doc, conds)
+
 	primaryKeySet := make(map[string]struct{}, len(primaryKeyCols))
+
 	for _, col := range primaryKeyCols {
 		if key, ok := lookupDocKey(doc, col); ok {
 			primaryKeySet[key] = struct{}{}
@@ -306,26 +308,48 @@ func (orm *ORM) mongoPrimaryKeyColumns(data any) ([]string, error) {
 		return nil, err
 	}
 
+	val := valMongoPrimaryKeyColumns(value)
+
+	selectedCols := orm.selectColMongoPrimaryKeyColumns()
+
+	columns := typMongoPrimaryKeyColumns(val, selectedCols)
+
+	return columns, nil
+}
+
+func valMongoPrimaryKeyColumns(value *reflect.Value) reflect.Value {
+	if value == nil || !value.IsValid() {
+		return reflect.Value{}
+	}
+
 	val := *value
+
 	if val.Kind() == reflect.Slice {
 		if val.Len() == 0 {
-			return nil, nil
+			return reflect.Value{}
 		}
+
 		val = val.Index(0)
 	}
 
 	for val.Kind() == reflect.Pointer || val.Kind() == reflect.Interface {
 		if val.IsNil() {
-			return nil, nil
+			return reflect.Value{}
 		}
+
 		val = val.Elem()
 	}
 
 	if val.Kind() != reflect.Struct {
-		return nil, nil
+		return reflect.Value{}
 	}
 
+	return val
+}
+
+func (orm *ORM) selectColMongoPrimaryKeyColumns() []string {
 	var selectedCols []string
+
 	for _, col := range orm.SelectedCols {
 		for _, part := range strings.Split(col, ",") {
 			if trimmed := strings.TrimSpace(part); trimmed != "" {
@@ -334,17 +358,27 @@ func (orm *ORM) mongoPrimaryKeyColumns(data any) ([]string, error) {
 		}
 	}
 
-	typ := val.Type()
+	return selectedCols
+}
+
+func typMongoPrimaryKeyColumns(val reflect.Value, selectedCols []string) []string {
 	var columns []string
+
+	typ := val.Type()
+
 	for idx := 0; idx < typ.NumField(); idx++ {
 		field := typ.Field(idx)
+
 		isPrimaryKey := false
+
 		for _, option := range strings.Split(field.Tag.Get("gorest"), ",")[1:] {
 			if strings.EqualFold(strings.TrimSpace(option), "primary_key") {
 				isPrimaryKey = true
+
 				break
 			}
 		}
+
 		if !isPrimaryKey {
 			continue
 		}
@@ -354,7 +388,7 @@ func (orm *ORM) mongoPrimaryKeyColumns(data any) ([]string, error) {
 		}
 	}
 
-	return columns, nil
+	return columns
 }
 
 func lookupDocKey(doc map[string]any, name string) (string, bool) {

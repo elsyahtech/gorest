@@ -46,6 +46,7 @@ func (orm *ORM) Find(data any) *ORM {
 			Error:   errors.New("find: orm is not running"),
 		}
 	}
+
 	if orm.Error != nil {
 		return orm
 	}
@@ -69,6 +70,7 @@ func (orm *ORM) Find(data any) *ORM {
 	if err := orm.validateSelectColumns(); err != nil {
 		return orm
 	}
+
 	if err := orm.validateSelectExpressions(orm.SelectedCols); err != nil {
 		return orm
 	}
@@ -103,6 +105,7 @@ func (orm *ORM) Select(cols ...string) *ORM {
 	if err := orm.validateSelectColumns(); err != nil {
 		return orm
 	}
+
 	if err := orm.validateSelectExpressions(cols); err != nil {
 		return orm
 	}
@@ -174,6 +177,7 @@ func (orm *ORM) Distinct(cols ...string) *ORM {
 
 	orm.IsDistinct = true
 	orm.DistinctCols = cols
+
 	if err := orm.validateDistinctColumns(cols); err != nil {
 		return orm
 	}
@@ -190,6 +194,7 @@ func (orm *ORM) Join(clause string) *ORM {
 	}
 
 	orm.JoinClauses = append(orm.JoinClauses, clause)
+
 	if err := orm.validateJoinClause(clause); err != nil {
 		orm.JoinClauses = orm.JoinClauses[:len(orm.JoinClauses)-1]
 		return orm
@@ -207,8 +212,12 @@ func (orm *ORM) Limit(limit int) *ORM {
 	}
 
 	orm.LimitVal = limit
+
 	orm.limitSet = true
-	_ = orm.validateLimitOffset()
+
+	if err := orm.validateLimitOffset(); err != nil {
+		return orm
+	}
 
 	return orm
 }
@@ -222,7 +231,9 @@ func (orm *ORM) Offset(offset int) *ORM {
 	}
 
 	orm.OffsetVal = offset
-	_ = orm.validateLimitOffset()
+	if err := orm.validateLimitOffset(); err != nil {
+		return orm
+	}
 
 	return orm
 }

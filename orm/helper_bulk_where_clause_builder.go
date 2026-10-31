@@ -8,11 +8,12 @@ import (
 )
 
 type reqBuildBulkWhereClause struct {
-	query             *resBuildQueryUpdateSQL
-	driver            string
-	primaryKeyIndex   []int
-	primaryKeyColumns []string
-	rows              []reflect.Value
+	query                     *resBuildQueryUpdateSQL
+	driver                    string
+	primaryKeyIndex           []int
+	primaryKeyColumns         []string
+	rows                      []reflect.Value
+	singleRowPrimaryKeyClause bool
 }
 
 func (orm *ORM) buildBulkWhereClause(req *reqBuildBulkWhereClause) ([]string, error) {
@@ -20,6 +21,13 @@ func (orm *ORM) buildBulkWhereClause(req *reqBuildBulkWhereClause) ([]string, er
 		return nil, orm.setError(
 			"Ensure your struct has a primary_key tag designated for bulk updates.",
 			errors.New("update: missing primary key for bulk update"),
+		)
+	}
+
+	if req.singleRowPrimaryKeyClause && len(req.rows) != 1 {
+		return nil, orm.setError(
+			"Ensure the unwrapped primary-key predicate is built for exactly one row.",
+			errors.New("update: unwrapped primary-key clause requires one row"),
 		)
 	}
 
@@ -40,10 +48,16 @@ func (orm *ORM) buildBulkWhereClause(req *reqBuildBulkWhereClause) ([]string, er
 			req.query.argCounter++
 		}
 
-		primaryKeyInClauses = append(primaryKeyInClauses, "("+strings.Join(pkConds, " AND ")+")")
+		if req.singleRowPrimaryKeyClause {
+			whereClauses = append(whereClauses, strings.Join(pkConds, " AND "))
+		} else {
+			primaryKeyInClauses = append(primaryKeyInClauses, "("+strings.Join(pkConds, " AND ")+")")
+		}
 	}
 
-	whereClauses = append(whereClauses, "("+strings.Join(primaryKeyInClauses, " OR ")+")")
+	if !req.singleRowPrimaryKeyClause {
+		whereClauses = append(whereClauses, "("+strings.Join(primaryKeyInClauses, " OR ")+")")
+	}
 
 	if len(orm.WhereClauses) > 0 {
 		whereArgIndex := 0

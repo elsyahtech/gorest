@@ -31,10 +31,75 @@ func TestOracleHTTPCRUDAndParameterBinding(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
+	libDir := discoverOracleClientDir()
+	if libDir == "" {
+		t.Fatal("Oracle Instant Client is required by GOREST's godror driver; set GOREST_IT_ORACLE_LIB_DIR to its directory")
+	}
+
 	image := strings.TrimSpace(os.Getenv("GOREST_IT_ORACLE_IMAGE"))
 	if image == "" {
 		image = oracleImageDefault
 	}
+	container, err := oracleIntegrationContainer(t, ctx, image, libDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if container != nil {
+		t.Cleanup(func() {
+			terminateCtx, terminateCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer terminateCancel()
+			if err := container.Terminate(terminateCtx); err != nil {
+				t.Errorf("terminate Oracle test container: %v", err)
+			}
+		})
+	}
+
+	t.Setenv("GOREST_IT_ORACLE_LIB_DIR", libDir)
+	t.Setenv("GOREST_IT_REQUIRED", "1")
+	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
+	runMigrationProcessScenarios(t, database.ORACLE, container)
+
+	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.ORACLE)
+	app := internaltest.OpenAppWithConfig(t, database.ORACLE, migrationSeeder.Configure)
+	migrationSeeder.Run(t, app)
+	if container == nil {
+		t.Log("Oracle endpoint: existing test database")
+	} else {
+		t.Logf("Oracle image: %s", image)
+	}
+	t.Logf("Oracle Instant Client configured: true")
+	logOracleVersion(t, app.Database())
+
+	table := fmt.Sprintf("GOREST_E2E_USERS_%d", time.Now().UnixNano())
+	runCRUDHTTPScenario(
+		t,
+		app.Database(),
+		table,
+		fmt.Sprintf("CREATE TABLE %s (id VARCHAR2(80) PRIMARY KEY, email VARCHAR2(320) NOT NULL UNIQUE, name VARCHAR2(200) NOT NULL)", table),
+		"DROP TABLE "+table+" PURGE",
+	)
+	internaltest.SQLORMCoverage(t, database.ORACLE)
+	internaltest.SQLParallelTransactions(t, database.ORACLE)
+}
+
+func oracleIntegrationContainer(t *testing.T, ctx context.Context, image, libDir string) (testcontainers.Container, error) {
+	t.Helper()
+
+	if strings.TrimSpace(os.Getenv("GOREST_IT_ORACLE_HOST")) != "" {
+		for _, name := range []string{
+			"GOREST_IT_ORACLE_PORT",
+			"GOREST_IT_ORACLE_NAME",
+			"GOREST_IT_ORACLE_USERNAME",
+			"GOREST_IT_ORACLE_PASSWORD",
+			"GOREST_IT_ORACLE_TLS",
+		} {
+			if strings.TrimSpace(os.Getenv(name)) == "" {
+				return nil, fmt.Errorf("external Oracle test endpoint requires %s", name)
+			}
+		}
+		return nil, nil
+	}
+
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image: image,
@@ -52,59 +117,35 @@ func TestOracleHTTPCRUDAndParameterBinding(t *testing.T) {
 		Started: true,
 	})
 	if err != nil {
-		t.Fatalf("start Oracle test container using %s: %v", image, err)
+		return nil, fmt.Errorf("start Oracle test container using %s: %w", image, err)
 	}
-	t.Cleanup(func() {
-		terminateCtx, terminateCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer terminateCancel()
-		if err := container.Terminate(terminateCtx); err != nil {
-			t.Errorf("terminate Oracle test container: %v", err)
-		}
-	})
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		t.Fatalf("get Oracle test container host: %v", err)
+		return nil, fmt.Errorf("get Oracle test container host: %w", err)
 	}
 	if host == "localhost" {
 		host = "127.0.0.1"
 	}
 	port, err := container.MappedPort(ctx, "1521/tcp")
 	if err != nil {
-		t.Fatalf("get Oracle mapped port: %v", err)
+		return nil, fmt.Errorf("get Oracle mapped port: %w", err)
 	}
 
-	libDir := discoverOracleClientDir()
-	if libDir == "" {
-		t.Fatal("Oracle Instant Client is required by GOREST's godror driver; set GOREST_IT_ORACLE_LIB_DIR to its directory")
+	for name, value := range map[string]string{
+		"GOREST_IT_ORACLE_HOST":     host,
+		"GOREST_IT_ORACLE_PORT":     port.Port(),
+		"GOREST_IT_ORACLE_NAME":     oracleService,
+		"GOREST_IT_ORACLE_USERNAME": oracleAppUser,
+		"GOREST_IT_ORACLE_PASSWORD": oracleAppPassword,
+		"GOREST_IT_ORACLE_TLS":      "disable",
+		"GOREST_IT_ORACLE_LIB_DIR":  libDir,
+		"GOREST_IT_REQUIRED":        "1",
+	} {
+		t.Setenv(name, value)
 	}
-	t.Setenv("GOREST_IT_ORACLE_HOST", host)
-	t.Setenv("GOREST_IT_ORACLE_PORT", port.Port())
-	t.Setenv("GOREST_IT_ORACLE_NAME", oracleService)
-	t.Setenv("GOREST_IT_ORACLE_USERNAME", oracleAppUser)
-	t.Setenv("GOREST_IT_ORACLE_PASSWORD", oracleAppPassword)
-	t.Setenv("GOREST_IT_ORACLE_TLS", "disable")
-	t.Setenv("GOREST_IT_ORACLE_LIB_DIR", libDir)
-	t.Setenv("GOREST_IT_REQUIRED", "1")
-	t.Chdir(t.TempDir()) // Keep example application logs out of the repository.
-	runMigrationProcessScenarios(t, database.ORACLE, container)
 
-	migrationSeeder := internaltest.NewMigrationSeederFixture(t, database.ORACLE)
-	app := internaltest.OpenAppWithConfig(t, database.ORACLE, migrationSeeder.Configure)
-	migrationSeeder.Run(t, app)
-	t.Logf("Oracle image: %s", image)
-	t.Logf("Oracle Instant Client configured: true")
-	logOracleVersion(t, app.Database())
-
-	table := fmt.Sprintf("GOREST_E2E_USERS_%d", time.Now().UnixNano())
-	runCRUDHTTPScenario(
-		t,
-		app.Database(),
-		table,
-		fmt.Sprintf("CREATE TABLE %s (id VARCHAR2(80) PRIMARY KEY, email VARCHAR2(320) NOT NULL UNIQUE, name VARCHAR2(200) NOT NULL)", table),
-		"DROP TABLE "+table+" PURGE",
-	)
-	internaltest.SQLParallelTransactions(t, database.ORACLE)
+	return container, nil
 }
 
 func discoverOracleClientDir() string {

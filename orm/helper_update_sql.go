@@ -38,16 +38,16 @@ func (orm *ORM) updateSingleSQL(
 
 	whereClause.args = orm.sanitizeArgs(whereClause.args)
 	if retPlan != nil && activeDriver == database.MYSQL {
-		return orm.updateMySQLSingleWithReturn(
-			execCtx,
-			tableName,
-			strings.Join(setClauses, ", "),
-			field,
-			whereClause,
-			retPlan,
-			rowsVal,
-			meta,
-		)
+		return orm.updateMySQLSingleWithReturn(&structUpdateMySQLSingleWithReturn{
+			execCtx:     execCtx,
+			tableName:   tableName,
+			setClause:   strings.Join(setClauses, ", "),
+			field:       field,
+			whereClause: whereClause,
+			plan:        retPlan,
+			inputRows:   rowsVal,
+			meta:        meta,
+		})
 	}
 
 	queryStr := buildUpdateStatement(tableName, strings.Join(setClauses, ", "), strings.Join(whereClause.parts, " AND "), retPlan, activeDriver)
@@ -66,7 +66,9 @@ func (orm *ORM) updateSingleSQL(
 			return err
 		}
 
-		orm.Message = "Data updated successfully"
+		const message = "Data updated successfully"
+
+		orm.Message = message
 		orm.HTTPCode = http.StatusOK
 
 		return nil
@@ -95,7 +97,9 @@ func (orm *ORM) updateSingleSQL(
 		rowsAffected: affected,
 	}
 
-	orm.Message = "Data updated successfully"
+	const message = "Data updated successfully"
+
+	orm.Message = message
 
 	return nil
 }
@@ -307,18 +311,19 @@ func (orm *ORM) buildQueryUpdateSQL(
 	col *updatableColumn,
 	activeDriver string,
 ) *resBuildQueryUpdateSQL {
+	orm.StringBuilder.Reset()
+
 	var (
 		valueArgs = make([]any, 0, (len(meta.primaryKeyIndex)+1)*len(chunkRows))
-		clause    strings.Builder
 	)
 
 	currentArgCounter := argCounter
 
-	clause.WriteString(col.name)
-	clause.WriteString(" = CASE")
+	orm.safeWriteString(col.name)
+	orm.safeWriteString(" = CASE")
 
 	for _, row := range chunkRows {
-		clause.WriteString(" WHEN ")
+		orm.safeWriteString(" WHEN ")
 
 		pkConditions := make([]string, 0, len(meta.primaryKeyIndex))
 
@@ -331,25 +336,25 @@ func (orm *ORM) buildQueryUpdateSQL(
 			currentArgCounter++
 		}
 
-		clause.WriteString(strings.Join(pkConditions, " AND "))
-		clause.WriteString(" THEN ")
+		orm.safeWriteString(strings.Join(pkConditions, " AND "))
+		orm.safeWriteString(" THEN ")
 
 		valPlaceholder := getPlaceholder(activeDriver, currentArgCounter)
 
-		clause.WriteString(valPlaceholder)
+		orm.safeWriteString(valPlaceholder)
 
 		valueArgs = append(valueArgs, row.Field(col.idx).Interface())
 
 		currentArgCounter++
 	}
 
-	clause.WriteString(" ELSE ")
-	clause.WriteString(col.name)
-	clause.WriteString(" END")
+	orm.safeWriteString(" ELSE ")
+	orm.safeWriteString(col.name)
+	orm.safeWriteString(" END")
 
 	return &resBuildQueryUpdateSQL{
 		args:       valueArgs,
-		clauses:    []string{clause.String()},
+		clauses:    []string{orm.StringBuilder.String()},
 		argCounter: currentArgCounter,
 	}
 } //nolint:revive

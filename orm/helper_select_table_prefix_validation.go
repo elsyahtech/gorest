@@ -6,6 +6,10 @@ import (
 )
 
 func (orm *ORM) validateSelectTablePrefixes(byTable map[string][]string, parentTable string, plan *scyllaPreloadPlan) error {
+	if len(byTable) == 0 {
+		return nil
+	}
+
 	known := map[string]bool{strings.ToLower(parentTable): true}
 
 	for _, hasMany := range plan.hasMany {

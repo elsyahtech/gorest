@@ -32,7 +32,7 @@ func getMongoRecords(ctx context.Context, database *Database, config *Config, co
 	// Proper defer with error handling
 	defer func() {
 		if err := cursor.Close(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "close cursor failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "close cursor failed: %v\n", err) //nolint:revive
 		}
 	}()
 
@@ -94,7 +94,7 @@ func getSQLRecords(ctx context.Context, database *Database, config *Config, tabl
 
 	defer func() {
 		if err := rows.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close rows failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "close rows failed: %v\n", err) //nolint:revive
 		}
 	}()
 
@@ -135,7 +135,7 @@ func getScyllaRecords(ctx context.Context, database *Database, config *Config, t
 
 	defer func() {
 		if err := iter.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close scylla iter failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "close scylla iter failed: %v\n", err) //nolint:revive
 		}
 	}()
 

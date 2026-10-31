@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,14 +17,196 @@ import (
 	"github.com/elsyahtech/gorest/orm"
 )
 
+func SQLORMCoverage(t *testing.T, driver string) {
+	t.Helper()
+	t.Run("joins and relation mapping", func(t *testing.T) {
+		SQLJoinAndPreload(t, driver)
+	})
+	t.Run("nullable mapping", func(t *testing.T) {
+		SQLNullableMapping(t, driver)
+	})
+	t.Run("pagination boundaries", func(t *testing.T) {
+		SQLPaginationBoundaries(t, driver)
+	})
+	t.Run("batch failure atomicity", func(t *testing.T) {
+		SQLBatchFailureAtomicity(t, driver)
+	})
+	t.Run("live query cancellation", func(t *testing.T) {
+		SQLContextCancellation(t, driver)
+	})
+	t.Run("upsert behavior", func(t *testing.T) {
+		SQLUpsertBehavior(t, driver)
+	})
+	t.Run("bulk update", func(t *testing.T) {
+		SQLBulkUpdate(t, driver)
+	})
+	t.Run("bulk delete", func(t *testing.T) {
+		SQLBulkDelete(t, driver)
+	})
+	t.Run("invalid ORM inputs", func(t *testing.T) {
+		SQLInvalidInputs(t, driver)
+	})
+	if driver == database.MYSQL {
+		t.Run("MySQL update return values", func(t *testing.T) {
+			SQLMySQLUpdateReturn(t)
+		})
+	}
+	if driver == database.ORACLE {
+		t.Run("Oracle update return values", func(t *testing.T) {
+			SQLOracleUpdateReturn(t)
+		})
+	}
+	if driver != database.MYSQL && driver != database.MARIADB && driver != database.ORACLE {
+		t.Run("create return values", func(t *testing.T) {
+			SQLCreateReturn(t, driver)
+		})
+	}
+}
+
+func SQLMySQLUpdateReturn(t *testing.T) {
+	t.Helper()
+	app := OpenApp(t, database.MYSQL)
+	table := "audit_mysql_return_" + uniqueIdentifier(t, "")[:8]
+	createSQLTable(
+		t,
+		app,
+		database.MYSQL,
+		table,
+		"id BIGINT PRIMARY KEY, name VARCHAR(200) NOT NULL, note VARCHAR(200) NOT NULL",
+	)
+	type record struct {
+		ID   int64  `gorest:"id, primary_key"`
+		Name string `gorest:"name"`
+		Note string `gorest:"note"`
+	}
+	for _, row := range []record{
+		{ID: 1, Name: "first", Note: "initial"},
+		{ID: 2, Name: "second", Note: "initial"},
+		{ID: 3, Name: "third", Note: "initial"},
+	} {
+		createDynamicRecord(t, app, table, reflect.TypeFor[record](), map[string]any{
+			"ID": row.ID, "Name": row.Name, "Note": row.Note,
+		})
+	}
+
+	singleInput := record{ID: 1, Name: "updated first", Note: "single"}
+	var singleResult record
+	query := app.Database().Table(table).Return(&singleResult).Update(&singleInput)
+	if query.Error != nil {
+		t.Fatalf("single MySQL Update().Return() failed: %v", query.Error)
+	}
+	if singleResult.ID != 1 || singleResult.Name != singleInput.Name || singleResult.Note != singleInput.Note ||
+		query.RowsAffected != 1 || query.HTTPCode != 200 {
+		t.Fatalf("single MySQL return result = %#v, rows=%d, status=%d",
+			singleResult, query.RowsAffected, query.HTTPCode)
+	}
+
+	bulkInput := []record{
+		{ID: 2, Name: "updated second", Note: "bulk"},
+		{ID: 3, Name: "updated third", Note: "bulk"},
+	}
+	var bulkResult []record
+	query = app.Database().Table(table).Return(&bulkResult).Update(&bulkInput)
+	if query.Error != nil {
+		t.Fatalf("bulk MySQL Update().Return() failed: %v", query.Error)
+	}
+	if len(bulkResult) != 2 || query.RowsAffected != 2 || query.HTTPCode != 200 {
+		t.Fatalf("bulk MySQL return result = %#v, rows=%d, status=%d",
+			bulkResult, query.RowsAffected, query.HTTPCode)
+	}
+	returnedByID := make(map[int64]record, len(bulkResult))
+	for _, row := range bulkResult {
+		returnedByID[row.ID] = row
+	}
+	if returnedByID[2].Name != "updated second" || returnedByID[2].Note != "bulk" ||
+		returnedByID[3].Name != "updated third" || returnedByID[3].Note != "bulk" {
+		t.Fatalf("bulk MySQL returned rows = %#v", returnedByID)
+	}
+
+	missing := record{ID: 99, Name: "must not insert", Note: "missing"}
+	var missingResult record
+	query = app.Database().Table(table).Return(&missingResult).Update(&missing)
+	if query.Error == nil || query.HTTPCode != 404 {
+		t.Fatalf("missing MySQL Update().Return() = HTTP %d, error %v; want not found",
+			query.HTTPCode, query.Error)
+	}
+}
+
+func SQLOracleUpdateReturn(t *testing.T) {
+	t.Helper()
+	app := OpenApp(t, database.ORACLE)
+	table := "AUDIT_ORACLE_RETURN_" + strings.ToUpper(uniqueIdentifier(t, "")[:8])
+	createSQLTable(
+		t,
+		app,
+		database.ORACLE,
+		table,
+		"id NUMBER(19) PRIMARY KEY, name VARCHAR2(200) NOT NULL, note VARCHAR2(200) NOT NULL",
+	)
+	type record struct {
+		ID   int64  `gorest:"id, primary_key"`
+		Name string `gorest:"name"`
+		Note string `gorest:"note"`
+	}
+	createDynamicRecord(t, app, table, reflect.TypeFor[record](), map[string]any{
+		"ID": int64(1), "Name": "before", "Note": "initial",
+	})
+
+	input := record{ID: 1, Name: "updated", Note: "returned"}
+	var returned record
+	query := app.Database().Table(table).Return(&returned).Update(&input)
+	if query.Error != nil {
+		t.Fatalf("Oracle Update().Return() failed: %v", query.Error)
+	}
+	if returned != input || query.RowsAffected != 1 || query.HTTPCode != 200 {
+		t.Fatalf("Oracle Update().Return() = %#v, rows=%d, status=%d; want %#v",
+			returned, query.RowsAffected, query.HTTPCode, input)
+	}
+
+	missing := record{ID: 99, Name: "missing", Note: "must not insert"}
+	var missingResult record
+	query = app.Database().Table(table).Return(&missingResult).Update(&missing)
+	if query.Error == nil || query.HTTPCode != 404 {
+		t.Fatalf("missing Oracle Update().Return() = HTTP %d, error %v; want not found",
+			query.HTTPCode, query.Error)
+	}
+}
+
+func SQLCreateReturn(t *testing.T, driver string) {
+	t.Helper()
+	app := OpenApp(t, driver)
+	table := "audit_create_return_" + uniqueIdentifier(t, "")[:8]
+	createSQLTable(
+		t,
+		app,
+		driver,
+		table,
+		"id "+sqlIntegerType(driver)+" PRIMARY KEY, name "+sqlTextType(driver)+" NOT NULL",
+	)
+	type record struct {
+		ID   int64  `gorest:"id, primary_key"`
+		Name string `gorest:"name"`
+	}
+
+	input := record{ID: 1, Name: "returned create"}
+	var returned record
+	query := app.Database().Table(table).Return(&returned).Create(&input)
+	if query.Error != nil {
+		t.Fatalf("%s Create().Return() failed: %v", driver, query.Error)
+	}
+	if returned != input {
+		t.Fatalf("%s Create().Return() = %#v, want %#v", driver, returned, input)
+	}
+}
+
 func SQLJoinAndPreload(t *testing.T, driver string) {
 	t.Helper()
 	app := OpenApp(t, driver)
 	suffix := uniqueIdentifier(t, "")[:8]
-	authorRelation := "AuditAuthor" + suffix
+	authorRelation := "AuditAuthor" + suffix + "Relation"
 	authorTable := strings.ToLower(authorRelation) + "s"
 	bookTable := "audit_books_" + suffix
-	postRelation := "AuditPosts" + suffix
+	postRelation := "AuditPosts" + suffix + "Relation"
 	postTable := strings.ToLower(postRelation) + "s"
 	userTable := "audit_users_" + suffix
 
@@ -120,9 +303,15 @@ func SQLNullableMapping(t *testing.T, driver string) {
 	if query.Error != nil {
 		t.Fatalf("Find() with nullable results failed: %v", query.Error)
 	}
-	if len(records) != 2 || records[0].OptionalText.Valid ||
+	nullMismatch := len(records) == 2 && records[0].OptionalText.Valid
+	if driver == database.ORACLE && len(records) == 2 {
+		// Oracle treats empty strings as NULL, and godror cannot preserve the
+		// distinction represented by sql.NullString.Valid for this value.
+		nullMismatch = records[0].OptionalText.String != ""
+	}
+	if len(records) != 2 || nullMismatch ||
 		!records[1].OptionalText.Valid || records[1].OptionalText.String != "present" {
-		t.Fatalf("nullable mapping = %#v, want NULL then valid %q", records, "present")
+		t.Fatalf("nullable mapping = %#v, want NULL (or Oracle empty value) then valid %q", records, "present")
 	}
 }
 
@@ -291,6 +480,154 @@ func SQLUpsertBehavior(t *testing.T, driver string) {
 	}))
 	if got := load(1); got.ID != 1 || got.Score != 50 || got.Note != "unique" {
 		t.Fatalf("alternate unique-key Upsert result = %#v", got)
+	}
+}
+
+func SQLBulkUpdate(t *testing.T, driver string) {
+	t.Helper()
+	app := OpenApp(t, driver)
+	table := "audit_bulk_update_" + uniqueIdentifier(t, "")[:8]
+	createSQLTable(
+		t,
+		app,
+		driver,
+		table,
+		"id "+sqlIntegerType(driver)+" PRIMARY KEY, name "+sqlTextType(driver)+" NOT NULL, note "+sqlTextType(driver)+" NOT NULL",
+	)
+	type record struct {
+		ID   int64  `gorest:"id, primary_key"`
+		Name string `gorest:"name"`
+		Note string `gorest:"note"`
+	}
+
+	for _, row := range []record{
+		{ID: 1, Name: "first", Note: "before"},
+		{ID: 2, Name: "second", Note: "before"},
+	} {
+		createDynamicRecord(t, app, table, reflect.TypeFor[record](), map[string]any{
+			"ID": row.ID, "Name": row.Name, "Note": row.Note,
+		})
+	}
+
+	updates := []record{
+		{ID: 1, Name: "updated first", Note: "bulk"},
+		{ID: 2, Name: "updated second", Note: "bulk"},
+	}
+	query := app.Database().Table(table).Update(&updates)
+	RequireNoORMError(t, query)
+	if query.RowsAffected != int64(len(updates)) {
+		t.Fatalf("%s bulk Update() affected %d rows, want %d", driver, query.RowsAffected, len(updates))
+	}
+
+	missing := []record{
+		{ID: 1, Name: "must not update", Note: "missing validation"},
+		{ID: 99, Name: "missing", Note: "missing"},
+	}
+	query = app.Database().Table(table).Update(&missing)
+	if query.Error == nil || query.HTTPCode != 404 {
+		t.Fatalf("%s bulk Update() with missing key = HTTP %d, error %v; want HTTP 404",
+			driver, query.HTTPCode, query.Error)
+	}
+
+	var loaded []record
+	RequireNoORMError(t, app.Database().Table(table).Find(&loaded))
+	loadedByID := make(map[int64]record, len(loaded))
+	for _, row := range loaded {
+		loadedByID[row.ID] = row
+	}
+	if len(loadedByID) != 2 ||
+		loadedByID[1].Name != "updated first" ||
+		loadedByID[1].Note != "bulk" ||
+		loadedByID[2].Name != "updated second" ||
+		loadedByID[2].Note != "bulk" {
+		t.Fatalf("%s bulk Update() results = %#v", driver, loadedByID)
+	}
+
+}
+
+func SQLBulkDelete(t *testing.T, driver string) {
+	t.Helper()
+	app := OpenApp(t, driver)
+	table := "audit_bulk_delete_" + uniqueIdentifier(t, "")[:8]
+	createSQLTable(
+		t,
+		app,
+		driver,
+		table,
+		"id "+sqlIntegerType(driver)+" PRIMARY KEY, name "+sqlTextType(driver)+" NOT NULL",
+	)
+	type record struct {
+		ID   int64  `gorest:"id, primary_key"`
+		Name string `gorest:"name"`
+	}
+	for _, row := range []record{
+		{ID: 1, Name: "first"},
+		{ID: 2, Name: "second"},
+		{ID: 3, Name: "preserve"},
+	} {
+		createDynamicRecord(t, app, table, reflect.TypeFor[record](), map[string]any{
+			"ID": row.ID, "Name": row.Name,
+		})
+	}
+
+	rowsToDelete := []record{{ID: 1}, {ID: 2}}
+	query := app.Database().Table(table).Delete(&rowsToDelete)
+	RequireNoORMError(t, query)
+	if query.RowsAffected != int64(len(rowsToDelete)) {
+		t.Fatalf("%s single-key bulk Delete() affected %d rows, want %d",
+			driver, query.RowsAffected, len(rowsToDelete))
+	}
+
+	var remaining []record
+	RequireNoORMError(t, app.Database().Table(table).Find(&remaining))
+	if len(remaining) != 1 || remaining[0].ID != 3 || remaining[0].Name != "preserve" {
+		t.Fatalf("%s single-key bulk Delete() left unexpected rows: %#v", driver, remaining)
+	}
+
+	missing := []record{{ID: 99}}
+	query = app.Database().Table(table).Delete(&missing)
+	if query.Error == nil || query.HTTPCode != http.StatusNotFound {
+		t.Fatalf("%s bulk Delete() with only missing keys = HTTP %d, error %v; want HTTP 404",
+			driver, query.HTTPCode, query.Error)
+	}
+
+	compositeTable := "audit_bulk_delete_composite_" + uniqueIdentifier(t, "")[:8]
+	createSQLTable(
+		t,
+		app,
+		driver,
+		compositeTable,
+		"tenant_id "+sqlTextType(driver)+" NOT NULL, item_id "+sqlTextType(driver)+
+			" NOT NULL, name "+sqlTextType(driver)+" NOT NULL, PRIMARY KEY (tenant_id, item_id)",
+	)
+	type compositeRecord struct {
+		TenantID string `gorest:"tenant_id, primary_key"`
+		ItemID   string `gorest:"item_id, primary_key"`
+		Name     string `gorest:"name"`
+	}
+	compositeRows := []compositeRecord{
+		{TenantID: "tenant", ItemID: "one", Name: "one"},
+		{TenantID: "tenant", ItemID: "two", Name: "two"},
+		{TenantID: "other", ItemID: "keep", Name: "preserve"},
+	}
+	for _, row := range compositeRows {
+		createDynamicRecord(t, app, compositeTable, reflect.TypeFor[compositeRecord](), map[string]any{
+			"TenantID": row.TenantID, "ItemID": row.ItemID, "Name": row.Name,
+		})
+	}
+	compositeRowsToDelete := compositeRows[:2]
+	query = app.Database().Table(compositeTable).Delete(&compositeRowsToDelete)
+	RequireNoORMError(t, query)
+	if query.RowsAffected != int64(len(compositeRowsToDelete)) {
+		t.Fatalf("%s composite-key bulk Delete() affected %d rows, want %d",
+			driver, query.RowsAffected, len(compositeRowsToDelete))
+	}
+
+	var remainingComposite []compositeRecord
+	RequireNoORMError(t, app.Database().Table(compositeTable).Find(&remainingComposite))
+	if len(remainingComposite) != 1 || remainingComposite[0].TenantID != "other" ||
+		remainingComposite[0].ItemID != "keep" || remainingComposite[0].Name != "preserve" {
+		t.Fatalf("%s composite-key bulk Delete() left unexpected rows: %#v", driver, remainingComposite)
 	}
 }
 

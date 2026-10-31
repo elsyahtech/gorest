@@ -6,9 +6,9 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+//nolint:gocognit,gocyclo,revive,funlen
 func (orm *ORM) findMongo(data any) error {
 	activeDriver := orm.DatabaseConfig.Driver
 
@@ -52,12 +52,12 @@ func (orm *ORM) findMongo(data any) error {
 	}
 
 	if orm.limitSet && orm.LimitVal == 0 {
-		alwaysFalse := bson.M{"$expr": bson.M{"$eq": bson.A{1, 0}}}
+		alwaysFalse := bson.M{dolarExpr: bson.M{dolarEq: bson.A{1, 0}}}
 
 		if len(filter) == 0 {
 			filter = alwaysFalse
 		} else {
-			filter = bson.M{"$and": bson.A{filter, alwaysFalse}}
+			filter = bson.M{dolarAnd: bson.A{filter, alwaysFalse}}
 		}
 	}
 
@@ -78,19 +78,18 @@ func (orm *ORM) findMongo(data any) error {
 		)
 	}
 
-	var (
-		findOpts *options.FindOptionsBuilder
-		pipeline mongo.Pipeline
-	)
-
-	if orm.IsDistinct {
-		pipeline, err = orm.buildMongoDistinctPipeline(filter, sort, tableName)
-	} else if grouped {
-		pipeline, err = orm.buildMongoGroupPipeline(tableName, filter, sort, isSlice, structInfo.structType)
-	} else if joining {
-		pipeline, err = orm.buildMongoJoinPipeline(tableName, filter, sort, structInfo.structType)
-	} else {
-		findOpts, err = orm.buildMongoOptionFindMongo(tableName, preload, sort, isSlice)
+	pipeline, findOpts, err := orm.buildMongoQuery(&structBuildMongoQuery{
+		filter:     filter,
+		sort:       sort,
+		tableName:  tableName,
+		grouped:    grouped,
+		isSlice:    isSlice,
+		structInfo: structInfo,
+		joining:    joining,
+		preload:    preload,
+	})
+	if err != nil {
+		return orm.Error
 	}
 
 	if err != nil {
@@ -139,7 +138,7 @@ func (orm *ORM) findMongo(data any) error {
 		}
 
 		if orm.Error == nil {
-			orm.setDatabaseOperationError("Find", err)
+			orm.setDatabaseOperationError("Find", err) //nolint:errcheck,revive
 		}
 	}()
 
@@ -147,15 +146,15 @@ func (orm *ORM) findMongo(data any) error {
 	fieldLookupMap := buildStructFieldMapByTag(structInfo.structType)
 
 	// 14. Process rows scanning and relationship mapping
-	_, err = orm.buildRowsScanFindMongo(
-		execCtx,
-		cursor,
-		structInfo.structType,
-		fieldLookupMap,
-		isSlice,
-		valElem,
-		structInfo.structValue,
-	)
+	_, err = orm.buildRowsScanFindMongo(&structBuildRowsScanFindMongo{
+		execCtx:        execCtx,
+		cursor:         cursor,
+		structType:     structInfo.structType,
+		fieldLookupMap: fieldLookupMap,
+		isSlice:        isSlice,
+		valElem:        valElem,
+		sliceVal:       structInfo.structValue,
+	})
 	if err != nil {
 		return orm.Error
 	}
@@ -165,15 +164,17 @@ func (orm *ORM) findMongo(data any) error {
 	}
 
 	// 15. Load Find Mongo Preload/has-many relationships preload data
-	if !orm.IsDistinct && !joining {
+	if !joining {
 		if err := orm.loadFindMogoPreloadData(execCtx, preload, valElem, isSlice); err != nil {
 			return orm.Error
 		}
 	}
 
 	// 16. Assign final result to ORM instance for handler consumption
+	const message = "Data retrieved successfully"
+
 	orm.Result = data
-	orm.Message = "Data retrieved successfully"
+	orm.Message = message
 
 	return nil
 }

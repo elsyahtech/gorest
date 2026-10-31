@@ -4,90 +4,11 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/elsyahtech/gorest/database"
 )
 
-func TestStartServerAfterDatabaseTasksStopsOnMigrationError(t *testing.T) {
-	migrationErr := errors.New("migration failed")
-	seederCalled := false
-	serverStarted := false
-
-	startServer, err := prepareStartup(
-		func() error { return migrationErr },
-		func() error {
-			seederCalled = true
-			return nil
-		},
-		func() { serverStarted = true },
-	)
-
-	if !errors.Is(err, migrationErr) {
-		t.Fatalf("startup error = %v, want migration error", err)
-	}
-
-	if startServer != nil {
-		t.Fatal("server start callback returned after migration failed")
-	}
-
-	if seederCalled {
-		t.Fatal("seeder ran after migration failed")
-	}
-
-	if serverStarted {
-		t.Fatal("server started after migration failed")
-	}
-}
-
-func TestStartServerAfterDatabaseTasksStopsOnSeederError(t *testing.T) {
-	seederErr := errors.New("seeder failed")
-	serverStarted := make(chan struct{}, 1)
-
-	startServer, err := prepareStartup(
-		func() error { return nil },
-		func() error { return seederErr },
-		func() { serverStarted <- struct{}{} },
-	)
-
-	if !errors.Is(err, seederErr) {
-		t.Fatalf("startup error = %v, want seeder error", err)
-	}
-
-	if startServer != nil {
-		t.Fatal("server start callback returned after seeder failed")
-	}
-
-	select {
-	case <-serverStarted:
-		t.Fatal("server started after seeder failed")
-	default:
-	}
-}
-
-func TestStartServerAfterDatabaseTasksStartsServerOnSuccess(t *testing.T) {
-	serverStarted := make(chan struct{}, 1)
-
-	startServer, err := prepareStartup(
-		func() error { return nil },
-		func() error { return nil },
-		func() { serverStarted <- struct{}{} },
-	)
-
-	if err != nil {
-		t.Fatalf("startup returned unexpected error: %v", err)
-	}
-
-	if startServer == nil {
-		t.Fatal("server start callback was not returned")
-	}
-
-	startServer()
-	select {
-	case <-serverStarted:
-	case <-time.After(time.Second):
-		t.Fatal("server did not start after successful database tasks")
-	}
-}
-
-func TestRunDatabaseStartupTasksStopsSeederAfterMigrationFailure(t *testing.T) {
+func TestRunMigrationStartupStopsSeederAfterMigrationFailure(t *testing.T) {
 	migrationErr := errors.New("migration failed")
 	seederCalled := false
 
@@ -108,6 +29,38 @@ func TestRunDatabaseStartupTasksStopsSeederAfterMigrationFailure(t *testing.T) {
 	}
 }
 
+func TestRunMigrationStartupRunsMigrationBeforeSeeder(t *testing.T) {
+	var calls []string
+	err := runMigrationStartup(
+		func() error {
+			calls = append(calls, "migration")
+			return nil
+		},
+		func() error {
+			calls = append(calls, "seeder")
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("runMigrationStartup() error = %v", err)
+	}
+
+	if len(calls) != 2 || calls[0] != "migration" || calls[1] != "seeder" {
+		t.Fatalf("startup task order = %v, want [migration seeder]", calls)
+	}
+}
+
+func TestRunMigrationStartupReturnsSeederError(t *testing.T) {
+	seederErr := errors.New("seeder failed")
+	err := runMigrationStartup(
+		func() error { return nil },
+		func() error { return seederErr },
+	)
+	if !errors.Is(err, seederErr) {
+		t.Fatalf("startup error = %v, want seeder error", err)
+	}
+}
+
 func TestLoadTimezoneDoesNotChangeProcessLocalTimezone(t *testing.T) {
 	original := time.Local
 	app := &App{config: Config{Timezone: "Asia/Jakarta"}}
@@ -116,5 +69,36 @@ func TestLoadTimezoneDoesNotChangeProcessLocalTimezone(t *testing.T) {
 
 	if time.Local != original {
 		t.Fatal("loading an app timezone changed process-global time.Local")
+	}
+}
+
+func TestRunDatabaseStartupTasksValidatesApplicationAndDatabaseState(t *testing.T) {
+	if err := (*App)(nil).RunDatabaseStartupTasks(); err == nil {
+		t.Fatal("RunDatabaseStartupTasks() accepted a nil application")
+	}
+
+	app := &App{config: Config{}}
+	if err := app.RunDatabaseStartupTasks(); err == nil {
+		t.Fatal("RunDatabaseStartupTasks() accepted an uninitialized database")
+	}
+
+	app = &App{
+		config:   Config{database: &database.Config{}},
+		database: &database.Database{},
+	}
+	if err := app.RunDatabaseStartupTasks(); err != nil {
+		t.Fatalf("RunDatabaseStartupTasks() with database tasks disabled: %v", err)
+	}
+}
+
+func TestRunMigrationReportsMissingLoggerAndDatabase(t *testing.T) {
+	app := &App{config: Config{database: &database.Config{Migration: true}}}
+	if err := app.runMigration(); err == nil {
+		t.Fatal("runMigration() accepted a missing logger")
+	}
+
+	app.log = newLifecycleTestLogger(t)
+	if err := app.runMigration(); err == nil {
+		t.Fatal("runMigration() accepted a missing database")
 	}
 }

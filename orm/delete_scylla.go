@@ -99,7 +99,9 @@ func (orm *ORM) deleteScylla(data any) error {
 		rowsAffected: deleted,
 	}
 
-	orm.Message = "Data deleted successfully"
+	const message = "Data deleted successfully"
+
+	orm.Message = message
 
 	return nil
 }

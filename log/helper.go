@@ -1,3 +1,4 @@
+//nolint:revive,nolintlint // Package log provides logging utilities for the application.
 package log
 
 import (

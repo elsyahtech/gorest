@@ -31,6 +31,10 @@ type Config struct {
 	// No default
 	Password string
 
+	// MongoDB authentication database. Used as authSource when credentials are set.
+	// Defaults to "admin" when empty.
+	AuthSource string
+
 	// Database name (schema) to connect to.
 	// Each environment should have a separate database.
 	// Database must exist before application startup.
@@ -61,8 +65,11 @@ type Config struct {
 	//     TrustServerCertificate false to validate the server certificate.
 	//   - Oracle: "enable" uses TCPS and requires an Oracle wallet via SSLCAPath;
 	//     "disable" uses plain TCP.
-	//   - MongoDB: "true" or "false".
-	//   - SQLite: not applicable. ScyllaDB TLS is not currently configured by this field.
+	//   - MongoDB: "true" or "false"; SSLCertPath and SSLKeyPath enable mTLS.
+	//   - ScyllaDB: "enable" or "disable".
+	//   - SQLite and ScyllaDB: SQLite has no network TLS. ScyllaDB supports
+	//     "enable" and verifies server certificates and hostnames when configured with
+	//     SSLCAPath; SSLCertPath and SSLKeyPath enable optional client certificates (mTLS).
 	//
 	// An empty value intentionally defaults to "disable" for non-Mongo network
 	// drivers (and "false" for MongoDB). This compatibility-oriented default keeps
@@ -75,9 +82,14 @@ type Config struct {
 	// encrypted merely because it uses a private address or network firewall.
 	TLS string
 
+	// AllowInsecureProduction explicitly records client approval to run this database
+	// connection without verified transport encryption in production. It does not
+	// disable validation or replace deployment requirements; GOREST logs this choice.
+	AllowInsecureProduction bool
+
 	// Path to SSL certificate file (client certificate for mutual TLS).
 	// Example: "./data/cert/client.crt"
-	// PostgreSQL uses this with SSLKeyPath for client-certificate authentication.
+	// PostgreSQL and MongoDB use this with SSLKeyPath for client-certificate authentication.
 	// MySQL does not load this path; use a registered driver TLS profile instead.
 	// Oracle uses a wallet via SSLCAPath and does not use this field.
 	// Default: empty
@@ -85,6 +97,7 @@ type Config struct {
 
 	// Path to SSL key file (client private key).
 	// Example: "./data/cert/client.key"
+	// MongoDB uses this with SSLCertPath for client-certificate authentication.
 	// Not applicable for Oracle: same reason as SSLCertPath, Oracle wallet bundles
 	// certificate/key/trust material together instead of using discrete files. Leave empty for Oracle.
 	// Default: empty
@@ -242,7 +255,7 @@ var ConfigDefault = Config{
 	// Default: "./database"
 	DatabaseDirectory: DefaultDatabaseDirectory,
 
-	/// Migration directory, relative to DatabaseDirectory.
+	// Migration directory, relative to DatabaseDirectory.
 	// The driver name is appended automatically.
 	// Example: "migrations" -> ./database/migrations/{Driver}
 	// Default: "migrations"
@@ -310,7 +323,7 @@ var ConfigDefault = Config{
 
 // Helper function to set default values.
 //
-//nolint:gocyclo,revive
+//nolint:revive
 func configDefault(config ...Config) Config {
 	if len(config) < 1 {
 		return ConfigDefault
@@ -405,7 +418,7 @@ func configDefault(config ...Config) Config {
 	}
 
 	if cfg.MaxOpenConnections < 0 {
-		log.Fatalf("Config Database: MaxOpenConnections must be greater than or equal to 0") // <--- Fixed error message
+		log.Fatalf("Config Database: MaxOpenConnections must be greater than or equal to 0")
 	}
 
 	// Default: 5
@@ -420,7 +433,9 @@ func configDefault(config ...Config) Config {
 	return cfg
 }
 
-func resolveDir(baseDir, dir, defaultDir, driver string) string {
+func resolveDir(baseDir, dirParam, defaultDir, driver string) string {
+	dir := dirParam
+
 	if dir == "" {
 		dir = defaultDir
 	}

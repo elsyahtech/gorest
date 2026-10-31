@@ -4,6 +4,7 @@ package httpapi_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -19,6 +20,12 @@ func TestSQLiteHTTPCRUDAndParameterBinding(t *testing.T) {
 	app := internaltest.OpenAppWithConfig(t, database.SQLITE, migrationSeeder.Configure)
 	migrationSeeder.Run(t, app)
 	logSQLiteVersion(t, app.Database())
+	if err := app.Database().RawQuerySQL(context.Background(), func(_ context.Context, connection *sql.DB) error {
+		var result int
+		return connection.QueryRowContext(context.Background(), "SELECT 1").Scan(&result)
+	}); err != nil {
+		t.Fatalf("execute SQLite raw SQL integration: %v", err)
+	}
 
 	table := fmt.Sprintf("gorest_e2e_users_%d", time.Now().UnixNano())
 	runCRUDHTTPScenario(
@@ -28,6 +35,7 @@ func TestSQLiteHTTPCRUDAndParameterBinding(t *testing.T) {
 		fmt.Sprintf("CREATE TABLE %s (id VARCHAR(80) NOT NULL PRIMARY KEY, email VARCHAR(320) NOT NULL UNIQUE, name VARCHAR(200) NOT NULL)", table),
 		"DROP TABLE IF EXISTS "+table,
 	)
+	internaltest.SQLORMCoverage(t, database.SQLITE)
 	internaltest.SQLParallelTransactions(t, database.SQLITE)
 	runMigrationProcessScenarios(t, database.SQLITE, nil)
 }

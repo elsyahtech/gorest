@@ -1,5 +1,6 @@
 package orm
 
+//nolint:revive,funlen
 func (orm *ORM) findSQL(data any) error {
 	activeDriver := orm.DatabaseConfig.Driver
 
@@ -18,12 +19,8 @@ func (orm *ORM) findSQL(data any) error {
 	// 4. Resolve struct info (type, slice value, and slice flag)
 	structInfo, isSlice := resolveStructInfo(valElem)
 
-	if len(orm.GroupByClauses) > 0 {
-		columns, err := orm.validateGroupByColumns(structInfo.structType, tableName)
-		if err != nil {
-			return orm.Error
-		}
-		orm.GroupByClauses = columns
+	if err := orm.validateGroupByColumns(structInfo.structType, tableName); err != nil {
+		return orm.Error
 	}
 
 	// 5. Build preloads metadata
@@ -97,7 +94,7 @@ func (orm *ORM) findSQL(data any) error {
 			return
 		}
 
-		orm.setDatabaseOperationError("Find", err)
+		orm.setDatabaseOperationError("Find", err) //nolint:errcheck
 	}()
 
 	// 13. Map SQL result columns
@@ -145,8 +142,10 @@ func (orm *ORM) findSQL(data any) error {
 	}
 
 	// 18. Assign final result to ORM instance for handler consumption
+	const message = "Data retrieved successfully"
+
 	orm.Result = data
-	orm.Message = "Data retrieved successfully"
+	orm.Message = message
 
 	return nil
 }

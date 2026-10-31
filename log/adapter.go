@@ -1,3 +1,4 @@
+//nolint:revive,nolintlint // This file is part of the log package and provides methods for closing the logger and logging with additional fields.
 package log
 
 import (

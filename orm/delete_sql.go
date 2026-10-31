@@ -70,7 +70,9 @@ func (orm *ORM) deleteSQL(data any) error {
 		return orm.setNotFound("delete")
 	}
 
-	orm.Message = "Data deleted successfully"
+	const message = "Data deleted successfully"
+
+	orm.Message = message
 
 	return nil
 }

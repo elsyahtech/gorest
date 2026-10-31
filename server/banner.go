@@ -51,10 +51,6 @@ func printStartupBanner(
 
 	logger.Log(nil, true).Info(message)
 
-	logger.Log(nil, true).Info("server started successfully")
-
-	logger.Log(nil, true).Info("gorest is running")
-
 	fmt.Println()
 	fmt.Println("╔═════════════════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  GOREST                                                                     ║")

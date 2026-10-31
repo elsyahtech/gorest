@@ -1,0 +1,10 @@
+{
+  "collection": "departments",
+  "delete": [
+    { "id": "dept-01" },
+    { "id": "dept-02" },
+    { "id": "dept-03" },
+    { "id": "dept-04" },
+    { "id": "dept-05" }
+  ]
+}
