@@ -57,7 +57,7 @@ func printStartupBanner(
 	fmt.Println()
 	fmt.Println("╔═════════════════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  GOREST                                                                     ║")
-	fmt.Printf("║  %-73s║\n", gorestVersion())
+	fmt.Printf("║  %-73s  ║\n", gorestVersion())
 	fmt.Println("╠═════════════════════════════════════════════════════════════════════════════╣")
 	fmt.Printf("║  App Name ...................... %-28s               ║\n", strings.ToUpper(appName))
 	fmt.Printf("║  App Version ................... %-28s               ║\n", version)
