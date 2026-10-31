@@ -314,6 +314,10 @@ app := gorest.New(gorest.Config{
     // Explicit application-wide opt-in for intentional non-TLS database or Redis
     // connections in production-like environments. Prefer TLS in production.
     AllowInsecureProduction: false,
+
+    // Disable built-in operational endpoints when they should not be exposed.
+    // Monitoring endpoints are enabled by default.
+    DisableMonitoringEndpoints: false,
 })
 ```
 
@@ -323,6 +327,7 @@ app := gorest.New(gorest.Config{
 - **Timezone:** Configures the timezone for database drivers that support it (currently MySQL and Oracle). It does not change Go's process-wide `time.Local`; configure timezone handling explicitly in application code for logs, token expiration, and other values.
 - **Debug:** When set to true, prevents the HTTP server listener from starting. It does not itself make migrations or seeders a dry run.
 - **AllowInsecureProduction:** Application-wide explicit opt-in for intentional non-TLS database or Redis connections in production-like environments. It does not waive TLS when TLS is available; configure the backend securely by default and use this only for trusted, documented exceptions. Foreground startup may prompt interactively, while headless startup requires this typed opt-in or the corresponding component opt-in.
+- **DisableMonitoringEndpoints:** When `true`, prevents GOREST from registering its built-in monitoring routes. The default is `false`, so `/gorest/live`, `/gorest/ready`, and `/gorest/metrics` are enabled unless explicitly disabled. See the [operational endpoints guide](./docs/configuration.md#operational-endpoints-and-environment-configuration) for endpoint behavior and privacy considerations.
 
 ---
 
@@ -414,6 +419,7 @@ technical references, see the [documentation index](./docs/README.md).
 
 #### Operate, diagnose, and validate
 
+- [Configure built-in liveness, readiness, and metrics endpoints](./docs/configuration.md#operational-endpoints-and-environment-configuration)
 - [Run migrations and seeders or recover failures](./docs/guide.md#migration-seeder)
 - [Diagnose a problem](./docs/troubleshoot.md)
 - [Review security scope and responsibilities](./docs/security/asvs-matrix.md)
