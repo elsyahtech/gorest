@@ -69,7 +69,7 @@ func TestGORESTAppStartAndSignalShutdown(t *testing.T) {
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitForHTTP(t, baseURL+"/ready")
-	waitForHTTP(t, baseURL+"/health/live")
+	waitForHTTP(t, baseURL+"/gorest/live")
 
 	responseResult := make(chan error, 1)
 	go func() {

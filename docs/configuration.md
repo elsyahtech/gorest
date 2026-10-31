@@ -189,18 +189,41 @@ Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-f
 
 ### Operational endpoints and environment configuration
 
-Gorest registers framework-managed endpoints for monitoring:
+GOREST registers built-in operational endpoints in the `/gorest` route group by
+default:
 
-- `GET /health/live` — process liveness; does not perform infrastructure calls.
-- `GET /health/ready` — database readiness; returns HTTP 503 until the database responds.
-- `GET /metrics` — bounded runtime metrics such as goroutines, heap allocation, and GC cycles. This is suitable for export into the application's monitoring pipeline, but it is not a replacement for Prometheus/OpenTelemetry instrumentation.
+- `GET /gorest/live` — liveness probe; returns `200` with `{"status":"alive"}`
+  when the application can serve the request.
+- `GET /gorest/ready` — readiness probe; reports the status of the logger,
+  server, database, Redis, and JWT filter. Each component is reported as
+  `healthy`, `unhealthy`, or `not running`. The overall `status` is `ready`
+  (`200`) or `not_ready` (`503`).
+- `GET /gorest/metrics` — runtime metrics including goroutine count, heap
+  allocation, heap system memory, and GC cycles. These are JSON runtime
+  statistics, not a Prometheus exposition endpoint or a replacement for
+  Prometheus/OpenTelemetry instrumentation.
 
-The readiness endpoint uses stable JSON values: `status: "not_ready"` means the
-application is not ready, and a `database` or `redis` value of
-`"not_initialized"` means that service has no running client. Diagnostic errors
-describe unavailable services as “not running”; these wordings refer to the
-same unavailable state, while the readiness JSON values are kept for API
-compatibility.
+Control endpoint exposure through `gorest.Config.DisableMonitoringEndpoints`.
+It defaults to `false` (enabled); set it to `true` to prevent all three routes
+from being registered:
+
+```go
+app := gorest.New(gorest.Config{
+    DisableMonitoringEndpoints: true,
+})
+```
+
+Disabling these routes does not disable the HTTP server, application services,
+or their internal instrumentation. When enabled, the endpoints are served by
+the application's HTTP server and have no built-in authentication specific to
+the monitoring group. If their information should remain private, disable them
+or restrict access at the network, proxy, or application layer.
+
+The readiness endpoint reports all component statuses in its JSON response.
+An unconfigured optional Redis or JWT filter is reported as `not running`;
+an unavailable configured dependency or failed health check marks readiness
+as `not_ready`. Liveness only confirms that the application can answer that
+request; use an external probe to detect a process that cannot serve HTTP.
 
 Database secrets can be loaded without placing them in source code using `database.ConfigFromEnv("GOREST_DB")`. Supported variables are `GOREST_DB_DRIVER`, `HOST`, `PORT`, `NAME`, `USERNAME`, `PASSWORD`, `TLS`, `SSL_CA`, `SSL_CERT`, and `SSL_KEY`. The password remains in the child-process environment only where required and is never logged by Gorest.
 

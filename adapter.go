@@ -925,7 +925,9 @@ func (app *App) Filter() *filter.Filter {
 	}
 
 	if app.filter == nil {
-		app.abortStartup(errors.New("JWT filter is not running; register filter.Run(...) with app.Use(...) and provide a non-empty signature key before use"))
+		app.abortStartup(errors.New("JWT filter is not running; ensure that the filter is registered with app.Use(...) " +
+			"in your main function before calling app.Filter() in your endpoint route, and that the filter " +
+			"has been properly configured. Check the log to see the error details."))
 	}
 
 	return app.filter

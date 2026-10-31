@@ -58,20 +58,26 @@ type Config struct {
 	// When set to true, the application will allow insecure connections in production mode.
 	// Default: false
 	AllowInsecureProduction bool `json:"allow_insecure_production"`
+
+	// DisableMonitoringEndpoints controls whether monitoring endpoints are registered.
+	// When true, endpoints such as /gorest/live, /gorest/ready, and /gorest/metrics
+	// are not exposed. Monitoring endpoints are enabled by default.
+	DisableMonitoringEndpoints bool `json:"disable_monitoring_endpoints"`
 }
 
 var ConfigDefault = Config{
-	log:                     &logimpr.ConfigDefault,
-	server:                  &serverimpr.ConfigDefault,
-	filter:                  &filter.ConfigDefault,
-	redis:                   nil,
-	database:                nil,
-	AppName:                 DefaultAppName,
-	Version:                 DefaultVersion,
-	Environment:             Development,
-	Timezone:                DefaultTimezone,
-	Debug:                   false,
-	AllowInsecureProduction: false,
+	log:                        &logimpr.ConfigDefault,
+	server:                     &serverimpr.ConfigDefault,
+	filter:                     &filter.ConfigDefault,
+	redis:                      nil,
+	database:                   nil,
+	AppName:                    DefaultAppName,
+	Version:                    DefaultVersion,
+	Environment:                Development,
+	Timezone:                   DefaultTimezone,
+	Debug:                      false,
+	AllowInsecureProduction:    false,
+	DisableMonitoringEndpoints: false,
 }
 
 func configDefault(config ...Config) Config {
@@ -84,6 +90,7 @@ func configDefault(config ...Config) Config {
 	cfg.log = ConfigDefault.log
 	cfg.redis = ConfigDefault.redis
 	cfg.database = ConfigDefault.database
+	cfg.filter = ConfigDefault.filter
 
 	if cfg.AppName == "" {
 		cfg.AppName = ConfigDefault.AppName
