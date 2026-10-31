@@ -26,7 +26,6 @@ func New(config ...Config) *App {
 
 	// initialize the server
 	app.serverInit()
-	app.registerOperationalRoutes()
 
 	// initialize the filter
 	app.filterInit(app.config.filter)
@@ -43,6 +42,7 @@ func (app *App) Start() *App {
 	app.Log(nil, true).Info("starting gorest")
 
 	app.logProductionWarnings()
+	app.registerOperationalRoutes()
 	app.startLifecycle()
 
 	return app

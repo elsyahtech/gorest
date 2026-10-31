@@ -38,18 +38,17 @@ Use the [API reference](api-reference.md) for public package symbols and the
 ## Application lifecycle
 
 1. `gorest.New(...)` applies application defaults and initializes the logger,
-   Fiber server, operational routes, and an optional filter configured with a
-   signing key.
+   Fiber server, and an optional filter configured with a signing key.
 2. `app.Use(...)` registers subsystem configuration. Database and Redis
    connections are initialized when their enabled configurations are
    registered; logger and server settings can be customized there as well.
 3. Application code registers routes and handlers through `app` or the server
    APIs. Handlers use application-facing database, Redis, filter, and logger
    accessors as needed.
-4. `app.Start()` runs configured migrations and seeders before starting the
-   HTTP listener. Startup tasks are skipped when their configuration is
-   disabled. A startup error prevents the HTTP server from being treated as
-   ready.
+4. `app.Start()` logs production warnings, registers operational routes, then
+   runs configured migrations and seeders before starting the HTTP listener.
+   Startup tasks are skipped when their configuration is disabled. A startup
+   error prevents the HTTP server from being treated as ready.
 5. On shutdown, GOREST stops the HTTP server before closing registered
    dependencies. Applications can call `app.Close()` when they manage
    shutdown themselves.

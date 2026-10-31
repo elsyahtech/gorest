@@ -35,6 +35,16 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			app := New()
+			responseBeforeStart, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+			if err != nil {
+				t.Fatalf("request readiness endpoint before route registration: %v", err)
+			}
+			responseBeforeStart.Body.Close()
+			if responseBeforeStart.StatusCode != http.StatusNotFound {
+				t.Fatalf("readiness status before startup route registration = %d, want %d", responseBeforeStart.StatusCode, http.StatusNotFound)
+			}
+
+			app.registerOperationalRoutes()
 			t.Cleanup(func() {
 				if _, _, err := app.Close(); err != nil {
 					t.Errorf("close health-check application: %v", err)
