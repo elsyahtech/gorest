@@ -30,6 +30,14 @@ func (filter *Filter) Authentication() server.Handler {
 		}
 
 		accessToken, refreshToken := extractTokens(ctx)
+
+		if accessToken == "" && refreshToken == "" {
+			return ctx.Status(http.StatusUnauthorized).JSON(fiber.Map{
+				errorKey:   "missing tokens",
+				messageKey: "A valid token is required",
+			})
+		}
+
 		claims, _, _, accessErr := filter.validateAccessToken(*ctx, accessToken)
 		tokenString := accessToken
 
