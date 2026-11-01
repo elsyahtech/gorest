@@ -74,6 +74,8 @@ Related references:
 - [API reference](./api-reference.md) — exported Go packages and symbols.
 - [Versions and change history](./versioning.md) — Go module versions and
   upgrade guidance.
+- [Release changelog](../CHANGELOG.md) — user-facing changes organized by
+  tagged release.
 
 ### Contribute
 

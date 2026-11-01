@@ -22,7 +22,7 @@ Application code
 
 | Package | Responsibility |
 |---|---|
-| `gorest` | Application configuration, subsystem registration, lifecycle, route helpers, health endpoints, and application-facing sessions |
+| `gorest` | Application configuration, subsystem registration, lifecycle, route helpers, operational endpoints, and application-facing sessions |
 | `server` | Fiber server configuration, routing, middleware, and request context |
 | `database` | Seven database drivers, native operations, connection configuration, and migrations/seeders |
 | `orm` | Shared query-building and mapping behavior used by application database sessions |
@@ -76,9 +76,30 @@ See the [request and response guide](guide/response/view_response.md),
 
 ## Scope
 
-GOREST provides common infrastructure, not a complete application or
-deployment. It does not include a built-in file upload/storage service or
-background job queue. Use Go packages or services suited to those
-requirements. Application authorization, external service policies, backups,
-failover, and production capacity also require environment-specific design
-and validation.
+GOREST provides reusable application infrastructure, while application code
+retains control of routes, handlers, and business rules. Its built-in scope
+includes:
+
+- Application configuration, subsystem initialization, startup tasks, and
+  graceful server and dependency shutdown.
+- HTTP routing and configurable middleware for CORS, panic
+  recovery, request IDs, compression, security headers, and rate limiting.
+- Structured logging with rotating file output and heuristic redaction.
+- Database connections for PostgreSQL, MySQL, SQL Server, Oracle, SQLite,
+  MongoDB, and ScyllaDB; native driver access; and ORM-based data access where
+  supported.
+- Database migrations and seeders, plus optional Redis connectivity.
+- Optional filter authentication and token-verification middleware, request parsing and
+  conversion helpers, and an optional JSON response envelope.
+- Built-in liveness, readiness, and runtime metrics endpoints, enabled by
+  default and configurable with `DisableMonitoringEndpoints`.
+
+These features are building blocks, not a complete application or deployment.
+GOREST does not provide user credential management, account/session lifecycle
+or revocation, application-specific authorization, a monitoring dashboard or
+Prometheus/OpenTelemetry exporter, a file upload/storage service, or a
+background job queue. Use application code or suitable Go packages and
+services for those requirements. The application and deployment remain
+responsible for secrets management, access policies for operational endpoints,
+TLS and network configuration, backups, failover, capacity planning, and
+validating security and reliability in their actual environment.
