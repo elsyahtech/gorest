@@ -22,12 +22,18 @@ app.Use(filterConfig)
 ## Required startup validation
 
 JWT is optional: creating an application without registering a filter
-configuration leaves JWT disabled. However, passing a filter configuration to
-`app.Use(...)` explicitly requests the JWT filter. If its `SignatureKey` is
-nil or empty, or if the signing method or token durations are invalid, GOREST
-logs the cause, closes running services, and terminates the process with a
-non-zero exit status. `app.Use(...)` does not return an error because its
-existing API is chainable.
+configuration leaves JWT disabled. Passing a filter configuration to
+`app.Use(...)` explicitly requests the JWT filter. GOREST normalizes the
+configuration with `filter.Run(...)`; a nil, empty, or whitespace-only
+`SignatureKey` aborts startup immediately. If the key is present but the
+signing method or token durations are invalid, filter initialization logs the
+error and leaves JWT disabled. `app.Use(...)` does not return an error because
+its existing API is chainable.
+
+When JWT initialization fails this way, the application can continue if it
+does not use JWT. If route setup then accesses `app.Filter()` or creates
+authentication middleware from an uninitialized filter, GOREST aborts startup
+so the protected routes cannot silently run without authentication.
 
 Accessing `app.Filter()` while JWT is disabled, or creating authentication
 middleware from a `filter.Filter` that is not running, also aborts startup. This

@@ -333,7 +333,7 @@ app := gorest.New(gorest.Config{
 
 ### 2. Custom Subsystem Configuration (`app.Use`)
 
-Use `app.Use(...)` when you need to register or customize subsystem configurations. It accepts supported configuration values or pointers, including `log.Config`, `database.Config`, `redis.Config`, and `server.Config`.
+Use `app.Use(...)` when you need to register or customize subsystem configurations. It accepts supported configuration values or pointers, including `log.Config`, `database.Config`, `redis.Config`, and `server.Config`, `filter.Config`.
 
 The logger and HTTP server are already initialized by `gorest.New()`. Register them again only when you want to apply explicit subsystem configurations.
 
@@ -430,6 +430,7 @@ technical references, see the [documentation index](./docs/README.md).
 
 - [Browse the Go API reference](./docs/api-reference.md)
 - [Check versions and review changes](./docs/versioning.md)
+- [Browse the release changelog](./CHANGELOG.md)
 - [Get help or report an issue](./docs/support.md)
 - [Contribute to GOREST](./CONTRIBUTING.md)
 

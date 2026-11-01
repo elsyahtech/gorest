@@ -66,6 +66,68 @@ deployment.
 | V16.5.1–V16.5.3 | Error handling and fail-safe behavior | GOREST provides structured errors and panic-recovery middleware, but handlers and deployment components still determine whether internal details leak or failures fail open. | Partial | Test public error responses, panic paths, database/network failure paths, and transaction rollback behavior. |
 | V17.1–V17.3 | WebRTC | GOREST does not provide WebRTC signaling, TURN, or media features. | Out of scope | Reassess if the application adds WebRTC functionality. |
 
+## Additional implementation notes
+
+The following notes supplement the existing control matrix with framework
+behavior and features that are useful when assessing the controls above. They
+do not replace or change the matrix's existing mappings, statuses, or
+follow-up actions.
+
+- **Response handling (V1, V4):** The optional `view` package can wrap JSON
+  responses. It is not a general contextual encoder for HTML, JavaScript,
+  URLs, or headers; handlers remain responsible for safe output in each
+  context. `helper.BodyRequest` parses request bodies but does not replace
+  endpoint-specific validation.
+- **Database and ORM APIs (V1, V2, V8, V15):** GOREST has adapters for
+  PostgreSQL, MySQL, SQL Server, Oracle, SQLite, MongoDB, and ScyllaDB, with
+  native APIs and ORM operations whose coverage varies by driver. SQL
+  transaction wrappers are available for relational drivers; MongoDB and
+  ScyllaDB have driver-specific transaction behavior. ORM column selection
+  and explicit update-column APIs can help constrain data access, but do not
+  provide authorization or make application-selected fields safe by default.
+  Bind values and allowlist dynamic identifiers and operators in native
+  queries.
+- **JWT and password helpers (V6, V7, V9, V11):** The filter validates JWT
+  signatures, allowed signing method, issuer, token type, required claims,
+  and expiry. A valid refresh cookie can renew access and also continue the
+  current protected request. `filter.ConfigDefault` sets `HttpOnly` and
+  `SameSite=Lax`; `Secure` defaults off, and partial config literals may
+  zero boolean cookie flags. `helper.GenerateBcrypt` and
+  `helper.GenerateArgon` provide password-hash helpers; Argon2id uses a
+  per-hash cryptographically random salt. MD5 and SHA-512 are fast, unkeyed
+  digests, not password hashing or authentication mechanisms. GOREST does
+  not provide identity, account lifecycle, token revocation, key rotation, or
+  a credential store.
+- **HTTP middleware and transport (V2, V3, V4, V12, V15):** The default
+  server installs CORS, panic recovery, request ID, compression, Helmet, and
+  rate-limiting middleware. These settings are configurable and must be
+  verified for the deployed application. CORS is not CSRF protection.
+  GOREST also has configurable request body limits and finite server
+  timeouts when its default core configuration is used. HTTP TLS is a
+  deployment concern; database and Redis TLS are driver/configuration
+  specific. Production-like startup checks warn or require explicit approval
+  for insecure backend transport, but do not prove the network path is
+  encrypted.
+- **Migrations and startup (V13, V16):** Configured migrations run before
+  seeders and before the HTTP listener starts. A startup-task failure aborts
+  startup. GOREST uses transactions where supported and may execute matching
+  `.down` compensation files, but compensation is bounded and best-effort;
+  it cannot guarantee atomic rollback across every driver or outage. Review
+  migration/seeder files and use appropriately restricted database
+  privileges.
+- **Operational endpoints (V13, V14):** By default, `/gorest/live`,
+  `/gorest/ready`, and `/gorest/metrics` are registered. Readiness reports
+  component states; metrics expose runtime values such as goroutine count,
+  heap allocation, and GC cycles. `gorest.Config.DisableMonitoringEndpoints:
+  true` prevents registration, but does not add authentication or network
+  restrictions. Restrict access at the network/proxy layer if these values
+  must remain private.
+- **Logging (V14, V16):** GOREST uses structured rotating logs and heuristic
+  redaction for recognized sensitive assignments, tokens, cookies, email
+  addresses, and phone-like values. Redaction can miss secrets or produce
+  false positives. The framework does not provide an application-specific
+  audit trail, tamper-proof remote storage, alerting, or retention policy.
+
 ## Suggested verification sequence
 
 1. Confirm the target application scope, data classification, deployment
