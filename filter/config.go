@@ -3,6 +3,9 @@ package filter
 import "time"
 
 type Config struct {
+	// LoggerConfig holds the configuration for logging authentication events
+	LoggerConfig LoggerConfig
+
 	// SignatureKey secret key used to sign tokens
 	SignatureKey *string
 
@@ -43,7 +46,33 @@ type Config struct {
 	CookieSessionOnly bool
 }
 
+type LoggerConfig struct {
+	// DisableLogging disables logging of authentication events.
+	DisableLogging bool
+
+	// EnabledEvents selects which authentication events are logged.
+	// When nil, the default event selection is used.
+	EnabledEvents []AuthenticationLogEvent
+}
+
+type AuthenticationLogEvent string
+
+const (
+	AuthenticationEventMissingCredentials      AuthenticationLogEvent = "missing_credentials"
+	AuthenticationEventAccessTokenInvalid      AuthenticationLogEvent = "access_token_invalid"
+	AuthenticationEventAccessTokenExpired      AuthenticationLogEvent = "access_token_expired"
+	AuthenticationEventRefreshTokenInvalid     AuthenticationLogEvent = "refresh_token_invalid"
+	AuthenticationEventRefreshTokenExpired     AuthenticationLogEvent = "refresh_token_expired"
+	AuthenticationEventRefreshFailed           AuthenticationLogEvent = "refresh_failed"
+	AuthenticationEventAuthenticationSucceeded AuthenticationLogEvent = "authentication_succeeded"
+	AuthenticationEventRefreshSucceeded        AuthenticationLogEvent = "refresh_succeeded"
+)
+
 var ConfigDefault = Config{
+	LoggerConfig: LoggerConfig{
+		DisableLogging: false,
+		EnabledEvents:  []AuthenticationLogEvent{AuthenticationEventMissingCredentials},
+	},
 	SignatureKey:         nil,
 	SigningMethod:        DefaultSigningMethod,
 	AccessTokenDuration:  DefaultAccessTokenDuration,
@@ -60,10 +89,18 @@ var ConfigDefault = Config{
 
 func configDefault(config ...Config) Config {
 	if len(config) == 0 {
-		return ConfigDefault
+		cfg := ConfigDefault
+		cfg.LoggerConfig.EnabledEvents = cloneAuthenticationLogEvents(ConfigDefault.LoggerConfig.EnabledEvents)
+
+		return cfg
 	}
 
 	cfg := config[0]
+	if cfg.LoggerConfig.EnabledEvents == nil {
+		cfg.LoggerConfig.EnabledEvents = cloneAuthenticationLogEvents(ConfigDefault.LoggerConfig.EnabledEvents)
+	} else {
+		cfg.LoggerConfig.EnabledEvents = cloneAuthenticationLogEvents(cfg.LoggerConfig.EnabledEvents)
+	}
 
 	if cfg.SigningMethod == "" {
 		cfg.SigningMethod = ConfigDefault.SigningMethod
@@ -98,4 +135,15 @@ func configDefault(config ...Config) Config {
 	}
 
 	return cfg
+}
+
+func cloneAuthenticationLogEvents(events []AuthenticationLogEvent) []AuthenticationLogEvent {
+	if events == nil {
+		return nil
+	}
+
+	cloned := make([]AuthenticationLogEvent, len(events))
+	copy(cloned, events)
+
+	return cloned
 }

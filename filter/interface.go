@@ -4,11 +4,13 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
 )
 
 type Filter struct {
 	JWT    *jwt.Token
 	Config *Config
+	Logger *zap.Logger
 }
 
 type Cookie struct {
