@@ -91,8 +91,9 @@ includes:
 - Database migrations and seeders, plus optional Redis connectivity.
 - Optional filter authentication and token-verification middleware, request parsing and
   conversion helpers, and an optional JSON response envelope.
-- Built-in liveness, readiness, and runtime metrics endpoints, enabled by
-  default and configurable with `DisableMonitoringEndpoints`.
+- Built-in liveness, readiness, runtime metrics, and database storage-usage
+  endpoints, enabled by default and configurable with
+  `DisableMonitoringEndpoints`.
 
 These features are building blocks, not a complete application or deployment.
 GOREST does not provide user credential management, account/session lifecycle

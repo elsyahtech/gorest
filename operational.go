@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/elsyahtech/gorest/monitoring"
 )
 
 func formatUptime(uptime time.Duration) string {
@@ -47,6 +49,7 @@ func (app *App) registerOperationalRoutes() {
 
 	startedAt := time.Now()
 	operational := app.Group("/gorest")
+	monitoring.Register(operational, app.GetDBConfig(), app.database)
 	liveHandler := func(c *Context) error {
 		return c.Status(200).JSON(Map{"status": "alive"})
 	}

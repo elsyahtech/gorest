@@ -40,6 +40,30 @@ func openAppWithConfig(
 ) *gorest.App {
 	t.Helper()
 
+	config := DatabaseConfig(t, driver)
+	if configure != nil {
+		configure(&config)
+	}
+
+	normalized := database.Run(config)
+	app := gorest.New()
+	app.Use(normalized)
+
+	if registerCleanup {
+		t.Cleanup(func() {
+			_, _, err := app.Close()
+			if err != nil {
+				t.Errorf("close integration application: %v", err)
+			}
+		})
+	}
+
+	return app
+}
+
+func DatabaseConfig(t *testing.T, driver string) database.Config {
+	t.Helper()
+
 	prefix := "GOREST_IT_" + strings.ToUpper(driver)
 	timeout := 10 * time.Second
 	if driver == database.ORACLE {
@@ -71,23 +95,7 @@ func openAppWithConfig(
 		config.TrustServerCertificate = strings.EqualFold(os.Getenv(prefix+"_TRUST_SERVER_CERTIFICATE"), "true")
 	}
 
-	if configure != nil {
-		configure(&config)
-	}
-
-	normalized := database.Run(config)
-	app := gorest.New()
-	app.Use(normalized)
-	if registerCleanup {
-		t.Cleanup(func() {
-			_, _, err := app.Close()
-			if err != nil {
-				t.Errorf("close integration application: %v", err)
-			}
-		})
-	}
-
-	return app
+	return config
 }
 
 func requiredEnvironmentValue(t *testing.T, name string) string {

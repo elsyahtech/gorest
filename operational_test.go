@@ -42,7 +42,7 @@ func TestRegisterOperationalRoutesCanBeDisabled(t *testing.T) {
 	})
 
 	app.registerOperationalRoutes()
-	for _, path := range []string{"/gorest/live", "/gorest/ready", "/gorest/metrics"} {
+	for _, path := range []string{"/gorest/live", "/gorest/ready", "/gorest/metrics", "/gorest/storage"} {
 		response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
 			t.Fatalf("request disabled monitoring endpoint %s: %v", path, err)
@@ -60,11 +60,13 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 		redis               *redis.Config
 		databaseUnavailable bool
 		wantStatus          int
+		wantStorageStatus   int
 		wantBody            []string
 	}{
 		{
-			name:       "optional services are not configured",
-			wantStatus: http.StatusOK,
+			name:              "optional services are not configured",
+			wantStatus:        http.StatusOK,
+			wantStorageStatus: http.StatusOK,
 			wantBody: []string{
 				`"logger":"healthy"`,
 				`"server":"healthy"`,
@@ -75,9 +77,10 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 			},
 		},
 		{
-			name:       "redis service not running",
-			redis:      &redis.Config{},
-			wantStatus: http.StatusServiceUnavailable,
+			name:              "redis service not running",
+			redis:             &redis.Config{},
+			wantStatus:        http.StatusServiceUnavailable,
+			wantStorageStatus: http.StatusOK,
 			wantBody: []string{
 				`"database":"healthy"`,
 				`"redis":"not running"`,
@@ -88,6 +91,7 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 			name:                "database is unhealthy",
 			databaseUnavailable: true,
 			wantStatus:          http.StatusServiceUnavailable,
+			wantStorageStatus:   http.StatusServiceUnavailable,
 			wantBody: []string{
 				`"database":"unhealthy"`,
 				`"redis":"not running"`,
@@ -99,17 +103,6 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			app := New()
-			app.registerOperationalRoutes()
-			for _, path := range []string{"/health/live", "/health/ready", "/metrics"} {
-				response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, path, nil))
-				if err != nil {
-					t.Fatalf("request removed operational endpoint %s: %v", path, err)
-				}
-				response.Body.Close()
-				if response.StatusCode != http.StatusNotFound {
-					t.Errorf("removed operational endpoint %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
-				}
-			}
 			t.Cleanup(func() {
 				if _, _, err := app.Close(); err != nil {
 					t.Errorf("close health-check application: %v", err)
@@ -136,9 +129,21 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 			app.database = db
 			app.config.database = &config
 			app.config.redis = test.redis
+			app.registerOperationalRoutes()
 			if test.databaseUnavailable {
 				if err := db.SQL.Close(); err != nil {
 					t.Fatalf("close SQLite health-check database: %v", err)
+				}
+			}
+
+			for _, path := range []string{"/health/live", "/health/ready", "/metrics"} {
+				response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, path, nil))
+				if err != nil {
+					t.Fatalf("request removed operational endpoint %s: %v", path, err)
+				}
+				response.Body.Close()
+				if response.StatusCode != http.StatusNotFound {
+					t.Errorf("removed operational endpoint %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
 				}
 			}
 
@@ -161,6 +166,19 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 						t.Errorf("readiness body from %s = %s, want it to contain %s", path, body, wantBody)
 					}
 				}
+			}
+
+			response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, "/gorest/storage", nil))
+			if err != nil {
+				t.Fatalf("request storage endpoint: %v", err)
+			}
+			body, err := io.ReadAll(response.Body)
+			response.Body.Close()
+			if err != nil {
+				t.Fatalf("read storage response: %v", err)
+			}
+			if response.StatusCode != test.wantStorageStatus {
+				t.Errorf("storage status = %d, want %d; body = %s", response.StatusCode, test.wantStorageStatus, body)
 			}
 		})
 	}

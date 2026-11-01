@@ -36,6 +36,10 @@ func TestSQLServerVersion(t *testing.T) {
 	t.Logf("SQL Server version: %s", version)
 }
 
+func TestSQLServerStorageUsageEndpoint(t *testing.T) {
+	internaltest.StorageUsage(t, database.SQLSERVER)
+}
+
 func TestORMCRUDAndBoundValues(t *testing.T) {
 	internaltest.SQLCRUD(t, database.SQLSERVER)
 }

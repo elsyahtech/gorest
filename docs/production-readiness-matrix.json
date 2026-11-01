@@ -1,0 +1,369 @@
+{
+  "schema_version": "1.0.0",
+  "title": "GOREST Feature, Integration Test, and Production Readiness Matrix",
+  "repository": "elsyahtech/gorest",
+  "repository_url": "https://github.com/elsyahtech/gorest",
+  "reference_commit": "dca1ad608c844e18a83b094f2dc944fbfe822175",
+  "language": "en",
+  "purpose": "Machine-readable inventory for auditor validation of documented GOREST features, integration-test coverage, and application/deployment production-readiness checks.",
+  "assessment": {
+    "overall_status": "conditional",
+    "summary": "GOREST provides framework capabilities that can be used in production applications, but production readiness must be validated for each consuming application and deployment. This file is not a certification, compliance attestation, or claim that all listed tests have recently passed.",
+    "test_evidence_note": "Integration-test entries describe scenarios documented in the repository. They are not evidence that a specific test run completed successfully. Use test reports from the target commit and environment as execution evidence.",
+    "security_assessment_reference": "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/security/asvs-matrix.md"
+  },
+  "framework_features": [
+    {
+      "id": "feature.application_http",
+      "area": "Application and HTTP",
+      "capabilities": [
+        "Application lifecycle and subsystem registration",
+        "Fiber-based HTTP routing and grouped routes",
+        "Configurable CORS, recovery, request ID, compression, security headers, and rate-limiting middleware",
+        "Graceful HTTP server and dependency shutdown",
+        "Liveness, readiness, and runtime metrics endpoints"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Production TLS and reverse-proxy configuration are deployment responsibilities.",
+        "Applications and operators must configure middleware policies and restrict access to operational endpoints as appropriate."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/architecture.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/router.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/configuration.md"
+      ]
+    },
+    {
+      "id": "feature.database_adapters",
+      "area": "Database adapters",
+      "capabilities": [
+        "Adapters for PostgreSQL, MySQL, SQL Server, Oracle, SQLite, MongoDB, and ScyllaDB",
+        "Native database operations, connection configuration, and connection-pool settings"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Supported operations and behavior differ by driver and database version.",
+        "SQLite is an embedded local-file database and is not a shared remote database service for horizontally scaled instances."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/configuration.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/testing-result.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/testing-result/testing-result-sqlite.md"
+      ]
+    },
+    {
+      "id": "feature.orm",
+      "area": "ORM",
+      "capabilities": [
+        "CRUD and supported query operations including filters, ordering, pagination, grouping, joins/preloads, and upsert"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Feature support and semantics vary by database driver.",
+        "Applications must bind values and review native-query or dynamic-identifier construction."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/orm.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/querying.md"
+      ]
+    },
+    {
+      "id": "feature.migrations_seeders",
+      "area": "Migrations and seeders",
+      "capabilities": [
+        "Startup migration and seeder execution",
+        "Migration tracking, startup locking, repeat-run handling, and best-effort failure recovery/compensation"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Rollback is not guaranteed to be atomic for all drivers or DDL operations.",
+        "Production deployments should run schema changes as a controlled deployment task and inspect/reconcile uncertain failures."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/database/migrations/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/database/seeders/README.md"
+      ]
+    },
+    {
+      "id": "feature.redis",
+      "area": "Redis",
+      "capabilities": [
+        "Redis client integration, pool operations, timeout configuration, TLS/mTLS options, and application readiness integration"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Reconnect behavior does not establish Sentinel/Cluster failover, persistence, backup/restore, or recovery guarantees."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/testing-result/testing-result-redis.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/configuration.md"
+      ]
+    },
+    {
+      "id": "feature.jwt_filter",
+      "area": "JWT filter",
+      "capabilities": [
+        "Access/refresh JWT creation and cookie delivery",
+        "Token validation, refresh handling, and optional request-authentication middleware",
+        "Configurable authentication-event logging"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "The filter is not a complete login or identity system.",
+        "Credential verification, MFA, account state, authorization, session revocation, and application CSRF policy remain application or identity-provider responsibilities."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/filter.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/security/asvs-matrix.md"
+      ]
+    },
+    {
+      "id": "feature.logger",
+      "area": "Logger",
+      "capabilities": [
+        "Structured logging",
+        "Rotating file output and shutdown handling",
+        "Heuristic redaction of recognized sensitive values"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Redaction is heuristic and is not a guarantee.",
+        "Applications must minimize logged data and redact application-specific sensitive values."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/logger.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/configuration.md"
+      ]
+    },
+    {
+      "id": "feature.helpers_responses",
+      "area": "Helpers and response handling",
+      "capabilities": [
+        "Request-body parsing, conversion, and hashing helpers",
+        "Optional JSON response envelope"
+      ],
+      "limitations_and_owner_responsibilities": [
+        "Request validation, business rules, and endpoint response policy remain application responsibilities."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/helpers.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/response/view_response.md"
+      ]
+    }
+  ],
+  "integration_test_coverage": [
+    {
+      "id": "test.database_orm_drivers",
+      "area": "Database drivers and ORM",
+      "documented_scenarios": [
+        "CRUD and bound-value operations",
+        "SQL transaction rollback",
+        "Pagination and grouping",
+        "Driver-specific extended ORM scenarios"
+      ],
+      "scope_and_limits": [
+        "Seven configured database drivers are represented.",
+        "SQLite uses a temporary database; other driver suites require configured services.",
+        "Coverage is representative and does not exhaust every dialect, schema, or database version."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/testing-result.md"
+      ]
+    },
+    {
+      "id": "test.http_end_to_end",
+      "area": "HTTP end-to-end",
+      "documented_scenarios": [
+        "CRUD and bound-value search through HTTP handlers",
+        "Validation, duplicate-key, and not-found responses",
+        "Twelve concurrent Create/GET/Delete requests for tested operations"
+      ],
+      "scope_and_limits": [
+        "Concurrency checks are bounded scenarios, not sustained load, throughput, or soak tests."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md"
+      ]
+    },
+    {
+      "id": "test.orm_extended",
+      "area": "Extended ORM behavior",
+      "documented_scenarios": [
+        "Joins and relation preloads where supported",
+        "Nullable result mapping",
+        "Pagination boundary inputs",
+        "Multi-row insert failure behavior",
+        "Live-query cancellation",
+        "Upsert behavior",
+        "Invalid ORM input handling"
+      ],
+      "scope_and_limits": [
+        "Exact scenarios and semantics differ by driver.",
+        "A multi-row statement test does not establish atomicity across multiple statements or chunks."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/orm.md"
+      ]
+    },
+    {
+      "id": "test.sql_parallel_transactions",
+      "area": "SQL transactions",
+      "documented_scenarios": [
+        "Eight independent SQL transactions execute concurrently and commit rows which the test verifies."
+      ],
+      "scope_and_limits": [
+        "This is not a database throughput, isolation-level, or sustained-load qualification.",
+        "Generic GOREST transaction methods do not claim SQL-like atomicity for MongoDB or ScyllaDB."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md"
+      ]
+    },
+    {
+      "id": "test.migrations_seeders",
+      "area": "Migrations and seeders",
+      "documented_scenarios": [
+        "Execution and repeat runs",
+        "Lock contention",
+        "Recovery after a migration process is killed",
+        "Forced database restart for selected container-backed drivers"
+      ],
+      "scope_and_limits": [
+        "These tests do not simulate host power loss, storage corruption, or every production deployment ordering."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide.md"
+      ]
+    },
+    {
+      "id": "test.tls_mtls",
+      "area": "TLS and mutual TLS",
+      "documented_scenarios": [
+        "TLS configuration and certificate/hostname verification for selected endpoints",
+        "mTLS rejection without a client certificate and acceptance with a trusted client certificate for supported scenarios"
+      ],
+      "scope_and_limits": [
+        "Endpoint, driver, and server-profile coverage varies.",
+        "Local certificate tests do not establish production DNS, certificate-chain, proxy, or deployment correctness."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/testing-result.md"
+      ]
+    },
+    {
+      "id": "test.redis",
+      "area": "Redis",
+      "documented_scenarios": [
+        "Redis operations and concurrent pool use",
+        "Operation and context timeouts",
+        "Startup failure against an unavailable endpoint",
+        "Reconnect after server-dropped client connections",
+        "TLS rejection scenarios"
+      ],
+      "scope_and_limits": [
+        "Reconnect tests do not establish Sentinel/Cluster failover, persistence, or backup/restore."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/testing-result/testing-result-redis.md"
+      ]
+    },
+    {
+      "id": "test.app_filter_logger",
+      "area": "Application lifecycle, JWT filter, and logger",
+      "documented_scenarios": [
+        "Signal-driven shutdown with an in-flight request",
+        "JWT issuance, validation, cookie behavior, HTTP authentication, and refresh",
+        "Logger file output, rotation, and recognized-value redaction"
+      ],
+      "scope_and_limits": [
+        "Does not test application login, account status, authorization, token revocation, or application CSRF policy."
+      ],
+      "execution_evidence_required": true,
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/filter.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/logger.md"
+      ]
+    }
+  ],
+  "production_readiness_checks": [
+    {
+      "id": "ready.target_environment_tests",
+      "check": "Run unit and relevant integration suites against the database product/version, TLS policy, and topology intended for deployment.",
+      "acceptance_evidence": [
+        "Test command, commit/revision, environment profile, and resulting reports are retained.",
+        "CI sets GOREST_IT_REQUIRED=1 where configured external services are mandatory, preventing silent skips."
+      ],
+      "status": "requires_application_or_deployment_validation",
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md"
+      ]
+    },
+    {
+      "id": "ready.full_integration_matrix",
+      "check": "Run and inspect the documented managed integration and coverage matrix.",
+      "acceptance_evidence": [
+        "The matrix command completes successfully for the selected revision.",
+        "Generated test reports and coverage outputs are reviewed; coverage is treated as execution evidence, not proof of correctness."
+      ],
+      "status": "requires_application_or_deployment_validation",
+      "notes": [
+        "The documented full matrix requires Docker and Oracle host Instant Client.",
+        "Review the SQL Server EULA requirement before setting GOREST_IT_SQLSERVER_ACCEPT_EULA=Y."
+      ],
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/integration_test/README.md"
+      ]
+    },
+    {
+      "id": "ready.application_security",
+      "check": "Add and run application-level tests for login, authorization and tenant isolation, input validation, token refresh/revocation, and safe public error responses.",
+      "acceptance_evidence": [
+        "Tests cover positive, negative, boundary, and unauthorized access cases for application routes.",
+        "Sensitive internal errors and credentials are not exposed in client responses or logs."
+      ],
+      "status": "requires_application_validation",
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/security/asvs-matrix.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/architecture.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/filter.md"
+      ]
+    },
+    {
+      "id": "ready.operations_resilience",
+      "check": "Validate TLS/proxy behavior, readiness and shutdown, backup/restore, migrations, failover, capacity, monitoring, and alerting in a representative non-production environment.",
+      "acceptance_evidence": [
+        "Operational tests use the intended deployment topology and service versions.",
+        "Recovery objectives, capacity limits, and alert behavior are documented and exercised."
+      ],
+      "status": "requires_deployment_validation",
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/production-validation.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/configuration.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide.md"
+      ]
+    },
+    {
+      "id": "ready.configuration_and_data_protection",
+      "check": "Review secrets handling, least-privilege accounts, operational endpoint access, log retention, and personal-data minimization.",
+      "acceptance_evidence": [
+        "Production secrets are not committed to source control.",
+        "Database/service permissions and monitoring endpoint exposure follow the deployment policy.",
+        "Log retention and sensitive-data handling are reviewed."
+      ],
+      "status": "requires_application_or_deployment_validation",
+      "references": [
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/security/asvs-matrix.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/configuration.md",
+        "https://github.com/elsyahtech/gorest/blob/dca1ad608c844e18a83b094f2dc944fbfe822175/docs/guide/logger.md"
+      ]
+    }
+  ]
+}

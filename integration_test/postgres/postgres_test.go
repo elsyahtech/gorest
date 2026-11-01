@@ -46,6 +46,10 @@ func TestPostgresServerVersion(t *testing.T) {
 	t.Logf("PostgreSQL server version: %s", version)
 }
 
+func TestPostgresStorageUsageEndpoint(t *testing.T) {
+	internaltest.StorageUsage(t, database.POSTGRES)
+}
+
 func TestPostgresMutualTLSRequiresClientCertificate(t *testing.T) {
 	const prefix = "GOREST_IT_POSTGRES_MTLS"
 	if os.Getenv(prefix+"_HOST") == "" {

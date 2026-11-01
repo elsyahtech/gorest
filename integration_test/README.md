@@ -267,16 +267,38 @@ the exact server profiles tested, see the
 | Package | Main scenarios | Coverage details |
 | --- | --- | --- |
 | [`sqlite/`](./sqlite/) | CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
-| [`mysql/`](./mysql/) | Server version and charset; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Same extended SQL scenarios, including MySQL-specific Upsert behavior |
-| [`postgres/`](./postgres/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; optional mTLS endpoint verification | Join/Preload, nullable mapping, pagination boundaries, multi-row statement atomicity, live-query cancellation, Upsert matrix, PostgreSQL row-level security |
-| [`oracle/`](./oracle/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
-| [`sqlserver/`](./sqlserver/) | Server version; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
-| [`mongo/`](./mongo/) | Server version; CRUD and bound values; extended ORM coverage | Alternate-unique-key Upsert, unfiltered-write guards, nullable mapping, canceled-context propagation |
-| [`scylla/`](./scylla/) | Server version; CRUD; extended ORM coverage | Composite-key Upsert validation, unfiltered-write guards, nullable mapping, canceled-context propagation |
+| [`mysql/`](./mysql/) | Server version and charset; storage-usage endpoint; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Same extended SQL scenarios, including MySQL-specific Upsert behavior |
+| [`postgres/`](./postgres/) | Server version; storage-usage endpoint; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; optional mTLS endpoint verification | Join/Preload, nullable mapping, pagination boundaries, multi-row statement atomicity, live-query cancellation, Upsert matrix, PostgreSQL row-level security |
+| [`oracle/`](./oracle/) | Server version; storage-usage endpoint; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
+| [`sqlserver/`](./sqlserver/) | Server version; storage-usage endpoint; CRUD and bound values; transaction rollback; **8 parallel SQL transactions**; pagination and grouping; extended ORM coverage | Join/Preload, nullable mapping, pagination boundaries, multi-row insert failure, live-query cancellation, Upsert, invalid ORM inputs |
+| [`mongo/`](./mongo/) | Server version; storage-usage endpoint; CRUD and bound values; extended ORM coverage | Alternate-unique-key Upsert, unfiltered-write guards, nullable mapping, canceled-context propagation |
+| [`scylla/`](./scylla/) | Server version; storage-usage endpoint; CRUD; extended ORM coverage | Composite-key Upsert validation, unfiltered-write guards, nullable mapping, canceled-context propagation |
 | [`httpapi/`](./httpapi/) | Managed HTTP CRUD, bound-value search, and 12-way concurrent Create/GET/Delete checks per driver; PostgreSQL additionally verifies TLS encryption, trusted-CA/hostname validation, and untrusted-CA rejection | Requires both `integration` and `integrationcontainers` tags; use the Make targets above |
 | [`app/`](./app/) | App startup and signal-driven graceful shutdown with an in-flight request | Helper-process test of the public `app.Start()` path |
 | [`log/`](./log/) | Configured file output, rotation, and redaction | Uses isolated temporary files |
 | [`redis/`](./redis/) | Operations, concurrent pool use, operation/context timeouts, startup failure, reconnect after server-dropped client connections, and TLS rejection | `make integration-test-redis-e2e` starts and removes disposable Redis; external TLS checks use the configured endpoint |
+
+The PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, and ScyllaDB suites each
+exercise `GET /gorest/storage` against the configured external integration
+service. These tests verify the driver-specific storage query, response
+status, scope, measurement name, and non-negative byte estimate. Use
+disposable test services with the `GOREST_IT_*` variables described below;
+set `GOREST_IT_REQUIRED=1` to fail instead of skipping when a service is not
+configured. ScyllaDB requires storage estimates to be available for the
+configured keyspace; when the system has no estimates, the test verifies the
+documented `unavailable` response instead of treating missing estimates as
+zero usage.
+
+Run all six endpoint integration tests after configuring their six
+`GOREST_IT_*` service profiles:
+
+```sh
+GOREST_IT_REQUIRED=1 go test -tags=integration \
+  ./integration_test/postgres ./integration_test/mysql \
+  ./integration_test/sqlserver ./integration_test/oracle \
+  ./integration_test/mongo ./integration_test/scylla \
+  -run 'StorageUsageEndpoint$' -count=1 -v
+```
 
 Run just the parallel SQL transaction scenario after configuring the selected
 driver's `GOREST_IT_*` environment variables:

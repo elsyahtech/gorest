@@ -54,7 +54,8 @@ Related references:
 - [GOREST guide](./guide.md) — application lifecycle, startup behavior,
   migrations and seeders, entity mapping, and response handling.
 - [Operational endpoints](./configuration.md#operational-endpoints-and-environment-configuration)
-  — liveness, readiness, runtime metrics, and how to disable the endpoints.
+  — liveness, readiness, runtime metrics, storage usage, how to try the
+  storage endpoint, and how to disable the endpoints.
 - [Troubleshooting guide](./troubleshoot.md) — diagnose common errors and find
   driver-specific references.
 - [Support guide](./support.md) — prepare a question or issue report.

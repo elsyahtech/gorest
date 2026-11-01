@@ -168,7 +168,7 @@ In production-like environments, GOREST warns when Redis TLS is disabled and rec
 
 For TLS implementation validation, a localhost certificate is sufficient to test certificate loading, encrypted handshakes, mutual TLS, invalid certificates, and expiry handling. A public or private DNS name is needed for production-representative hostname verification. Testing against `localhost` does not prove that a publicly deployed certificate chain and hostname are valid; use a certificate whose SAN matches the production hostname and is issued or trusted by an approved CA.
 
-SQLite is local storage and does not use network transport. Production SQLite accepts empty, `localhost`, `127.0.0.1`, and `::1` host values only. Remote hosts are rejected rather than silently ignored. SQLite remains allowed in development/testing and for explicitly approved single-node production workloads, but it is not recommended for horizontally scaled or shared remote deployments.
+SQLite is local storage and does not use network transport. GOREST requests mode `0700` when creating a new SQLite database directory and mode `0600` when creating a new database file. Existing file and directory permissions or ownership are not changed; verify them in the deployment environment. These POSIX permission modes are subject to operating-system behavior and umask, and do not prevent access by other processes running as the same application user. Production SQLite accepts empty, `localhost`, `127.0.0.1`, and `::1` host values only. Remote hosts are rejected rather than silently ignored. SQLite remains allowed in development/testing and for explicitly approved single-node production workloads, but it is not recommended for horizontally scaled or shared remote deployments.
 
 TLS verification is enabled by default when TLS is configured; GOREST does not set `InsecureSkipVerify`. `SSLCAPath` adds a CA pool for server verification. Configure both `SSLCertPath` and `SSLKeyPath` together when mutual TLS is required. Connection timeout, retry, and pool options are passed to go-redis, but they do not guarantee recovery from prolonged Redis outages; validate reconnect behavior, resource limits, and application fallback policy against the Redis version and deployment used by your service.
 
@@ -202,9 +202,77 @@ default:
   allocation, heap system memory, and GC cycles. These are JSON runtime
   statistics, not a Prometheus exposition endpoint or a replacement for
   Prometheus/OpenTelemetry instrumentation.
+- `GET /gorest/storage` — a point-in-time estimate of storage used by the
+  configured database. The response identifies the driver, scope, and
+  measurement method. Values are driver-specific estimates, not free disk
+  space, maximum capacity, or a cross-driver comparison. Collection failures
+  return `503` with a sanitized reason and do not affect readiness.
+
+The storage endpoint uses database statistics scoped to the configured
+database, schema, file, or keyspace. PostgreSQL reports database size; MySQL
+reports table data and index sizes; SQL Server reports used data-file pages;
+Oracle reports schema segment bytes; SQLite reports allocated database pages;
+MongoDB reports storage and index sizes; and ScyllaDB reports estimated table
+bytes from `system.size_estimates`. ScyllaDB values are estimates and may be
+unavailable when the system table has no estimates or required permissions
+are missing. These measurements do not report free filesystem or node/cluster
+capacity; use infrastructure monitoring for that information.
+
+#### Try the storage endpoint
+
+Start the application with its intended database configuration, then request
+the endpoint from a host allowed to reach the application:
+
+```sh
+curl --show-error --include http://localhost:3000/gorest/storage
+```
+
+Replace the URL with the application's actual address and port. A successful
+collection returns HTTP `200`; for example:
+
+```json
+{
+  "status": "available",
+  "database": {
+    "driver": "postgres",
+    "scope": "configured_database",
+    "measurement": "database_size",
+    "used_bytes": 123456
+  }
+}
+```
+
+The `driver`, `scope`, and `measurement` describe what was measured.
+`used_bytes` is an integer byte estimate and can legitimately be `0` for an
+empty database or schema. Driver-specific scope and measurement names are
+listed above. A collection or permission problem returns HTTP `503`, for
+example `{"status":"unavailable","reason":"collection_failed"}`; an
+unsupported driver returns `reason: "unsupported_driver"`. The endpoint does
+not include database credentials or raw query errors in its response.
+
+To exercise the driver-specific query against an isolated external test
+database, configure that driver's `GOREST_IT_<DRIVER>_*` variables and run
+its storage integration test from the repository root. For example, for
+MySQL:
+
+```sh
+GOREST_IT_REQUIRED=1 go test -tags=integration \
+  ./integration_test/mysql \
+  -run '^TestMySQLStorageUsageEndpoint$' -count=1 -v
+```
+
+Replace `mysql` and `TestMySQLStorageUsageEndpoint` with the selected driver
+package and test name (`postgres`/`TestPostgresStorageUsageEndpoint`,
+`sqlserver`/`TestSQLServerStorageUsageEndpoint`,
+`oracle`/`TestOracleStorageUsageEndpoint`, `mongo`/`TestMongoStorageUsageEndpoint`,
+or `scylla`/`TestScyllaStorageUsageEndpoint`). Use a disposable database
+account with the minimum permissions required for the selected statistics
+query; do not point integration tests at production data. See the
+[integration test guide](../integration_test/README.md) for all settings and
+driver caveats.
 
 Control endpoint exposure through `gorest.Config.DisableMonitoringEndpoints`.
-It defaults to `false` (enabled); set it to `true` to prevent all three routes
+It defaults to `false` (enabled); set it to `true` to prevent all four routes
 from being registered:
 
 ```go

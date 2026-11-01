@@ -39,6 +39,10 @@ func TestOracleServerVersion(t *testing.T) {
 	t.Logf("Oracle server version: %s", version)
 }
 
+func TestOracleStorageUsageEndpoint(t *testing.T) {
+	internaltest.StorageUsage(t, database.ORACLE)
+}
+
 func TestORMCRUDAndBoundValues(t *testing.T) {
 	internaltest.SQLCRUD(t, database.ORACLE)
 }

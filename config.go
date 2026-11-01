@@ -60,7 +60,8 @@ type Config struct {
 	AllowInsecureProduction bool `json:"allow_insecure_production"`
 
 	// DisableMonitoringEndpoints controls whether monitoring endpoints are registered.
-	// When true, endpoints such as /gorest/live, /gorest/ready, and /gorest/metrics
+	// When true, built-in endpoints such as /gorest/live, /gorest/ready,
+	// /gorest/metrics, and /gorest/storage
 	// are not exposed. Monitoring endpoints are enabled by default.
 	DisableMonitoringEndpoints bool `json:"disable_monitoring_endpoints"`
 }
