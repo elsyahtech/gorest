@@ -223,3 +223,70 @@ Database Parameter Breakdown:
 - **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls connection pool limits and lifetimes. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid. Tune these values for the database limits and application concurrency.
 - **TLS configuration** (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Requests driver-specific encrypted connections and certificate behavior. Support and semantics vary by driver; verify the negotiated connection and certificate validation in the target environment. For Oracle, `SSLCAPath` is used as the Oracle Wallet directory path (`TNS_ADMIN`) when TLS is set to `"enable"`.
 - **Migrations & Seeders** (Migration, Seeder, directories, QueryLogging): Automates database bootstrapping and gives developers direct visibility into query generation during development.
+
+### JWT Filter Configuration (`filter.Run(...)`)
+
+JWT authentication is optional and disabled unless a filter configuration
+with a non-empty signing key is registered. Start from `filter.ConfigDefault`
+so the configured defaults are preserved, then register the configuration
+with `app.Use(...)` before using authentication middleware:
+
+```go
+import (
+    "os"
+    "time"
+
+    "github.com/elsyahtech/gorest"
+    "github.com/elsyahtech/gorest/filter"
+)
+
+signingKey := os.Getenv("GOREST_JWT_SIGNATURE_KEY")
+
+filterConfig := filter.ConfigDefault
+filterConfig.SignatureKey = &signingKey
+filterConfig.AccessTokenDuration = 15 * time.Minute
+filterConfig.RefreshTokenDuration = 30 * 24 * time.Hour
+filterConfig.CookieSecure = true
+
+app := gorest.New(gorest.Config{AppName: "my-service"})
+app.Use(filter.Run(filterConfig))
+```
+
+Provide `GOREST_JWT_SIGNATURE_KEY` through the deployment environment or a
+secret manager. Use a high-entropy secret, do not commit it to source control,
+and plan key rotation. Registering a filter config without a signature key
+aborts startup. An unsupported signing method or token duration under one
+second is logged and leaves the filter uninitialized; if route setup then
+calls `app.Filter()` or creates authentication middleware from that
+uninitialized filter, startup aborts. If JWT is not needed, do not register a
+filter config.
+
+| `filter.Config` field | Default and behavior |
+|---|---|
+| `SignatureKey` | No key by default; required to enable the filter. |
+| `SigningMethod` | `HS256`; unsupported algorithms prevent filter initialization. |
+| `Issuer` | Defaults to `gorest`, but GOREST sets the effective JWT issuer to the application's `gorest.Config.AppName`. |
+| `AccessTokenDuration` | 15 minutes; minimum one second. |
+| `RefreshTokenDuration` | 30 days; minimum one second. |
+| `CookieSameSite` | `Lax`. |
+| `CookieDomain` | Empty, producing host-only cookies. Set only when sharing cookies across subdomains is intended. |
+| `CookiePath` | `/`. |
+| `CookieSecure` | `false`; set to `true` when cookies are served over HTTPS. |
+| `CookieHTTPOnly` | `true` with `filter.ConfigDefault`; prevents browser JavaScript from reading token cookies. |
+| `CookieSessionOnly` | `false`; cookies expire based on their token duration. When true, browser-session cookies are used, but the JWT's own expiry still applies. |
+| `CookieMaxAge` | Deprecated and ignored for token-cookie lifetime; expiry is derived from each token duration. |
+
+Use `filter.ConfigDefault` when customizing the filter. A partial
+`filter.Config{...}` literal gets zero values for boolean fields, so
+`CookieHTTPOnly` and `CookieSecure` will both be false unless set explicitly.
+With the defaults, GOREST issues cookies named `access` and `refresh`.
+Authentication middleware accepts an access JWT from the `Authorization`
+header using the `Bearer` scheme, or from the `access` cookie; if access
+validation fails, it tries the `refresh` cookie. A valid refresh cookie can
+renew access and continue the current protected request. The middleware
+verifies the token signature, signing method, issuer, type, required claims,
+and expiry. It then places a `filter.TokenDetail` in request locals under
+`tokenJWT`. It does not authenticate user credentials, check account state, or
+authorize application resources. For middleware, token creation, claims,
+refresh behavior, and cookie security, see the
+[JWT filter guide](./guide/filter.md).
