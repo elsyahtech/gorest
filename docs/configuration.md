@@ -332,6 +332,20 @@ filter config.
 | `CookieHTTPOnly` | `true` with `filter.ConfigDefault`; prevents browser JavaScript from reading token cookies. |
 | `CookieSessionOnly` | `false`; cookies expire based on their token duration. When true, browser-session cookies are used, but the JWT's own expiry still applies. |
 | `CookieMaxAge` | Deprecated and ignored for token-cookie lifetime; expiry is derived from each token duration. |
+| `LoggerConfig` | Controls authentication event logging. By default, logging is enabled for `missing_credentials`; other event types, including success events, must be selected explicitly. |
+
+`LoggerConfig.DisableLogging` disables all authentication event logs.
+Otherwise, `LoggerConfig.EnabledEvents` is an allowlist of event types. Set it
+to an explicit empty slice to log none, or select any of:
+`missing_credentials`, `access_token_invalid`, `access_token_expired`,
+`refresh_token_invalid`, `refresh_token_expired`, `refresh_failed`,
+`authentication_succeeded`, and `refresh_succeeded`. Success events are
+opt-in; if both are enabled, a request authenticated through refresh emits both
+success events. Failure events use `WARN`, and success events use `INFO`.
+Authentication event logs do not include token values, authorization headers,
+or raw validation errors. The event meanings, application-level audit
+responsibilities, and a configuration example are in the
+[JWT filter guide](./guide/filter.md#authentication-failure-logging).
 
 Use `filter.ConfigDefault` when customizing the filter. A partial
 `filter.Config{...}` literal gets zero values for boolean fields, so

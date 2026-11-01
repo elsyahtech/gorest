@@ -10,6 +10,7 @@ import (
 
 	"github.com/elsyahtech/gorest/server"
 	"github.com/gofiber/fiber/v3"
+	"go.uber.org/zap"
 )
 
 func (filter *Filter) Authentication() server.Handler {
@@ -32,6 +33,8 @@ func (filter *Filter) Authentication() server.Handler {
 		accessToken, refreshToken := extractTokens(ctx)
 
 		if accessToken == "" && refreshToken == "" {
+			filter.logAuthenticationEvent(AuthenticationEventMissingCredentials, http.StatusUnauthorized)
+
 			return ctx.Status(http.StatusUnauthorized).JSON(fiber.Map{
 				errorKey:   "missing tokens",
 				messageKey: "A valid token is required",
@@ -40,6 +43,7 @@ func (filter *Filter) Authentication() server.Handler {
 
 		claims, _, _, accessErr := filter.validateAccessToken(*ctx, accessToken)
 		tokenString := accessToken
+		usedRefreshToken := false
 
 		if accessErr != nil {
 			refreshClaims, message, status, err := filter.validateRefreshToken(*ctx, refreshToken)
@@ -47,6 +51,8 @@ func (filter *Filter) Authentication() server.Handler {
 				if status < http.StatusBadRequest || status > 599 {
 					status = http.StatusUnauthorized
 				}
+
+				filter.logAuthenticationFailures(accessToken, refreshToken, accessErr, err, status)
 
 				return ctx.Status(status).JSON(fiber.Map{
 					errorKey:   err.Error(),
@@ -56,10 +62,17 @@ func (filter *Filter) Authentication() server.Handler {
 
 			claims = refreshClaims
 			tokenString = refreshToken
+			usedRefreshToken = true
 		}
 
 		detail, err := tokenDetailFromClaims(claims, tokenString)
 		if err != nil {
+			event := AuthenticationEventAccessTokenInvalid
+			if usedRefreshToken {
+				event = AuthenticationEventRefreshTokenInvalid
+			}
+			filter.logAuthenticationEvent(event, http.StatusUnauthorized)
+
 			return ctx.Status(http.StatusUnauthorized).JSON(fiber.Map{
 				errorKey:   err.Error(),
 				messageKey: "The token contains invalid claims",
@@ -67,8 +80,65 @@ func (filter *Filter) Authentication() server.Handler {
 		}
 
 		ctx.Locals("tokenJWT", detail)
+		filter.logAuthenticationEvent(AuthenticationEventAuthenticationSucceeded, http.StatusOK)
+		if usedRefreshToken {
+			filter.logAuthenticationEvent(AuthenticationEventRefreshSucceeded, http.StatusOK)
+		}
 
 		return ctx.Next()
+	}
+}
+
+func (filter *Filter) logAuthenticationFailures(accessToken, refreshToken string, accessErr, refreshErr error, status int) {
+	if accessToken != "" && accessErr != nil {
+		event := authenticationTokenFailureEvent(accessErr, AuthenticationEventAccessTokenInvalid, AuthenticationEventAccessTokenExpired)
+		filter.logAuthenticationEvent(event, http.StatusUnauthorized)
+	}
+
+	if refreshToken == "" || refreshErr == nil {
+		return
+	}
+
+	if errors.Is(refreshErr, errRefreshFailed) {
+		filter.logAuthenticationEvent(AuthenticationEventRefreshFailed, status)
+
+		return
+	}
+
+	event := authenticationTokenFailureEvent(refreshErr, AuthenticationEventRefreshTokenInvalid, AuthenticationEventRefreshTokenExpired)
+	filter.logAuthenticationEvent(event, status)
+}
+
+func authenticationTokenFailureEvent(err error, invalidEvent, expiredEvent AuthenticationLogEvent) AuthenticationLogEvent {
+	if errors.Is(err, errTokenExpired) {
+		return expiredEvent
+	}
+
+	return invalidEvent
+}
+
+func (filter *Filter) logAuthenticationEvent(event AuthenticationLogEvent, status int) {
+	if filter == nil || filter.Config == nil || filter.Config.LoggerConfig.DisableLogging || filter.Logger == nil {
+		return
+	}
+
+	for _, enabledEvent := range filter.Config.LoggerConfig.EnabledEvents {
+		if enabledEvent != event {
+			continue
+		}
+
+		fields := []zap.Field{
+			zap.String("event", "authentication"),
+			zap.String("authentication_event", string(event)),
+			zap.Int("status", status),
+		}
+		if event == AuthenticationEventAuthenticationSucceeded || event == AuthenticationEventRefreshSucceeded {
+			filter.Logger.Info("Authentication event", fields...)
+		} else {
+			filter.Logger.Warn("Authentication event", fields...)
+		}
+
+		return
 	}
 }
 

@@ -114,6 +114,58 @@ On success, it stores a `filter.TokenDetail` value in request locals under
 check whether it is disabled, or authorize access to application resources.
 Applications must perform those checks in their own handler or service layer.
 
+## Authentication failure logging
+
+Authentication event logging is controlled by `filter.Config.LoggerConfig`.
+It does not change the middleware's HTTP responses or authentication result.
+`DisableLogging: true` disables every authentication event. Otherwise,
+`EnabledEvents` acts as an allowlist; by default only `missing_credentials`
+is enabled to preserve the existing default behavior. Success events are
+opt-in because they can generate a log entry for every authenticated request.
+Set an explicit empty slice to disable all authentication event logs while
+keeping logging enabled for future selected categories:
+
+```go
+config := filter.ConfigDefault
+config.SignatureKey = &key
+config.LoggerConfig.EnabledEvents = []filter.AuthenticationLogEvent{
+    filter.AuthenticationEventMissingCredentials,
+    filter.AuthenticationEventAccessTokenExpired,
+    filter.AuthenticationEventRefreshTokenExpired,
+}
+app.Use(filter.Run(config))
+```
+
+Available event constants are:
+
+| Event | Meaning |
+|---|---|
+| `AuthenticationEventMissingCredentials` | Neither access nor refresh token was provided. |
+| `AuthenticationEventAccessTokenInvalid` | A supplied access token failed validation and authentication was ultimately rejected. |
+| `AuthenticationEventAccessTokenExpired` | A supplied access token expired and authentication was ultimately rejected. |
+| `AuthenticationEventRefreshTokenInvalid` | A supplied refresh token failed validation. |
+| `AuthenticationEventRefreshTokenExpired` | A supplied refresh token expired. |
+| `AuthenticationEventRefreshFailed` | A valid refresh token could not be used to issue a replacement access token. |
+| `AuthenticationEventAuthenticationSucceeded` | A valid access token authenticated the request. |
+| `AuthenticationEventRefreshSucceeded` | A refresh token issued a replacement access token and authenticated the current request. |
+
+An access-token failure that is recovered by a valid refresh token is not
+logged as an authentication failure. If both supplied tokens fail, the
+selected access and refresh failure events can both be recorded. If both
+success events are enabled, a request authenticated through refresh emits both
+`authentication_succeeded` and `refresh_succeeded`; otherwise each event can
+be selected independently. Failure events are logged at `WARN`, while success
+events are logged at `INFO`. Events use the `authentication_event` structured
+log field. Token values, authorization headers, and raw validation errors are
+not included in these event logs.
+
+The filter only records events from its own JWT authentication and refresh
+flow. Authorization decisions (for example, an authenticated identity being
+denied access to a resource), credential login, MFA, account lockout, logout,
+token revocation, and credential changes belong to the application or identity
+provider that implements those workflows. Record those events at the point
+where the application makes the decision.
+
 ## GOREST token claims
 
 GOREST currently uses these claim names:

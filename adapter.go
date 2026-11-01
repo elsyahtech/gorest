@@ -769,6 +769,7 @@ func (app *App) Log(field map[string]any, args ...bool) *zap.Logger {
 
 	if app.log == nil {
 		golog.Print("gorest: cannot write application log because the logger is not configured")
+
 		return zap.NewNop()
 	}
 

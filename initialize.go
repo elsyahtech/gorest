@@ -227,6 +227,7 @@ func (app *App) filterInit(config *filter.Config) {
 	app.filter = &filter.Filter{
 		JWT:    jwtInitialized,
 		Config: &filterConfig,
+		Logger: app.log.Log(nil, true),
 	}
 
 	app.registerService("Filter")

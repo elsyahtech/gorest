@@ -110,7 +110,7 @@ func (filter *Filter) validateRefreshToken(ctx server.Context, refreshToken stri
 	key := []byte(*filter.Config.SignatureKey)
 
 	if message, status, err := filter.execGenerateToken(ctx, tokenID, "access", key); err != nil {
-		return nil, message, status, fmt.Errorf("generate new access token: %w", err)
+		return nil, message, status, refreshFailedError{err: fmt.Errorf("generate new access token: %w", err)}
 	}
 
 	return claims, "", http.StatusOK, nil
@@ -131,6 +131,23 @@ func (filter *Filter) deleteTokenCookie(ctx server.Context, name, value string) 
 }
 
 var errTokenExpired = errors.New("token has expired")
+var errRefreshFailed = errors.New("refresh token renewal failed")
+
+type refreshFailedError struct {
+	err error
+}
+
+func (failure refreshFailedError) Error() string {
+	return failure.err.Error()
+}
+
+func (failure refreshFailedError) Unwrap() error {
+	return failure.err
+}
+
+func (failure refreshFailedError) Is(target error) bool {
+	return target == errRefreshFailed
+}
 
 func checkTokenExpired(claims jwt.MapClaims) (jwt.MapClaims, string, int, error) {
 	expiresAt, err := unixTimestampClaim(claims, "expires_at")

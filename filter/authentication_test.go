@@ -84,6 +84,24 @@ func TestAuthenticationRejectsExpiredAccessWithoutRefresh(t *testing.T) {
 	}
 }
 
+func TestAuthenticationRejectsMissingTokensWhenLoggingDisabled(t *testing.T) {
+	config := ConfigDefault
+	config.SignatureKey = authenticationStringPointer("authentication-test-key")
+	config.LoggerConfig.DisableLogging = true
+	tokenFilter := newTestFilter(t, config)
+	app := newAuthenticationTestApp(tokenFilter)
+
+	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/protected", nil))
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+	}
+}
+
 func TestAuthenticationRejectsRefreshTokenAsAccessToken(t *testing.T) {
 	tokenFilter := newTestFilter(t, Config{SignatureKey: authenticationStringPointer("authentication-test-key")})
 	refreshToken := createAuthenticationTestToken(t, tokenFilter, "refresh", time.Hour)
