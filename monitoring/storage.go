@@ -37,9 +37,22 @@ func Register(routes *server.Server, config database.Config, databaseConn *datab
 		return
 	}
 
-	registerDatabaseMetrics(routes, config, databaseConn)
+	registerDatabaseMetrics(routes, "/database", config, databaseConn, nil)
+	registerStorageMetrics(routes, "/storage", config, databaseConn, nil)
+}
 
-	routes.Get("/storage", func(requestContext *server.Context) error {
+func registerStorageMetrics(
+	routes *server.Server,
+	path string,
+	config database.Config,
+	databaseConn *database.Database,
+	middleware server.HandlerFunc,
+) {
+	if routes == nil {
+		return
+	}
+
+	handler := func(requestContext *server.Context) error {
 		ctx, cancel := context.WithTimeout(requestContext.Context(), collectionTimeout)
 		defer cancel()
 
@@ -55,7 +68,17 @@ func Register(routes *server.Server, config database.Config, databaseConn *datab
 			Status:   "available",
 			Database: metric,
 		})
-	})
+	}
+	registerGet(routes, path, middleware, handler)
+}
+
+func registerGet(routes *server.Server, path string, middleware, handler server.HandlerFunc) {
+	if middleware == nil {
+		routes.Get(path, handler)
+		return
+	}
+
+	routes.Get(path, middleware, handler)
 }
 
 func collectStorage(ctx context.Context, config database.Config, databaseConn *database.Database) (*storageMetric, error) {

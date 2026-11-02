@@ -132,6 +132,39 @@ func TestOperationalEndpointsUseConfiguredPeerIPAllowlist(t *testing.T) {
 	}
 }
 
+func TestOperationalRoutesAreRegisteredIndividually(t *testing.T) {
+	app := New().Use(monitoring.Config{HTTPMetricsAllowedIPs: []string{"0.0.0.0/0"}})
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close application after checking operational routes: %v", err)
+		}
+	})
+	app.registerOperationalRoutes()
+
+	paths := map[string]bool{}
+	for _, route := range app.server.SRV.GetRoutes() {
+		if route.Path == "/gorest" {
+			t.Fatalf("found synthetic /gorest route with method %s", route.Method)
+		}
+		if strings.HasPrefix(route.Path, "/gorest/") {
+			paths[route.Path] = true
+		}
+	}
+
+	for _, path := range []string{
+		"/gorest/database",
+		"/gorest/storage",
+		"/gorest/http",
+		"/gorest/live",
+		"/gorest/ready",
+		"/gorest/metrics",
+	} {
+		if !paths[path] {
+			t.Errorf("explicit operational route %q was not registered", path)
+		}
+	}
+}
+
 func TestRuntimeMetricsEndpointReportsNestedRuntimeStats(t *testing.T) {
 	app := New().Use(monitoring.Config{HTTPMetricsAllowedIPs: []string{"0.0.0.0/0"}})
 	t.Cleanup(func() {
