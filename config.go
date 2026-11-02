@@ -77,7 +77,7 @@ var ConfigDefault = Config{
 	redis:                   nil,
 	database:                nil,
 	AppName:                 DefaultAppName,
-	Version:                 DefaultVersion,
+	Version:                 DefaultAppVersion,
 	Environment:             Development,
 	Timezone:                DefaultTimezone,
 	Debug:                   false,

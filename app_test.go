@@ -18,7 +18,7 @@ func TestNewInitializesApplicationDefaultsAndServices(t *testing.T) {
 	if app == nil {
 		t.Fatal("New() returned nil")
 	}
-	if app.Name() != DefaultAppName || app.Version() != DefaultVersion || app.Timezone() != DefaultTimezone {
+	if app.Name() != DefaultAppName || app.Version() != DefaultAppVersion || app.Timezone() != DefaultTimezone {
 		t.Fatalf("application defaults = (%q, %q, %q)", app.Name(), app.Version(), app.Timezone())
 	}
 	if app.server == nil || app.log == nil || app.services == nil {

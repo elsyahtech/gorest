@@ -111,7 +111,7 @@ func TestOperationalEndpointsUseConfiguredPeerIPAllowlist(t *testing.T) {
 		"/gorest/live", "/gorest/ready", "/gorest/metrics",
 		"/gorest/http", "/gorest/storage", "/gorest/database",
 	} {
-		app := New().Use(monitoring.Config{HTTPMetricsAllowedIPs: []string{"0.0.0.0/0"}})
+		app := New().Use(monitoring.Config{MonitoringAllowedIPs: []string{"0.0.0.0/0"}})
 		app.registerOperationalRoutes()
 		response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, path, nil))
 		if err != nil {
@@ -133,7 +133,7 @@ func TestOperationalEndpointsUseConfiguredPeerIPAllowlist(t *testing.T) {
 }
 
 func TestOperationalRoutesAreRegisteredIndividually(t *testing.T) {
-	app := New().Use(monitoring.Config{HTTPMetricsAllowedIPs: []string{"0.0.0.0/0"}})
+	app := New().Use(monitoring.Config{MonitoringAllowedIPs: []string{"0.0.0.0/0"}})
 	t.Cleanup(func() {
 		if _, _, err := app.Close(); err != nil {
 			t.Errorf("close application after checking operational routes: %v", err)
@@ -166,7 +166,7 @@ func TestOperationalRoutesAreRegisteredIndividually(t *testing.T) {
 }
 
 func TestRuntimeMetricsEndpointReportsNestedRuntimeStats(t *testing.T) {
-	app := New().Use(monitoring.Config{HTTPMetricsAllowedIPs: []string{"0.0.0.0/0"}})
+	app := New().Use(monitoring.Config{MonitoringAllowedIPs: []string{"0.0.0.0/0"}})
 	t.Cleanup(func() {
 		if _, _, err := app.Close(); err != nil {
 			t.Errorf("close runtime metrics application: %v", err)
@@ -217,8 +217,8 @@ func TestRuntimeMetricsEndpointReportsNestedRuntimeStats(t *testing.T) {
 
 func TestHTTPMetricsEndpointUsesApplicationSnapshotAndRouteTemplates(t *testing.T) {
 	app := New().Use(monitoring.Config{
-		HTTPMetricsAllowedIPs:     []string{"0.0.0.0/0"},
-		EnablePerRouteHTTPMetrics: true,
+		MonitoringAllowedIPs:        []string{"0.0.0.0/0"},
+		EnableHTTPMetricsMonitoring: true,
 	})
 	t.Cleanup(func() {
 		if _, _, err := app.Close(); err != nil {
@@ -398,7 +398,7 @@ func TestReadyHealthRouteReportsRedisDependency(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			app := New().Use(monitoring.Config{HTTPMetricsAllowedIPs: []string{"0.0.0.0/0"}})
+			app := New().Use(monitoring.Config{MonitoringAllowedIPs: []string{"0.0.0.0/0"}})
 			t.Cleanup(func() {
 				if _, _, err := app.Close(); err != nil {
 					t.Errorf("close health-check application: %v", err)

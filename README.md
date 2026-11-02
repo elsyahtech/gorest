@@ -341,15 +341,15 @@ registering application routes:
 
 ```go
 app.Use(monitoring.Config{
-    HTTPMetricsAllowedIPs:      []string{"127.0.0.1/32", "::1/128"},
+    MonitoringAllowedIPs:       []string{"127.0.0.1/32", "::1/128"},
     DisableMonitoringEndpoints: false,
-    EnablePerRouteHTTPMetrics:  false,
+    EnableHTTPMetricsMonitoring: false,
 })
 ```
 
 Move these options from `gorest.Config` to `monitoring.Config` when upgrading
 from a version that exposed them on the application config. An empty
-`HTTPMetricsAllowedIPs` list denies access to all built-in `/gorest` endpoints.
+`MonitoringAllowedIPs` list denies access to all built-in `/gorest` endpoints.
 The allowlist checks the connection peer IP (the proxy IP behind a reverse
 proxy), not forwarded headers. `DisableMonitoringEndpoints` defaults to
 `false`; per-route metrics are optional and disabled by default. See the

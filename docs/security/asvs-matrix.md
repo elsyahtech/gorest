@@ -123,7 +123,7 @@ follow-up actions.
   estimates; database metrics expose application-client pool and operation
   statistics. All built-in `/gorest` operational endpoints deny access by
   default and support an IP/CIDR allowlist through
-  `monitoring.Config.HTTPMetricsAllowedIPs`; the peer IP is checked directly,
+  `monitoring.Config.MonitoringAllowedIPs`; the peer IP is checked directly,
   not forwarded headers, and this is not user authentication. Behind a reverse
   proxy, allowlist the trusted proxy peer IP and restrict access at the
   network/proxy layer.

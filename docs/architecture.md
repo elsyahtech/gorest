@@ -95,7 +95,7 @@ includes:
   endpoints, enabled by default and configurable with
   `monitoring.Config.DisableMonitoringEndpoints` through `app.Use(...)`.
   Access to every built-in endpoint is denied by default and can be restricted
-  to connection peer IPs with `monitoring.Config.HTTPMetricsAllowedIPs`.
+  to connection peer IPs with `monitoring.Config.MonitoringAllowedIPs`.
 - Startup notification when a newer official GOREST release is available,
   enabled by default and configurable through `gorest.Config.CheckForUpdates`.
   This only logs a notice; it never upgrades the application.

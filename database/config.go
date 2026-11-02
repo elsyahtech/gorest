@@ -82,11 +82,6 @@ type Config struct {
 	// encrypted merely because it uses a private address or network firewall.
 	TLS string
 
-	// AllowInsecureProduction explicitly records client approval to run this database
-	// connection without verified transport encryption in production. It does not
-	// disable validation or replace deployment requirements; GOREST logs this choice.
-	AllowInsecureProduction bool
-
 	// Path to SSL certificate file (client certificate for mutual TLS).
 	// Example: "./data/cert/client.crt"
 	// PostgreSQL and MongoDB use this with SSLKeyPath for client-certificate authentication.
@@ -154,6 +149,11 @@ type Config struct {
 	// Default: 10 minutes
 	// Example: 10 * time.Minute
 	ConnectionMaxLifetime time.Duration
+
+	// AllowInsecureProduction explicitly records client approval to run this database
+	// connection without verified transport encryption in production. It does not
+	// disable validation or replace deployment requirements; GOREST logs this choice.
+	AllowInsecureProduction bool
 
 	// MSSQL/SQLSERVER only: whether to trust self-signed server certificates.
 	// false: verify certificate (production, secure)
@@ -280,6 +280,12 @@ var ConfigDefault = Config{
 	// Recommended: 10-30 minutes
 	// Default: 10 minutes.
 	ConnectionMaxLifetime: DefaultConnectionMaxLifetime,
+
+	// AllowInsecureProduction explicitly records client approval to run this database
+	// connection without verified transport encryption in production. It does not
+	// disable validation or replace deployment requirements; GOREST logs this choice.
+	// default: false
+	AllowInsecureProduction: DefaultAllowInsecureProduction,
 
 	// MSSQL/SQLSERVER only: whether to trust self-signed server certificates.
 	// false: verify certificate (production, secure)
