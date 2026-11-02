@@ -315,15 +315,6 @@ app := gorest.New(gorest.Config{
     // connections in production-like environments. Prefer TLS in production.
     AllowInsecureProduction: false,
 
-    // Disable built-in operational endpoints when they should not be exposed.
-    // Monitoring endpoints are enabled by default.
-    DisableMonitoringEndpoints: false,
-
-    // Restrict /gorest/http to local development clients. Empty denies all.
-    HTTPMetricsAllowedIPs: []string{"127.0.0.1/32", "::1/128"},
-
-    // Optional bounded metrics grouped by method and registered route template.
-    EnablePerRouteHTTPMetrics: false,
 })
 ```
 
@@ -333,15 +324,34 @@ app := gorest.New(gorest.Config{
 - **Timezone:** Configures the timezone for database drivers that support it (currently MySQL and Oracle). It does not change Go's process-wide `time.Local`; configure timezone handling explicitly in application code for logs, token expiration, and other values.
 - **Debug:** When set to true, prevents the HTTP server listener from starting. It does not itself make migrations or seeders a dry run.
 - **AllowInsecureProduction:** Application-wide explicit opt-in for intentional non-TLS database or Redis connections in production-like environments. It does not waive TLS when TLS is available; configure the backend securely by default and use this only for trusted, documented exceptions. Foreground startup may prompt interactively, while headless startup requires this typed opt-in or the corresponding component opt-in.
-- **DisableMonitoringEndpoints:** When `true`, prevents GOREST from registering its built-in monitoring routes. The default is `false`, so `/gorest/live`, `/gorest/ready`, `/gorest/metrics`, `/gorest/http`, `/gorest/storage`, and `/gorest/database` are enabled unless explicitly disabled. See the [operational endpoints guide](./docs/configuration.md#operational-endpoints-and-environment-configuration) for endpoint behavior and privacy considerations.
-- **HTTPMetricsAllowedIPs:** Peer IP addresses or CIDR ranges permitted to access `/gorest/http`. The default empty list denies access. Behind a reverse proxy, configure the proxy's peer IP and restrict access at the proxy/network layer; this setting does not protect older operational endpoints.
-- **EnablePerRouteHTTPMetrics:** When `true`, includes optional HTTP metrics grouped by method and registered route template. Defaults to `false`.
-
 ---
 
 ### 2. Custom Subsystem Configuration (`app.Use`)
 
-Use `app.Use(...)` when you need to register or customize subsystem configurations. It accepts supported configuration values or pointers, including `log.Config`, `database.Config`, `redis.Config`, and `server.Config`, `filter.Config`.
+Use `app.Use(...)` when you need to register or customize subsystem configurations. It accepts supported configuration values or pointers, including `log.Config`,
+`database.Config`, `redis.Config`, `server.Config`, `filter.Config`, and
+`monitoring.Config`.
+
+Import `github.com/elsyahtech/gorest/monitoring` and configure built-in
+operational endpoints and HTTP metrics through the monitoring service before
+registering application routes:
+
+```go
+app.Use(monitoring.Config{
+    HTTPMetricsAllowedIPs:      []string{"127.0.0.1/32", "::1/128"},
+    DisableMonitoringEndpoints: false,
+    EnablePerRouteHTTPMetrics:  false,
+})
+```
+
+Move these options from `gorest.Config` to `monitoring.Config` when upgrading
+from a version that exposed them on the application config. An empty
+`HTTPMetricsAllowedIPs` list denies access to all built-in `/gorest` endpoints.
+The allowlist checks the connection peer IP (the proxy IP behind a reverse
+proxy), not forwarded headers. `DisableMonitoringEndpoints` defaults to
+`false`; per-route metrics are optional and disabled by default. See the
+[operational endpoints guide](./docs/configuration.md#operational-endpoints-and-environment-configuration)
+for details.
 
 The logger and HTTP server are already initialized by `gorest.New()`. Register them again only when you want to apply explicit subsystem configurations.
 

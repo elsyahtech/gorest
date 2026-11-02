@@ -192,19 +192,25 @@ Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-f
 GOREST registers built-in operational endpoints in the `/gorest` route group by
 default:
 
+- All built-in `/gorest` endpoints are restricted by
+  `monitoring.Config.HTTPMetricsAllowedIPs`. The default empty allowlist denies
+  every caller; configuring it does not add user authentication. The check uses
+  the connection peer IP, so behind a reverse proxy the proxy's IP is checked,
+  not `X-Forwarded-For`.
 - `GET /gorest/live` — liveness probe; returns `200` with `{"status":"alive"}`
   when the application can serve the request.
 - `GET /gorest/ready` — readiness probe; reports the status of the logger,
   server, database, Redis, and JWT filter. Each component is reported as
   `healthy`, `unhealthy`, or `not running`. The overall `status` is `ready`
   (`200`) or `not_ready` (`503`).
-- `GET /gorest/metrics` — runtime metrics including goroutine count, heap
-  allocation, heap system memory, and GC cycles. These are JSON runtime
-  statistics, not a Prometheus exposition endpoint or a replacement for
-  Prometheus/OpenTelemetry instrumentation.
+- `GET /gorest/metrics` — runtime, memory, garbage-collection, and scheduler
+  statistics, including goroutine/GOMAXPROCS counts, heap and stack memory,
+  GC counters, scheduler latency distribution, and cumulative mutex wait time.
+  The scheduler histogram reports bucket bounds in seconds and counts. These
+  are process-local JSON runtime statistics, not a Prometheus exposition
+  endpoint or a replacement for Prometheus/OpenTelemetry instrumentation.
 - `GET /gorest/http` — application-scoped HTTP server metrics. The route is
-  registered by default, but access is denied unless the connection peer IP
-  matches `HTTPMetricsAllowedIPs`.
+  registered by default and returns application request observations.
 - `GET /gorest/storage` — a point-in-time estimate of storage used by the
   configured database. The response identifies the driver, scope, and
   measurement method. Values are driver-specific estimates, not free disk
@@ -219,23 +225,31 @@ default:
 
 #### HTTP server metrics
 
-Configure access and optional route-level collection on `gorest.Config`:
+Configure access and optional route-level collection with
+`monitoring.Config` from `github.com/elsyahtech/gorest/monitoring` through
+`app.Use(...)`, before registering application routes:
 
 ```go
-app := gorest.New(gorest.Config{
+app := gorest.New()
+app.Use(monitoring.Config{
     HTTPMetricsAllowedIPs: []string{"127.0.0.1/32", "::1/128"},
     EnablePerRouteHTTPMetrics: false,
 })
 ```
 
 `HTTPMetricsAllowedIPs` accepts IP literals and CIDR ranges. It defaults to an
-empty list, which denies all access. Invalid entries abort application
-initialization. The endpoint checks the TCP connection's peer IP; it does not
-trust `X-Forwarded-For`. Behind a reverse proxy, the peer IP is the proxy's IP,
-so allow only trusted proxy addresses and also restrict access at the proxy or
-network layer. This allowlist protects `/gorest/http` only; it does not protect
-the older operational endpoints. Those endpoints require a separate access
-control review.
+empty list, which denies all access to built-in `/gorest` endpoints, including
+`/live`, `/ready`, `/metrics`, `/http`, `/storage`, and `/database`. Invalid
+entries abort application initialization. Each endpoint checks the TCP
+connection's peer IP; it does not trust `X-Forwarded-For`. Behind a reverse
+proxy, the peer IP is the proxy's IP, so allow only trusted proxy addresses
+and also restrict access at the proxy or network layer. Health checks and
+other internal callers must be included in this allowlist.
+
+The `HTTPMetricsAllowedIPs`, `DisableMonitoringEndpoints`, and
+`EnablePerRouteHTTPMetrics` fields belong to `monitoring.Config`, not
+`gorest.Config`. When upgrading code that set these fields on `gorest.Config`,
+move them into `app.Use(monitoring.Config{...})` as shown above.
 
 The endpoint returns JSON with `status` (`available` or `partial`) and a
 `metrics` object. `partial` means at least one metric is unavailable; the
@@ -298,13 +312,17 @@ compression; it is not bandwidth or network traffic. Delivery failures after
 the application prepares a response cannot be reflected in this value.
 
 Global metrics are enabled whenever the HTTP metrics middleware is active.
-`EnablePerRouteHTTPMetrics` adds a `routes` array grouped by HTTP method and
-registered route template (for example, `/users/:id`), never by actual URL or
-parameter values. It is disabled by default; enabling it adds bounded memory
-and synchronization overhead proportional to the registered route templates.
-Per-route objects contain the same counters except `request_in_flight`, which
-is global only. Snapshots are collected from concurrent atomic counters, so
-individual fields can represent adjacent instants while requests are active.
+`EnablePerRouteHTTPMetrics` controls whether `GET /gorest/http` also returns a
+`routes` array with metrics grouped by HTTP method and registered route
+template, such as `GET /users/:id`. It never groups by actual URL or parameter
+values such as a user ID. When the flag is `false` (the default), global
+counters remain available and only the route breakdown is omitted. Set it to
+`true` to include the breakdown. Per-route objects contain the same counters
+as the global metrics except `request_in_flight`, which is global only.
+Enabling the option adds processing to each completed request and memory
+proportional to the number of registered route templates. Snapshots are
+collected from concurrent atomic counters, so individual fields can represent
+adjacent instants while requests are active.
 
 The storage endpoint uses database statistics scoped to the configured
 database, schema, file, or keyspace. PostgreSQL reports database size; MySQL
@@ -318,8 +336,9 @@ capacity; use infrastructure monitoring for that information.
 
 #### Try the storage endpoint
 
-Start the application with its intended database configuration, then request
-the endpoint from a host allowed to reach the application:
+Start the application with its intended database configuration and configure
+`monitoring.Config.HTTPMetricsAllowedIPs` to include the caller's peer IP.
+Without that configuration, the default empty allowlist returns `403`:
 
 ```sh
 curl --show-error --include http://localhost:3000/gorest/storage
@@ -354,7 +373,8 @@ database credentials or raw query errors in its response.
 
 #### Database usage and client metrics
 
-Request the application-scoped database metrics with:
+Configure the monitoring allowlist to include the caller's peer IP as described
+above, then request the application-scoped database metrics:
 
 ```sh
 curl --show-error --include http://localhost:3000/gorest/database
@@ -400,7 +420,8 @@ monitoring events; wait counts and wait duration are currently unavailable for
 MongoDB. ScyllaDB pool metrics are unavailable because its client does not
 expose equivalent pool statistics. For unsupported metrics, JSON values are
 `null` and `unavailable_metrics` identifies the reason, rather than reporting
-an invented zero.
+an invented zero. When every metric is available, `unavailable_metrics` is
+`null`.
 
 Example (individual values depend on the driver and workload):
 
@@ -460,24 +481,24 @@ query; do not point integration tests at production data. See the
 [integration test guide](../integration_test/README.md) for all settings and
 driver caveats.
 
-Control endpoint exposure through `gorest.Config.DisableMonitoringEndpoints`.
+Control endpoint exposure through `monitoring.Config.DisableMonitoringEndpoints`.
 It defaults to `false` (enabled); set it to `true` to prevent the built-in
 operational routes, including `/gorest/http`, from being registered:
 
 ```go
-app := gorest.New(gorest.Config{
+app := gorest.New()
+app.Use(monitoring.Config{
     DisableMonitoringEndpoints: true,
 })
 ```
 
 Disabling these routes does not disable the HTTP server or application
-services. It also disables HTTP metrics collection. When enabled, the
-endpoints are served by the application's HTTP server. `/gorest/http` is
-restricted by `HTTPMetricsAllowedIPs` (empty by default); this is an IP
-allowlist, not user authentication. The older operational endpoints are not
-covered by that allowlist and do not add authentication or authorization.
-Restrict all exposed operational endpoints at the network, proxy, or
-application layer as appropriate.
+services. It also disables HTTP metrics collection. When enabled, the endpoints are served by the application's HTTP server and
+all are restricted by `HTTPMetricsAllowedIPs` (empty by default); this is an IP
+allowlist, not user authentication. Requests are checked against the
+connection's peer IP, so a reverse proxy's address is used when applicable.
+Include trusted health-check clients and proxies in the allowlist, and apply
+network or proxy restrictions as appropriate.
 
 The readiness endpoint reports all component statuses in its JSON response.
 An unconfigured optional Redis or JWT filter is reported as `not running`;

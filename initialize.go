@@ -2,12 +2,14 @@ package gorest
 
 import (
 	"context"
+	"fmt"
 	golog "log"
 	"strings"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
 	"github.com/elsyahtech/gorest/log"
+	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
 )
@@ -121,6 +123,44 @@ func (app *App) databaseInit() {
 	app.Log(nil, true).Info("database is running")
 }
 
+func (app *App) monitoringInit() {
+	if app == nil {
+		golog.Fatalf("failed to run monitoring: application is nil")
+	}
+
+	if app.log == nil {
+		golog.Fatalf("failed to run monitoring: logger is not running")
+	}
+
+	if app.config.monitoring == nil {
+		config := monitoring.ConfigDefault
+		app.config.monitoring = &config
+	}
+
+	config := monitoring.Run(*app.config.monitoring)
+	monitoringInitialized, err := monitoring.New(config)
+	if err != nil {
+		app.Log(map[string]any{
+			LogFieldKeyError: err,
+		}, true).Error("failed to run monitoring")
+		app.abortStartup(fmt.Errorf("initialize monitoring: %w", err))
+	}
+
+	app.config.monitoring = &config
+	app.monitoring = monitoringInitialized
+	if app.monitoring.EndpointsEnabled() {
+		app.registerService("Monitoring")
+	} else {
+		app.unregisterService("Monitoring")
+	}
+
+	app.Log(nil, true).Info("monitoring configuration is ready")
+
+	if app.server != nil {
+		app.reconfigureServer()
+	}
+}
+
 func (app *App) newServer() {
 	if app.log == nil {
 		golog.Fatalf("failed to run server: logger is not running")
@@ -128,9 +168,9 @@ func (app *App) newServer() {
 
 	app.registerService("Server")
 
-	serverConfig := app.serverConfigWithHTTPMetrics()
+	serverConfig := app.serverConfigWithMonitoring()
 
-	serverInitialized, message, err := app.newServerWithHTTPMetrics(&serverConfig)
+	serverInitialized, message, err := app.newServerWithMonitoring(&serverConfig)
 	if err != nil {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
@@ -152,8 +192,8 @@ func (app *App) reconfigureServer() {
 
 	app.registerService("Server")
 
-	serverConfig := app.serverConfigWithHTTPMetrics()
-	serverInitialized, message, err := app.newServerWithHTTPMetrics(&serverConfig)
+	serverConfig := app.serverConfigWithMonitoring()
+	serverInitialized, message, err := app.newServerWithMonitoring(&serverConfig)
 	if err != nil {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,

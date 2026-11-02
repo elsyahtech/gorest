@@ -19,6 +19,7 @@ func TestDatabaseMetricsEndpointReportsApplicationSQLMetrics(t *testing.T) {
 		DatabaseDirectory:  t.TempDir(),
 		MaxOpenConnections: 4,
 	}
+
 	db, _, err := database.New(context.Background(), &config, "UTC")
 	if err != nil {
 		t.Fatalf("initialize SQLite database: %v", err)
@@ -104,5 +105,20 @@ func TestDatabaseMetricsEndpointReportsApplicationSQLMetrics(t *testing.T) {
 	}
 	if metric.TransactionRollbackTotal == nil || *metric.TransactionRollbackTotal != 0 {
 		t.Errorf("transaction_rollback_total = %v, want 0", metric.TransactionRollbackTotal)
+	}
+}
+
+func TestDatabaseMetricsUnavailableMetricsMarshalsNullWhenEmpty(t *testing.T) {
+	body, err := json.Marshal(databaseMetrics{UnavailableMetrics: nil})
+	if err != nil {
+		t.Fatalf("marshal database metrics: %v", err)
+	}
+
+	var result map[string]json.RawMessage
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode database metrics JSON: %v", err)
+	}
+	if got := string(result["unavailable_metrics"]); got != "null" {
+		t.Errorf("unavailable_metrics = %s, want null", got)
 	}
 }

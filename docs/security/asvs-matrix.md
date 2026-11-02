@@ -121,12 +121,13 @@ follow-up actions.
   runtime metrics expose process values; HTTP metrics expose application
   request observations; storage reports driver-specific database usage
   estimates; database metrics expose application-client pool and operation
-  statistics. `/gorest/http` denies access by default and supports an IP/CIDR
-  allowlist through `HTTPMetricsAllowedIPs`; this is not user authentication
-  and only protects that endpoint. Older operational endpoints are not
-  automatically protected by this allowlist. Restrict all exposed monitoring
-  information at the network/proxy layer. `gorest.Config.DisableMonitoringEndpoints: true`
-  prevents registration.
+  statistics. All built-in `/gorest` operational endpoints deny access by
+  default and support an IP/CIDR allowlist through
+  `monitoring.Config.HTTPMetricsAllowedIPs`; the peer IP is checked directly,
+  not forwarded headers, and this is not user authentication. Behind a reverse
+  proxy, allowlist the trusted proxy peer IP and restrict access at the
+  network/proxy layer.
+  `monitoring.Config.DisableMonitoringEndpoints: true` prevents registration.
 - **Logging (V14, V16):** GOREST uses structured rotating logs and heuristic
   redaction for recognized sensitive assignments, tokens, cookies, email
   addresses, and phone-like values. Redaction can miss secrets or produce

@@ -74,7 +74,6 @@ func collectDatabaseMetrics(ctx context.Context, config database.Config, databas
 		Scope:              "application_database_client",
 		CounterPeriod:      "since_client_init",
 		SlowQueryThreshold: time.Second.String(),
-		UnavailableMetrics: make(map[string]string),
 	}
 
 	if databaseConn == nil {

@@ -4,6 +4,7 @@ import (
 	dbimpr "github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
 	logimpr "github.com/elsyahtech/gorest/log"
+	monitoringimpr "github.com/elsyahtech/gorest/monitoring"
 	redisimpr "github.com/elsyahtech/gorest/redis"
 	serverimpr "github.com/elsyahtech/gorest/server"
 )
@@ -23,6 +24,9 @@ type Config struct {
 
 	//nolint:revive
 	filter *filter.Config `json:"-"`
+
+	//nolint:revive
+	monitoring *monitoringimpr.Config `json:"-"`
 
 	// This function allows to setup app name for the app
 	//
@@ -50,12 +54,6 @@ type Config struct {
 	// Default: UTC
 	Timezone string `json:"timezone"`
 
-	// HTTPMetricsAllowedIPs lists peer IP addresses or CIDR ranges allowed to
-	// access GET /gorest/http. An empty list denies access. The connection peer
-	// is checked directly; forwarded headers are not used.
-	//nolint:tagliatelle // Keep snake_case JSON config keys consistent.
-	HTTPMetricsAllowedIPs []string `json:"http_metrics_allowed_ips"`
-
 	// This function allows to enable or disable debug mode globally.
 	// Default: false
 	Debug bool `json:"debug"`
@@ -64,34 +62,21 @@ type Config struct {
 	// When set to true, the application will allow insecure connections in production mode.
 	// Default: false
 	AllowInsecureProduction bool `json:"allow_insecure_production"`
-
-	// DisableMonitoringEndpoints controls whether monitoring endpoints are registered.
-	// When true, built-in endpoints such as /gorest/live, /gorest/ready,
-	// /gorest/metrics, /gorest/storage, /gorest/database, and /gorest/http
-	// are not exposed. Monitoring endpoints are enabled by default.
-	DisableMonitoringEndpoints bool `json:"disable_monitoring_endpoints"`
-
-	// EnablePerRouteHTTPMetrics adds bounded method and route-template metrics
-	// to GET /gorest/http. Disabled by default.
-	//nolint:tagliatelle // Keep snake_case JSON config keys consistent.
-	EnablePerRouteHTTPMetrics bool `json:"enable_per_route_http_metrics"`
 }
 
 var ConfigDefault = Config{
-	log:                        &logimpr.ConfigDefault,
-	server:                     &serverimpr.ConfigDefault,
-	filter:                     &filter.ConfigDefault,
-	redis:                      nil,
-	database:                   nil,
-	AppName:                    DefaultAppName,
-	Version:                    DefaultVersion,
-	Environment:                Development,
-	Timezone:                   DefaultTimezone,
-	Debug:                      false,
-	AllowInsecureProduction:    false,
-	DisableMonitoringEndpoints: false,
-	HTTPMetricsAllowedIPs:      nil,
-	EnablePerRouteHTTPMetrics:  false,
+	log:                     &logimpr.ConfigDefault,
+	server:                  &serverimpr.ConfigDefault,
+	filter:                  &filter.ConfigDefault,
+	monitoring:              &monitoringimpr.ConfigDefault,
+	redis:                   nil,
+	database:                nil,
+	AppName:                 DefaultAppName,
+	Version:                 DefaultVersion,
+	Environment:             Development,
+	Timezone:                DefaultTimezone,
+	Debug:                   false,
+	AllowInsecureProduction: false,
 }
 
 func configDefault(config ...Config) Config {
@@ -105,6 +90,7 @@ func configDefault(config ...Config) Config {
 	cfg.redis = ConfigDefault.redis
 	cfg.database = ConfigDefault.database
 	cfg.filter = ConfigDefault.filter
+	cfg.monitoring = ConfigDefault.monitoring
 
 	if cfg.AppName == "" {
 		cfg.AppName = ConfigDefault.AppName

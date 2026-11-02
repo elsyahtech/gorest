@@ -12,6 +12,7 @@ Browse the packages on [pkg.go.dev](https://pkg.go.dev/github.com/elsyahtech/gor
 | [`database`](https://pkg.go.dev/github.com/elsyahtech/gorest/database) | Database drivers, connection configuration, native APIs, and migrations |
 | [`orm`](https://pkg.go.dev/github.com/elsyahtech/gorest/orm) | ORM query construction and execution |
 | [`server`](https://pkg.go.dev/github.com/elsyahtech/gorest/server) | HTTP server, routes, handlers, and request context |
+| [`monitoring`](https://pkg.go.dev/github.com/elsyahtech/gorest/monitoring) | Operational endpoints, HTTP metrics, and monitoring configuration |
 | [`redis`](https://pkg.go.dev/github.com/elsyahtech/gorest/redis) | Redis configuration and client |
 | [`filter`](https://pkg.go.dev/github.com/elsyahtech/gorest/filter) | JWT configuration, token details, and authentication |
 | [`log`](https://pkg.go.dev/github.com/elsyahtech/gorest/log) | Logger configuration and structured logger |
@@ -23,6 +24,7 @@ To inspect the API for the version currently checked out locally, run:
 ```sh
 go doc .
 go doc ./database
+go doc ./monitoring
 go doc ./server
 ```
 

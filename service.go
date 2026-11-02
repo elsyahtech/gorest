@@ -10,6 +10,7 @@ import (
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
 	"github.com/elsyahtech/gorest/log"
+	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
 	"github.com/gofiber/fiber/v3"
@@ -21,6 +22,12 @@ func (app *App) registerService(name string) {
 	}
 
 	app.modules = append(app.modules, name)
+}
+
+func (app *App) unregisterService(name string) {
+	app.modules = slices.DeleteFunc(app.modules, func(module string) bool {
+		return module == name
+	})
 }
 
 func (app *App) Use(args ...any) *App {
@@ -46,6 +53,10 @@ func (app *App) Use(args ...any) *App {
 		case filter.Config, *filter.Config:
 			app.useCaseFilter(args, idx)
 
+		// MONITORING
+		case monitoring.Config, *monitoring.Config:
+			app.useCaseMonitoring(args, idx)
+
 		default:
 			golog.Fatalf(
 				"gorest error: unsupported application configuration type %T (%v); "+
@@ -53,8 +64,10 @@ func (app *App) Use(args ...any) *App {
 					"log.Config/log.ConfigDefault, "+
 					"database.Config/database.ConfigDefault, "+
 					"redis.Config/redis.ConfigDefault, "+
-					"server.Config/server.ConfigDefault; "+
-					"example: app.Use(database.Config{...})"+
+					"server.Config/server.ConfigDefault, "+
+					"filter.Config/filter.ConfigDefault, "+
+					"monitoring.Config/monitoring.ConfigDefault; "+
+					"example: app.Use(monitoring.Config{...}) "+
 					"example: app.Use(database.ConfigDefault)",
 				arg, arg,
 			)
@@ -134,6 +147,16 @@ func (app *App) useCaseFilter(args []any, idx int) {
 		}
 		app.initializeConfiguredFilter(argPtr)
 	}
+}
+
+func (app *App) useCaseMonitoring(args []any, idx int) {
+	if argType, monitoringOk := args[idx].(monitoring.Config); monitoringOk {
+		app.config.monitoring = &argType
+	} else if argPtr, monitoringOk := args[idx].(*monitoring.Config); monitoringOk {
+		app.config.monitoring = argPtr
+	}
+
+	app.monitoringInit()
 }
 
 func (app *App) initializeConfiguredFilter(config *filter.Config) {

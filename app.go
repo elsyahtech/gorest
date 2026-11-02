@@ -2,12 +2,9 @@ package gorest
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	golog "log"
-
-	"github.com/elsyahtech/gorest/monitoring"
 )
 
 func New(config ...Config) *App {
@@ -27,14 +24,8 @@ func New(config ...Config) *App {
 	// initialize the global logger
 	app.logInit()
 
-	httpMetrics, err := monitoring.NewHTTPMetrics(monitoring.HTTPMetricsOptions{
-		EnablePerRoute: app.config.EnablePerRouteHTTPMetrics,
-		AllowedIPs:     app.config.HTTPMetricsAllowedIPs,
-	})
-	if err != nil {
-		app.abortStartup(fmt.Errorf("invalid HTTP metrics configuration: %w", err))
-	}
-	app.httpMetrics = httpMetrics
+	// initialize the monitoring service
+	app.monitoringInit()
 
 	// initialize the server
 	app.serverInit()

@@ -14,7 +14,7 @@ quick start.
 ### Configure the application
 
 - [Configuration guide](./configuration.md) — application and subsystem
-  settings for logging, HTTP, Redis, and databases.
+  settings for logging, HTTP, monitoring, Redis, and databases.
 - [Logger guide](./guide/logger.md) — log output, rotation, and redaction.
 - [Server and router guide](./guide/router.md) — route registration and HTTP
   middleware.
@@ -55,7 +55,7 @@ Related references:
   migrations and seeders, entity mapping, and response handling.
 - [Operational endpoints](./configuration.md#operational-endpoints-and-environment-configuration)
   — liveness, readiness, runtime metrics, storage usage, how to try the
-  storage endpoint, and how to disable the endpoints.
+  storage endpoint, configure the peer-IP allowlist, and disable the endpoints.
 - [Troubleshooting guide](./troubleshoot.md) — diagnose common errors and find
   driver-specific references.
 - [Support guide](./support.md) — prepare a question or issue report.
