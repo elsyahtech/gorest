@@ -40,12 +40,18 @@ type databaseMetrics struct {
 	UnavailableMetrics       map[string]string `json:"unavailable_metrics"`
 }
 
-func registerDatabaseMetrics(routes *server.Server, config database.Config, databaseConn *database.Database) {
+func registerDatabaseMetrics(
+	routes *server.Server,
+	path string,
+	config database.Config,
+	databaseConn *database.Database,
+	middleware server.HandlerFunc,
+) {
 	if routes == nil {
 		return
 	}
 
-	routes.Get("/database", func(requestContext *server.Context) error {
+	handler := func(requestContext *server.Context) error {
 		ctx, cancel := context.WithTimeout(requestContext.Context(), collectionTimeout)
 		defer cancel()
 
@@ -64,7 +70,8 @@ func registerDatabaseMetrics(routes *server.Server, config database.Config, data
 		}
 
 		return requestContext.JSON(databaseMetricsResponse{Status: status, Database: metric})
-	})
+	}
+	registerGet(routes, path, middleware, handler)
 }
 
 func collectDatabaseMetrics(ctx context.Context, config database.Config, databaseConn *database.Database) *databaseMetrics {

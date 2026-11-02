@@ -3,7 +3,10 @@ package monitoring
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"strings"
 
+	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/server"
 	"github.com/gofiber/fiber/v3"
 )
@@ -65,4 +68,30 @@ func (m *Monitoring) RegisterHTTPMetrics(routes *server.Server) {
 	}
 
 	RegisterHTTPMetrics(routes, m.httpMetrics)
+}
+
+// RegisterOperationalEndpoints registers built-in monitoring endpoints using
+// explicit paths, with the configured peer-IP allowlist applied to each route.
+func (m *Monitoring) RegisterOperationalEndpoints(
+	routes *server.Server,
+	prefix string,
+	config database.Config,
+	databaseConn *database.Database,
+) {
+	if m == nil || routes == nil {
+		return
+	}
+
+	prefix = strings.TrimRight(prefix, "/")
+	middleware := func(ctx *server.Context) error {
+		if !m.AllowsPeer(ctx.RequestCtx().RemoteIP()) {
+			return ctx.Status(http.StatusForbidden).JSON(fiber.Map{"status": "forbidden"})
+		}
+
+		return ctx.Next()
+	}
+
+	registerDatabaseMetrics(routes, prefix+"/database", config, databaseConn, middleware)
+	registerStorageMetrics(routes, prefix+"/storage", config, databaseConn, middleware)
+	registerHTTPMetricsAt(routes, prefix+"/http", m.httpMetrics, middleware)
 }

@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/elsyahtech/gorest/monitoring"
 )
 
 func formatUptime(uptime time.Duration) string {
@@ -51,19 +49,23 @@ func (app *App) registerOperationalRoutes() {
 	}
 
 	startedAt := time.Now()
-	operational := app.Group("/gorest", func(ctx *Context) error {
+	allowOperationalPeer := func(ctx *Context) error {
 		if !app.monitoring.AllowsPeer(ctx.RequestCtx().RemoteIP()) {
 			return ctx.Status(http.StatusForbidden).JSON(Map{"status": "forbidden"})
 		}
 
 		return ctx.Next()
-	})
-	monitoring.Register(operational, app.GetDBConfig(), app.database)
-	app.monitoring.RegisterHTTPMetrics(operational)
+	}
+	app.monitoring.RegisterOperationalEndpoints(
+		app.server,
+		"/gorest",
+		app.GetDBConfig(),
+		app.database,
+	)
 	liveHandler := func(c *Context) error {
 		return c.Status(200).JSON(Map{"status": "alive"})
 	}
-	operational.Get("/live", liveHandler)
+	app.Get("/gorest/live", allowOperationalPeer, liveHandler)
 
 	readyHandler := func(c *Context) error {
 		ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
@@ -136,12 +138,12 @@ func (app *App) registerOperationalRoutes() {
 		response["status"] = "ready"
 		return c.JSON(response)
 	}
-	operational.Get("/ready", readyHandler)
+	app.Get("/gorest/ready", allowOperationalPeer, readyHandler)
 
 	metricsHandler := func(c *Context) error {
 		return c.JSON(collectRuntimeMetrics(app.config.AppName))
 	}
-	operational.Get("/metrics", metricsHandler)
+	app.Get("/gorest/metrics", allowOperationalPeer, metricsHandler)
 }
 
 type runtimeMetricsResponse struct {

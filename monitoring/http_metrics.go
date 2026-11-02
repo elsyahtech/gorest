@@ -138,11 +138,20 @@ func (m *HTTPMetrics) AllowsPeer(peerIP net.IP) bool {
 
 // RegisterHTTPMetrics adds the IP-restricted HTTP metrics endpoint to a route group.
 func RegisterHTTPMetrics(routes *server.Server, metrics *HTTPMetrics) {
+	registerHTTPMetricsAt(routes, "/http", metrics, nil)
+}
+
+func registerHTTPMetricsAt(
+	routes *server.Server,
+	path string,
+	metrics *HTTPMetrics,
+	middleware server.HandlerFunc,
+) {
 	if routes == nil {
 		return
 	}
 
-	routes.Get("/http", func(ctx *server.Context) error {
+	handler := func(ctx *server.Context) error {
 		if metrics == nil || !metrics.AllowsPeer(ctx.RequestCtx().RemoteIP()) {
 			return ctx.Status(http.StatusForbidden).JSON(fiber.Map{"status": "forbidden"})
 		}
@@ -165,5 +174,6 @@ func RegisterHTTPMetrics(routes *server.Server, metrics *HTTPMetrics) {
 			"status":  status,
 			"metrics": snapshot,
 		})
-	})
+	}
+	registerGet(routes, path, middleware, handler)
 }

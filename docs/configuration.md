@@ -228,8 +228,8 @@ name, application version, or configuration is sent.
 
 ### Operational endpoints and environment configuration
 
-GOREST registers built-in operational endpoints in the `/gorest` route group by
-default:
+GOREST registers each built-in operational endpoint individually under the
+`/gorest` path by default; `/gorest` itself is not an endpoint:
 
 - All built-in `/gorest` endpoints are restricted by
   `monitoring.Config.HTTPMetricsAllowedIPs`. The default empty allowlist denies
