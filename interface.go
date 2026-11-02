@@ -3,6 +3,7 @@ package gorest
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"sync/atomic"
 
 	"github.com/elsyahtech/gorest/database"
@@ -14,17 +15,18 @@ import (
 )
 
 type App struct {
-	context    context.Context
-	log        *log.Log
-	server     *server.Server
-	redis      *redis.Redis
-	database   *database.Database
-	services   *service
-	filter     *filter.Filter
-	monitoring *monitoring.Monitoring
-	config     Config
-	configured Config
-	modules    []string
+	context       context.Context
+	updateCheckWG sync.WaitGroup
+	log           *log.Log
+	server        *server.Server
+	redis         *redis.Redis
+	database      *database.Database
+	services      *service
+	filter        *filter.Filter
+	monitoring    *monitoring.Monitoring
+	config        Config
+	configured    Config
+	modules       []string
 }
 
 type service struct {

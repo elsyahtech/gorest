@@ -187,6 +187,45 @@ For an enabled database, `app.Start()` logs a driver-aware warning when the envi
 
 Driver-specific notes: PostgreSQL supports `require`, `verify-ca`, and `verify-full` (prefer certificate and hostname validation with `verify-full`); SQL Server supports `mandatory` or `strict` and should use `TrustServerCertificate: false`; Oracle uses `enable` for TCPS and requires a wallet via `SSLCAPath`. For MySQL, GOREST requires a non-empty `SSLCAPath` only as a switch for passing `TLS` to go-sql-driver/mysql; it does not load that path as a CA file. With go-sql-driver/mysql v1.10.1, `TLS: "true"` enables normal certificate verification using the system roots and verifies the hostname derived from the connection address. Do not use the driver's `skip-verify` or `preferred` modes in production because they disable certificate verification. For a custom CA or client certificate, register a TLS profile with `mysql.RegisterTLSConfig`, configure its `RootCAs`, `ServerName`, and optional client certificate, then set `TLS` to that profile name and keep `SSLCAPath` non-empty. GOREST does not pass `SSLCertPath` or `SSLKeyPath` to the MySQL driver. SQLite has no network TLS.
 
+### GOREST update notifications
+
+Update notifications are enabled by default. `CheckForUpdates` is a `*bool`;
+when it is `nil`, GOREST checks the official latest release after application
+startup. Use the built-in pointer helpers to choose explicitly:
+
+```go
+app := gorest.New(gorest.Config{
+    CheckForUpdates: gorest.EnableAutoUpdate,
+})
+app.Start()
+```
+
+To disable the outbound check:
+
+```go
+app := gorest.New(gorest.Config{
+    CheckForUpdates: gorest.DisableAutoUpdate,
+})
+```
+
+These exported pointer values let callers choose the setting without creating
+a local `bool` or taking its address.
+
+The check compares the GOREST module version recorded in Go build information
+with the latest stable release from the official GitHub repository. It does
+not use the application's `gorest.Config.Version`, which is application
+metadata. A newer release produces an informational log with the installed
+version, latest version, and release link. GOREST never upgrades itself or
+changes the application's dependencies. Development builds without a
+published module version are skipped.
+
+The check runs asynchronously with a three-second timeout. Network errors,
+GitHub API errors, or invalid release data are logged as warnings and do not
+block or fail application startup. When enabled, each application start makes
+an unauthenticated outbound request to GitHub; GitHub receives the request's
+source IP and may apply its unauthenticated API rate limits. No application
+name, application version, or configuration is sent.
+
 ### Operational endpoints and environment configuration
 
 GOREST registers built-in operational endpoints in the `/gorest` route group by

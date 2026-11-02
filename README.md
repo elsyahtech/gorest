@@ -315,6 +315,8 @@ app := gorest.New(gorest.Config{
     // connections in production-like environments. Prefer TLS in production.
     AllowInsecureProduction: false,
 
+    // Disable startup notifications when a newer GOREST release is available.
+    CheckForUpdates: gorest.DisableAutoUpdate,
 })
 ```
 
@@ -324,6 +326,7 @@ app := gorest.New(gorest.Config{
 - **Timezone:** Configures the timezone for database drivers that support it (currently MySQL and Oracle). It does not change Go's process-wide `time.Local`; configure timezone handling explicitly in application code for logs, token expiration, and other values.
 - **Debug:** When set to true, prevents the HTTP server listener from starting. It does not itself make migrations or seeders a dry run.
 - **AllowInsecureProduction:** Application-wide explicit opt-in for intentional non-TLS database or Redis connections in production-like environments. It does not waive TLS when TLS is available; configure the backend securely by default and use this only for trusted, documented exceptions. Foreground startup may prompt interactively, while headless startup requires this typed opt-in or the corresponding component opt-in.
+- **CheckForUpdates:** A `*bool` controlling update notifications. `nil` defaults to enabled; use `gorest.EnableAutoUpdate` to enable or `gorest.DisableAutoUpdate` to disable. The asynchronous startup check compares the official GitHub latest release and only logs a notice; it never upgrades the application. It has a three-second timeout and does not block/fail startup. When enabled, it makes an outbound request to GitHub at each application start.
 ---
 
 ### 2. Custom Subsystem Configuration (`app.Use`)

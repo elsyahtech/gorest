@@ -56,6 +56,9 @@ Related references:
 - [Operational endpoints](./configuration.md#operational-endpoints-and-environment-configuration)
   — liveness, readiness, runtime metrics, storage usage, how to try the
   storage endpoint, configure the peer-IP allowlist, and disable the endpoints.
+- [GOREST update notifications](./configuration.md#gorest-update-notifications)
+  — startup checks for a newer official release, enabled by default and
+  configurable through `gorest.Config.CheckForUpdates`.
 - [Troubleshooting guide](./troubleshoot.md) — diagnose common errors and find
   driver-specific references.
 - [Support guide](./support.md) — prepare a question or issue report.

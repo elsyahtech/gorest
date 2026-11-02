@@ -62,6 +62,11 @@ type Config struct {
 	// When set to true, the application will allow insecure connections in production mode.
 	// Default: false
 	AllowInsecureProduction bool `json:"allow_insecure_production"`
+
+	// CheckForUpdates checks the official GOREST GitHub release on application
+	// start and logs when a newer version is available. It never upgrades the
+	// application and does not block startup. A nil value enables the check.
+	CheckForUpdates *bool `json:"check_for_updates"`
 }
 
 var ConfigDefault = Config{
@@ -77,6 +82,19 @@ var ConfigDefault = Config{
 	Timezone:                DefaultTimezone,
 	Debug:                   false,
 	AllowInsecureProduction: false,
+	CheckForUpdates:         EnableAutoUpdate,
+}
+
+// EnableAutoUpdate enables startup notifications when a newer GOREST release
+// is available. It does not upgrade the application.
+var EnableAutoUpdate = boolPointer(true)
+
+// DisableAutoUpdate disables startup update checks. No update request is made
+// when this value is used.
+var DisableAutoUpdate = boolPointer(false)
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func configDefault(config ...Config) Config {
@@ -110,6 +128,10 @@ func configDefault(config ...Config) Config {
 
 	if !cfg.Debug {
 		cfg.Debug = ConfigDefault.Debug
+	}
+
+	if cfg.CheckForUpdates == nil {
+		cfg.CheckForUpdates = boolPointer(true)
 	}
 
 	return cfg
