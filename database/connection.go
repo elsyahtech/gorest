@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
+	sqldriver "database/sql/driver"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/elsyahtech/gorest/monitoring/dbmetrics"
 	"github.com/go-sql-driver/mysql"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -33,46 +35,46 @@ import (
 // MYSQLConnection establishes a connection to the MYSQL Server
 // database using global configuration settings
 // ==========================================================================.
-func mysqlConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, nil)
+func mysqlConnection(ctx context.Context, cfg *Config, timezone, driver string, metrics ...*dbmetrics.Stats) (*sql.DB, string, error) {
+	return connectDatabase(ctx, cfg, timezone, driver, nil, metrics...)
 }
 
 // ==========================================================================
 // MSSQLConnection establishes a connection to the Microsoft SQL Server
 // database using global configuration settings
 // ==========================================================================.
-func mssqlConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, mssqlDSN)
+func mssqlConnection(ctx context.Context, cfg *Config, timezone, driver string, metrics ...*dbmetrics.Stats) (*sql.DB, string, error) {
+	return connectDatabase(ctx, cfg, timezone, driver, mssqlDSN, metrics...)
 }
 
 // ==========================================================================
 // POSTGRESQLConnection establishes a connection to the POSTGRESQL Server
 // database using global configuration settings
 // ==========================================================================.
-func postgresqlConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, postgresDSN)
+func postgresqlConnection(ctx context.Context, cfg *Config, timezone, driver string, metrics ...*dbmetrics.Stats) (*sql.DB, string, error) {
+	return connectDatabase(ctx, cfg, timezone, driver, postgresDSN, metrics...)
 }
 
 // ==========================================================================
 // SQLITEConnection establishes a connection to the SQLite
 // database using global configuration settings
 // ==========================================================================.
-func sqliteConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, sqliteDSN)
+func sqliteConnection(ctx context.Context, cfg *Config, timezone, driver string, metrics ...*dbmetrics.Stats) (*sql.DB, string, error) {
+	return connectDatabase(ctx, cfg, timezone, driver, sqliteDSN, metrics...)
 }
 
 // ==========================================================================
 // ORACLEConnection establishes a connection to the ORACLE
 // database using global configuration settings
 // ==========================================================================.
-func oracleConnection(ctx context.Context, cfg *Config, timezone, driver string) (*sql.DB, string, error) {
-	return connectDatabase(ctx, cfg, timezone, driver, nil)
+func oracleConnection(ctx context.Context, cfg *Config, timezone, driver string, metrics ...*dbmetrics.Stats) (*sql.DB, string, error) {
+	return connectDatabase(ctx, cfg, timezone, driver, nil, metrics...)
 }
 
 // ===================================================================
 // MONGOConnection establishes a connection to the MongoDB database
 // ===================================================================.
-func mongoConnection(ctx context.Context, cfg *Config, driver string) (*mongo.Client, string, error) {
+func mongoConnection(ctx context.Context, cfg *Config, driver string, metrics ...*dbmetrics.Stats) (*mongo.Client, string, error) {
 	if cfg == nil {
 		const message = "ensure the app configuration is set up correctly"
 
@@ -90,7 +92,12 @@ func mongoConnection(ctx context.Context, cfg *Config, driver string) (*mongo.Cl
 	dsn := mongoDSN(cfg)
 
 	// Configure MongoDB client options with URI and server selection timeout
-	clientOpts := options.Client().ApplyURI(dsn).SetServerSelectionTimeout(cfg.Timeout)
+	stats := statsFrom(metrics)
+	clientOpts := options.Client().
+		ApplyURI(dsn).
+		SetServerSelectionTimeout(cfg.Timeout).
+		SetMonitor(stats.MongoCommandMonitor()).
+		SetPoolMonitor(stats.MongoPoolMonitor())
 
 	// Connect to the MongoDB server instance
 	client, err := mongo.Connect(clientOpts)
@@ -118,7 +125,11 @@ func mongoConnection(ctx context.Context, cfg *Config, driver string) (*mongo.Cl
 // =================================================================
 // SCYLLAConnection establishes a connection to the SCYLLA database
 // =================================================================.
-func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error) {
+func scyllaConnection(
+	cfg *Config,
+	driver string,
+	metrics ...*dbmetrics.Stats,
+) (*gocql.Session, string, error) {
 	if cfg == nil {
 		const message = "ensure the app configuration is set up correctly"
 
@@ -133,6 +144,10 @@ func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error
 	// Create cluster configuration for gocql
 	cluster := gocql.NewCluster(cfg.Host)
 	cluster.Port = stringToInt(cfg.Port)
+	stats := statsFrom(metrics)
+	stats.EnableQueries()
+	cluster.QueryObserver = stats
+	cluster.BatchObserver = stats
 	// Server-assigned timestamps avoid client clock skew making writes stale after LWT operations.
 	cluster.DefaultTimestamp = false
 
@@ -153,44 +168,13 @@ func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error
 		cluster.Keyspace = cfg.Name
 	}
 
-	// Configuring TLS for ScyllaDB connection.
-	if cfg.TLS == "enable" {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: false,
+	if cfg.TLS == TLSEnabled {
+		tlsOptions, message, err := scyllaTLSOptions(cfg, driver)
+		if err != nil {
+			return nil, message, err
 		}
 
-		if cfg.SSLCAPath != "" {
-			caCert, err := os.ReadFile(cfg.SSLCAPath)
-			if err != nil {
-				return nil, "failed to read CA certificate", fmt.Errorf("%s connection error: - read CA cert: %w", driver, err)
-			}
-
-			caCertPool := x509.NewCertPool()
-
-			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return nil, "failed to append CA certificate", fmt.Errorf("%s connection error: - append CA cert failed", driver)
-			}
-
-			tlsConfig.RootCAs = caCertPool
-		}
-
-		if (cfg.SSLCertPath == "") != (cfg.SSLKeyPath == "") {
-			return nil, "client certificate and key must be configured together", errors.New("SCYLLA connection error: SSLCertPath and SSLKeyPath must both be set for mutual TLS")
-		}
-		if cfg.SSLCertPath != "" {
-			cert, err := tls.LoadX509KeyPair(cfg.SSLCertPath, cfg.SSLKeyPath)
-			if err != nil {
-				return nil, "failed to load client certificate and key", fmt.Errorf("%s connection error: - load client keys: %w", driver, err)
-			}
-
-			tlsConfig.Certificates = []tls.Certificate{cert}
-		}
-
-		tlsConfig.ServerName = cfg.Host
-		cluster.SslOpts = &gocql.SslOptions{
-			Config:                 tlsConfig,
-			EnableHostVerification: true,
-		}
+		cluster.SslOpts = tlsOptions
 	}
 
 	// Open session connection to ScyllaDB
@@ -205,7 +189,55 @@ func scyllaConnection(cfg *Config, driver string) (*gocql.Session, string, error
 	return session, "", nil
 }
 
-func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver string, dsnBuilder databaseConnector) (*sql.DB, string, error) {
+func scyllaTLSOptions(cfg *Config, driver string) (*gocql.SslOptions, string, error) {
+	tlsConfig := &tls.Config{InsecureSkipVerify: false}
+
+	if cfg.SSLCAPath != "" {
+		caCert, err := os.ReadFile(cfg.SSLCAPath)
+		if err != nil {
+			message := "failed to read CA certificate"
+			return nil, message, fmt.Errorf("%s connection error: - read CA cert: %w", driver, err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			message := "failed to append CA certificate"
+			return nil, message, fmt.Errorf("%s connection error: - append CA cert failed", driver)
+		}
+
+		tlsConfig.RootCAs = caCertPool
+	}
+
+	if (cfg.SSLCertPath == "") != (cfg.SSLKeyPath == "") {
+		message := "client certificate and key must be configured together"
+		err := errors.New("SCYLLA connection error: SSLCertPath and SSLKeyPath must both be set for mutual TLS")
+
+		return nil, message, err
+	}
+
+	if cfg.SSLCertPath != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.SSLCertPath, cfg.SSLKeyPath)
+		if err != nil {
+			message := "failed to load client certificate and key"
+			return nil, message, fmt.Errorf("%s connection error: - load client keys: %w", driver, err)
+		}
+
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	tlsConfig.ServerName = cfg.Host
+
+	return &gocql.SslOptions{Config: tlsConfig, EnableHostVerification: true}, "", nil
+}
+
+func connectDatabase(
+	ctx context.Context,
+	cfg *Config,
+	timezone string,
+	driver string,
+	dsnBuilder databaseConnector,
+	metrics ...*dbmetrics.Stats,
+) (*sql.DB, string, error) {
 	if cfg == nil {
 		const message = "ensure the app configuration is set up correctly and config is not nil"
 
@@ -228,6 +260,8 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 		err      error
 	)
 
+	stats := statsFrom(metrics)
+
 	switch {
 	case driver == MYSQL:
 		driverConfig, configErr := mysqlDriverConfig(cfg, timezone)
@@ -238,7 +272,7 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 			if connectorErr != nil {
 				err = connectorErr
 			} else {
-				database = sql.OpenDB(connector)
+				database = sql.OpenDB(dbmetrics.WrapConnector(connector, stats))
 			}
 		}
 	case driver == ORACLE:
@@ -246,12 +280,12 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 		if configErr != nil {
 			err = configErr
 		} else {
-			database, err = sql.Open(sqlDriver, dsn)
+			database, err = openInstrumentedDB(sqlDriver, dsn, stats)
 		}
 	case dsnBuilder == nil:
 		err = fmt.Errorf("missing DSN builder for %s", driver)
 	default:
-		database, err = sql.Open(sqlDriver, dsnBuilder(cfg, timezone))
+		database, err = openInstrumentedDB(sqlDriver, dsnBuilder(cfg, timezone), stats)
 	}
 
 	if err != nil {
@@ -284,6 +318,56 @@ func connectDatabase(ctx context.Context, cfg *Config, timezone string, driver s
 	}
 
 	return database, "", nil
+}
+
+func openInstrumentedDB(driverName, dsn string, metrics *dbmetrics.Stats) (*sql.DB, error) {
+	base, err := sql.Open(driverName, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open SQL driver handle: %w", err)
+	}
+
+	driverImpl := base.Driver()
+	if err := base.Close(); err != nil {
+		return nil, fmt.Errorf("close unconnected SQL handle: %w", err)
+	}
+
+	var connector sqldriver.Connector
+	if driverContext, ok := driverImpl.(sqldriver.DriverContext); ok {
+		connector, err = driverContext.OpenConnector(dsn)
+		if err != nil {
+			return nil, fmt.Errorf("create SQL driver connector: %w", err)
+		}
+	} else {
+		connector = &legacyConnector{driver: driverImpl, dsn: dsn}
+	}
+
+	return sql.OpenDB(dbmetrics.WrapConnector(connector, metrics)), nil
+}
+
+type legacyConnector struct {
+	driver sqldriver.Driver
+	dsn    string
+}
+
+func (c *legacyConnector) Connect(context.Context) (sqldriver.Conn, error) {
+	conn, err := c.driver.Open(c.dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open legacy SQL driver connection: %w", err)
+	}
+
+	return conn, nil
+}
+
+func (c *legacyConnector) Driver() sqldriver.Driver {
+	return c.driver
+}
+
+func statsFrom(metrics []*dbmetrics.Stats) *dbmetrics.Stats {
+	if len(metrics) > 0 && metrics[0] != nil {
+		return metrics[0]
+	}
+
+	return dbmetrics.New()
 }
 
 // generateSQLiteDatabase creates the SQLite database file (and its directory) if it doesn't exist.

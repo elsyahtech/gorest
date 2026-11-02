@@ -91,8 +91,14 @@ includes:
 - Database migrations and seeders, plus optional Redis connectivity.
 - Optional filter authentication and token-verification middleware, request parsing and
   conversion helpers, and an optional JSON response envelope.
-- Built-in liveness, readiness, and runtime metrics endpoints, enabled by
-  default and configurable with `DisableMonitoringEndpoints`.
+- Built-in liveness, readiness, runtime metrics, and database storage-usage
+  endpoints, enabled by default and configurable with
+  `monitoring.Config.DisableMonitoringEndpoints` through `app.Use(...)`.
+  Access to every built-in endpoint is denied by default and can be restricted
+  to connection peer IPs with `monitoring.Config.HTTPMetricsAllowedIPs`.
+- Startup notification when a newer official GOREST release is available,
+  enabled by default and configurable through `gorest.Config.CheckForUpdates`.
+  This only logs a notice; it never upgrades the application.
 
 These features are building blocks, not a complete application or deployment.
 GOREST does not provide user credential management, account/session lifecycle

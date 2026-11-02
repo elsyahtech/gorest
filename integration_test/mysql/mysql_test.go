@@ -48,6 +48,67 @@ func TestMySQLServerVersion(t *testing.T) {
 	t.Logf("MySQL server product: %s, version: %s, connection charset: %s", product, version, charset)
 }
 
+func TestMySQLStorageUsageEndpoint(t *testing.T) {
+	configureMySQLStorageTLS(t)
+	internaltest.StorageUsage(t, database.MYSQL)
+}
+
+func configureMySQLStorageTLS(t *testing.T) {
+	t.Helper()
+
+	config := database.ConfigFromEnv("GOREST_IT_MYSQL")
+	hasClientCert := config.SSLCertPath != ""
+	hasClientKey := config.SSLKeyPath != ""
+	if hasClientCert != hasClientKey {
+		t.Fatal("MySQL storage test requires both GOREST_IT_MYSQL_SSL_CERT and GOREST_IT_MYSQL_SSL_KEY")
+	}
+
+	if config.TLS != database.TLSTrue &&
+		config.TLS != database.TLSVerifyFull &&
+		!hasClientCert {
+		return
+	}
+
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil {
+		t.Fatalf("load system roots for MySQL storage test: %v", err)
+	}
+	if rootCAs == nil {
+		rootCAs = x509.NewCertPool()
+	}
+
+	if config.SSLCAPath != "" {
+		caCertificate, err := os.ReadFile(config.SSLCAPath)
+		if err != nil {
+			t.Fatalf("read MySQL storage test CA certificate: %v", err)
+		}
+		if !rootCAs.AppendCertsFromPEM(caCertificate) {
+			t.Fatal("MySQL storage test CA certificate contains no valid PEM certificates")
+		}
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    rootCAs,
+	}
+	if hasClientCert {
+		clientCertificate, err := tls.LoadX509KeyPair(config.SSLCertPath, config.SSLKeyPath)
+		if err != nil {
+			t.Fatalf("load MySQL storage test client certificate and key: %v", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{clientCertificate}
+	}
+
+	const tlsProfile = "gorest_integration_storage_verified"
+	if err := mysql.RegisterTLSConfig(tlsProfile, tlsConfig); err != nil {
+		t.Fatalf("register MySQL storage test TLS profile: %v", err)
+	}
+	t.Cleanup(func() {
+		mysql.DeregisterTLSConfig(tlsProfile)
+	})
+	t.Setenv("GOREST_IT_MYSQL_TLS", tlsProfile)
+}
+
 func TestMySQLTLSVerifiesServerCertificateAndHostname(t *testing.T) {
 	const (
 		verifiedProfile  = "gorest_integration_verified"

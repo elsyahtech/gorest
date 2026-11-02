@@ -231,6 +231,8 @@ func (app *App) runStartup(startupCtx context.Context, shutdownSignal <-chan os.
 		return
 	}
 
+	app.checkForGorestUpdates(startupCtx)
+
 	if app.httpServerDisabled() {
 		app.Log(nil, true).Info("gorest is ready; HTTP server is disabled")
 		app.waitForShutdown(startupCtx, shutdownSignal)

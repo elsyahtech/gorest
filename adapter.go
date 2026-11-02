@@ -683,6 +683,8 @@ func (app *App) Close() (string, int, error) {
 		}
 	}
 
+	app.updateCheckWG.Wait()
+
 	// Logger is closed last so other services can still log during shutdown.
 	if app.log != nil {
 		msg, code, err := app.log.Close()

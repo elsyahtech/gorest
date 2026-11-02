@@ -38,6 +38,10 @@ func TestMongoServerVersion(t *testing.T) {
 	t.Logf("MongoDB server version: %s", version)
 }
 
+func TestMongoStorageUsageEndpoint(t *testing.T) {
+	internaltest.StorageUsage(t, database.MONGO)
+}
+
 func TestORMCRUDWithBoundValues(t *testing.T) {
 	internaltest.NoSQLCRUD(t, database.MONGO)
 }

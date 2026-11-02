@@ -101,6 +101,10 @@ func TestScyllaServerVersion(t *testing.T) {
 	t.Logf("ScyllaDB server version: %s", version)
 }
 
+func TestScyllaStorageUsageEndpoint(t *testing.T) {
+	internaltest.StorageUsage(t, database.SCYLLA)
+}
+
 func TestORMCRUD(t *testing.T) {
 	internaltest.ScyllaCRUD(t)
 }

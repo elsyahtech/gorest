@@ -12,7 +12,7 @@ import (
 	"github.com/elsyahtech/gorest/server"
 )
 
-func TestInvalidJWTFilterUsageAbortsStartup(t *testing.T) {
+func TestJWTFilterStartupBehavior(t *testing.T) {
 	const (
 		childEnv  = "GOREST_INVALID_FILTER_CHILD"
 		modeEnv   = "GOREST_INVALID_FILTER_MODE"
@@ -43,6 +43,7 @@ func TestInvalidJWTFilterUsageAbortsStartup(t *testing.T) {
 			key := "test-signature-key"
 			app.Use(filter.Config{SignatureKey: &key, AccessTokenDuration: -time.Second})
 		case "filter-accessor":
+			app.Use(filter.Config{})
 			httpServer, _, err := server.New(nil)
 			if err != nil {
 				t.Fatalf("initialize child test server: %v", err)
@@ -61,49 +62,61 @@ func TestInvalidJWTFilterUsageAbortsStartup(t *testing.T) {
 		default:
 			t.Fatalf("unknown child test mode %q", os.Getenv(modeEnv))
 		}
+
+		if os.Getenv(modeEnv) == "missing-key" || os.Getenv(modeEnv) == "blank-key" {
+			if app.filter != nil || app.config.filter != nil {
+				t.Fatal("JWT filter with an empty signing key was not disabled")
+			}
+
+			return
+		}
+
 		t.Fatal("invalid JWT filter usage returned without aborting startup")
 	}
 
 	tests := []struct {
-		name string
-		mode string
-		want string
+		name        string
+		mode        string
+		want        string
+		shouldAbort bool
 	}{
 		{
-			name: "missing signing key",
+			name: "missing signing key disables JWT without aborting startup",
 			mode: "missing-key",
-			want: "JWT filter was configured without a signature key",
 		},
 		{
-			name: "blank signing key",
+			name: "blank signing key disables JWT without aborting startup",
 			mode: "blank-key",
-			want: "JWT filter was configured without a signature key",
 		},
 		{
-			name: "unsupported signing method",
-			mode: "unsupported-signing-method",
-			want: "failed to run JWT filter",
+			name:        "unsupported signing method",
+			mode:        "unsupported-signing-method",
+			want:        "failed to run JWT filter",
+			shouldAbort: true,
 		},
 		{
-			name: "invalid token duration",
-			mode: "invalid-token-duration",
-			want: "failed to run JWT filter",
+			name:        "invalid token duration",
+			mode:        "invalid-token-duration",
+			want:        "failed to run JWT filter",
+			shouldAbort: true,
 		},
 		{
-			name: "protected route registration without JWT aborts before server start",
-			mode: "filter-accessor",
-			want: "JWT filter is not running",
+			name:        "protected route registration without JWT aborts before server start",
+			mode:        "filter-accessor",
+			want:        "JWT filter is not running",
+			shouldAbort: true,
 		},
 		{
-			name: "creating middleware from uninitialized filter",
-			mode: "direct-authentication",
-			want: "JWT filter is not running",
+			name:        "creating middleware from uninitialized filter",
+			mode:        "direct-authentication",
+			want:        "JWT filter is not running",
+			shouldAbort: true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			command := exec.Command(os.Args[0], "-test.run=^TestInvalidJWTFilterUsageAbortsStartup$")
+			command := exec.Command(os.Args[0], "-test.run=^TestJWTFilterStartupBehavior$")
 			env := os.Environ()
 			env = replaceTestEnv(env, childEnv, "1")
 			env = replaceTestEnv(env, modeEnv, test.mode)
@@ -111,6 +124,14 @@ func TestInvalidJWTFilterUsageAbortsStartup(t *testing.T) {
 			command.Env = env
 
 			output, err := command.CombinedOutput()
+			if !test.shouldAbort {
+				if err != nil {
+					t.Fatalf("child process error = %v, output: %s; want successful startup", err, output)
+				}
+
+				return
+			}
+
 			exitErr, ok := err.(*exec.ExitError)
 			if !ok || exitErr.ExitCode() != 1 {
 				t.Fatalf("child process error = %v, output: %s; want exit status 1", err, output)

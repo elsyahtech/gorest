@@ -13,8 +13,6 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-const gorestModulePath = "github.com/elsyahtech/gorest"
-
 //nolint:revive
 func printStartupBanner(
 	server *Server,
@@ -88,37 +86,29 @@ func gorestVersion() string {
 		return "development (untagged)"
 	}
 
-	return gorestVersionFromBuildInfo(info)
-}
-
-func gorestVersionFromBuildInfo(info *debug.BuildInfo) string {
-	if info == nil {
-		return "development (untagged)"
-	}
-
-	if info.Main.Path == gorestModulePath {
-		return releaseVersion(info.Main.Version)
+	if info.Main.Path == "github.com/elsyahtech/gorest" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
 	}
 
 	for _, dependency := range info.Deps {
-		if dependency.Path == gorestModulePath {
-			if dependency.Replace != nil {
-				return releaseVersion(dependency.Replace.Version)
-			}
-
-			return releaseVersion(dependency.Version)
+		if dependency.Path != "github.com/elsyahtech/gorest" {
+			continue
 		}
-	}
 
-	return "development (untagged)"
-}
+		if dependency.Replace != nil {
+			if dependency.Replace.Version != "" && dependency.Replace.Version != "(devel)" {
+				return dependency.Replace.Version
+			}
+			return "development (untagged)"
+		}
 
-func releaseVersion(version string) string {
-	if version == "" || version == "(devel)" {
+		if dependency.Version != "" && dependency.Version != "(devel)" {
+			return dependency.Version
+		}
 		return "development (untagged)"
 	}
 
-	return version
+	return "development (untagged)"
 }
 
 func getRegisteredEndpoints(server *Server) []string {

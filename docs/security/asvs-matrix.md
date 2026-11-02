@@ -116,12 +116,18 @@ follow-up actions.
   migration/seeder files and use appropriately restricted database
   privileges.
 - **Operational endpoints (V13, V14):** By default, `/gorest/live`,
-  `/gorest/ready`, and `/gorest/metrics` are registered. Readiness reports
-  component states; metrics expose runtime values such as goroutine count,
-  heap allocation, and GC cycles. `gorest.Config.DisableMonitoringEndpoints:
-  true` prevents registration, but does not add authentication or network
-  restrictions. Restrict access at the network/proxy layer if these values
-  must remain private.
+  `/gorest/ready`, `/gorest/metrics`, `/gorest/http`, `/gorest/storage`, and
+  `/gorest/database` are registered. Readiness reports component states;
+  runtime metrics expose process values; HTTP metrics expose application
+  request observations; storage reports driver-specific database usage
+  estimates; database metrics expose application-client pool and operation
+  statistics. All built-in `/gorest` operational endpoints deny access by
+  default and support an IP/CIDR allowlist through
+  `monitoring.Config.HTTPMetricsAllowedIPs`; the peer IP is checked directly,
+  not forwarded headers, and this is not user authentication. Behind a reverse
+  proxy, allowlist the trusted proxy peer IP and restrict access at the
+  network/proxy layer.
+  `monitoring.Config.DisableMonitoringEndpoints: true` prevents registration.
 - **Logging (V14, V16):** GOREST uses structured rotating logs and heuristic
   redaction for recognized sensitive assignments, tokens, cookies, email
   addresses, and phone-like values. Redaction can miss secrets or produce

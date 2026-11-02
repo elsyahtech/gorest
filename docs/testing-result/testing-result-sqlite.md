@@ -14,8 +14,17 @@ operations, transactions, migrations, seeders, and application lifecycle.
 ## Storage and deployment
 
 SQLite stores data in a local file and does not use network TLS. Use
-`DatabaseDirectory` and `Name` to select the database file location and keep
-file permissions restrictive. Plan disk capacity and backups for the
+`DatabaseDirectory` and `Name` to select the database file location. When
+GOREST creates a new database directory, it requests mode `0700`; when it
+creates a new database file, it requests mode `0600`. On POSIX systems, these
+modes restrict access to the application process owner, subject to the
+operating system and umask.
+
+GOREST does not change permissions or ownership of an existing database file
+or directory. Ensure their access controls are appropriately restrictive in
+the deployment environment. These defaults do not replace operating-system
+access controls, and processes running as the same user as the application
+can still access the database. Plan disk capacity and backups for the
 application's data lifecycle.
 
 SQLite is suited to local or single-node application deployments. It does not

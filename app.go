@@ -24,6 +24,9 @@ func New(config ...Config) *App {
 	// initialize the global logger
 	app.logInit()
 
+	// initialize the monitoring service
+	app.monitoringInit()
+
 	// initialize the server
 	app.serverInit()
 

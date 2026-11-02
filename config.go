@@ -4,6 +4,7 @@ import (
 	dbimpr "github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
 	logimpr "github.com/elsyahtech/gorest/log"
+	monitoringimpr "github.com/elsyahtech/gorest/monitoring"
 	redisimpr "github.com/elsyahtech/gorest/redis"
 	serverimpr "github.com/elsyahtech/gorest/server"
 )
@@ -23,6 +24,9 @@ type Config struct {
 
 	//nolint:revive
 	filter *filter.Config `json:"-"`
+
+	//nolint:revive
+	monitoring *monitoringimpr.Config `json:"-"`
 
 	// This function allows to setup app name for the app
 	//
@@ -59,25 +63,38 @@ type Config struct {
 	// Default: false
 	AllowInsecureProduction bool `json:"allow_insecure_production"`
 
-	// DisableMonitoringEndpoints controls whether monitoring endpoints are registered.
-	// When true, endpoints such as /gorest/live, /gorest/ready, and /gorest/metrics
-	// are not exposed. Monitoring endpoints are enabled by default.
-	DisableMonitoringEndpoints bool `json:"disable_monitoring_endpoints"`
+	// CheckForUpdates checks the official GOREST GitHub release on application
+	// start and logs when a newer version is available. It never upgrades the
+	// application and does not block startup. A nil value enables the check.
+	CheckForUpdates *bool `json:"check_for_updates"`
 }
 
 var ConfigDefault = Config{
-	log:                        &logimpr.ConfigDefault,
-	server:                     &serverimpr.ConfigDefault,
-	filter:                     &filter.ConfigDefault,
-	redis:                      nil,
-	database:                   nil,
-	AppName:                    DefaultAppName,
-	Version:                    DefaultVersion,
-	Environment:                Development,
-	Timezone:                   DefaultTimezone,
-	Debug:                      false,
-	AllowInsecureProduction:    false,
-	DisableMonitoringEndpoints: false,
+	log:                     &logimpr.ConfigDefault,
+	server:                  &serverimpr.ConfigDefault,
+	filter:                  &filter.ConfigDefault,
+	monitoring:              &monitoringimpr.ConfigDefault,
+	redis:                   nil,
+	database:                nil,
+	AppName:                 DefaultAppName,
+	Version:                 DefaultVersion,
+	Environment:             Development,
+	Timezone:                DefaultTimezone,
+	Debug:                   false,
+	AllowInsecureProduction: false,
+	CheckForUpdates:         EnableAutoUpdate,
+}
+
+// EnableAutoUpdate enables startup notifications when a newer GOREST release
+// is available. It does not upgrade the application.
+var EnableAutoUpdate = boolPointer(true)
+
+// DisableAutoUpdate disables startup update checks. No update request is made
+// when this value is used.
+var DisableAutoUpdate = boolPointer(false)
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func configDefault(config ...Config) Config {
@@ -91,6 +108,7 @@ func configDefault(config ...Config) Config {
 	cfg.redis = ConfigDefault.redis
 	cfg.database = ConfigDefault.database
 	cfg.filter = ConfigDefault.filter
+	cfg.monitoring = ConfigDefault.monitoring
 
 	if cfg.AppName == "" {
 		cfg.AppName = ConfigDefault.AppName
@@ -110,6 +128,10 @@ func configDefault(config ...Config) Config {
 
 	if !cfg.Debug {
 		cfg.Debug = ConfigDefault.Debug
+	}
+
+	if cfg.CheckForUpdates == nil {
+		cfg.CheckForUpdates = boolPointer(true)
 	}
 
 	return cfg
