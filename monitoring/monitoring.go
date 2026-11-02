@@ -20,8 +20,8 @@ func Run(config ...Config) Config {
 func New(config Config) (*Monitoring, error) {
 	config = Run(config)
 	httpMetrics, err := NewHTTPMetrics(HTTPMetricsOptions{
-		AllowedIPs:     config.HTTPMetricsAllowedIPs,
-		EnablePerRoute: config.EnablePerRouteHTTPMetrics,
+		AllowedIPs:     config.MonitoringAllowedIPs,
+		EnablePerRoute: config.EnableHTTPMetricsMonitoring,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize monitoring service: %w", err)

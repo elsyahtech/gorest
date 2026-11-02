@@ -232,7 +232,7 @@ GOREST registers each built-in operational endpoint individually under the
 `/gorest` path by default; `/gorest` itself is not an endpoint:
 
 - All built-in `/gorest` endpoints are restricted by
-  `monitoring.Config.HTTPMetricsAllowedIPs`. The default empty allowlist denies
+  `monitoring.Config.MonitoringAllowedIPs`. The default empty allowlist denies
   every caller; configuring it does not add user authentication. The check uses
   the connection peer IP, so behind a reverse proxy the proxy's IP is checked,
   not `X-Forwarded-For`.
@@ -271,12 +271,12 @@ Configure access and optional route-level collection with
 ```go
 app := gorest.New()
 app.Use(monitoring.Config{
-    HTTPMetricsAllowedIPs: []string{"127.0.0.1/32", "::1/128"},
-    EnablePerRouteHTTPMetrics: false,
+    MonitoringAllowedIPs: []string{"127.0.0.1/32", "::1/128"},
+    EnableHTTPMetricsMonitoring: false,
 })
 ```
 
-`HTTPMetricsAllowedIPs` accepts IP literals and CIDR ranges. It defaults to an
+`MonitoringAllowedIPs` accepts IP literals and CIDR ranges. It defaults to an
 empty list, which denies all access to built-in `/gorest` endpoints, including
 `/live`, `/ready`, `/metrics`, `/http`, `/storage`, and `/database`. Invalid
 entries abort application initialization. Each endpoint checks the TCP
@@ -285,10 +285,13 @@ proxy, the peer IP is the proxy's IP, so allow only trusted proxy addresses
 and also restrict access at the proxy or network layer. Health checks and
 other internal callers must be included in this allowlist.
 
-The `HTTPMetricsAllowedIPs`, `DisableMonitoringEndpoints`, and
-`EnablePerRouteHTTPMetrics` fields belong to `monitoring.Config`, not
-`gorest.Config`. When upgrading code that set these fields on `gorest.Config`,
-move them into `app.Use(monitoring.Config{...})` as shown above.
+The `MonitoringAllowedIPs`, `DisableMonitoringEndpoints`, and
+`EnableHTTPMetricsMonitoring` fields belong to `monitoring.Config`, not
+`gorest.Config`. When upgrading code that used the previous names
+`HTTPMetricsAllowedIPs` or `EnablePerRouteHTTPMetrics`, rename them to
+`MonitoringAllowedIPs` or `EnableHTTPMetricsMonitoring`, respectively. The
+corresponding JSON keys are now `monitoring_allowed_ips` and
+`enable_http_metrics_monitoring`.
 
 The endpoint returns JSON with `status` (`available` or `partial`) and a
 `metrics` object. `partial` means at least one metric is unavailable; the
@@ -351,7 +354,7 @@ compression; it is not bandwidth or network traffic. Delivery failures after
 the application prepares a response cannot be reflected in this value.
 
 Global metrics are enabled whenever the HTTP metrics middleware is active.
-`EnablePerRouteHTTPMetrics` controls whether `GET /gorest/http` also returns a
+`EnableHTTPMetricsMonitoring` controls whether `GET /gorest/http` also returns a
 `routes` array with metrics grouped by HTTP method and registered route
 template, such as `GET /users/:id`. It never groups by actual URL or parameter
 values such as a user ID. When the flag is `false` (the default), global
@@ -376,7 +379,7 @@ capacity; use infrastructure monitoring for that information.
 #### Try the storage endpoint
 
 Start the application with its intended database configuration and configure
-`monitoring.Config.HTTPMetricsAllowedIPs` to include the caller's peer IP.
+`monitoring.Config.MonitoringAllowedIPs` to include the caller's peer IP.
 Without that configuration, the default empty allowlist returns `403`:
 
 ```sh
@@ -533,7 +536,7 @@ app.Use(monitoring.Config{
 
 Disabling these routes does not disable the HTTP server or application
 services. It also disables HTTP metrics collection. When enabled, the endpoints are served by the application's HTTP server and
-all are restricted by `HTTPMetricsAllowedIPs` (empty by default); this is an IP
+all are restricted by `MonitoringAllowedIPs` (empty by default); this is an IP
 allowlist, not user authentication. Requests are checked against the
 connection's peer IP, so a reverse proxy's address is used when applicable.
 Include trusted health-check clients and proxies in the allowlist, and apply

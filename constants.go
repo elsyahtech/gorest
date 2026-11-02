@@ -2,7 +2,7 @@ package gorest
 
 const (
 	DefaultAppName     = "gorest"
-	DefaultVersion     = "1.0.0"
+	DefaultAppVersion  = "1.0.0"
 	Development        = "development"
 	Production         = "production"
 	Testing            = "testing"
