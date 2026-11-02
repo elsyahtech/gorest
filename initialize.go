@@ -3,6 +3,7 @@ package gorest
 import (
 	"context"
 	golog "log"
+	"strings"
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
@@ -127,7 +128,9 @@ func (app *App) newServer() {
 
 	app.registerService("Server")
 
-	serverInitialized, message, err := server.New(app.config.server)
+	serverConfig := app.serverConfigWithHTTPMetrics()
+
+	serverInitialized, message, err := app.newServerWithHTTPMetrics(&serverConfig)
 	if err != nil {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
@@ -149,7 +152,8 @@ func (app *App) reconfigureServer() {
 
 	app.registerService("Server")
 
-	serverInitialized, message, err := server.New(app.config.server)
+	serverConfig := app.serverConfigWithHTTPMetrics()
+	serverInitialized, message, err := app.newServerWithHTTPMetrics(&serverConfig)
 	if err != nil {
 		app.Log(map[string]any{
 			LogFieldKeyError:   err,
@@ -196,7 +200,7 @@ func (app *App) filterInit(config *filter.Config) {
 	}
 
 	filterConfig := filter.Run(*config)
-	if filterConfig.SignatureKey == nil || *filterConfig.SignatureKey == "" {
+	if filterConfig.SignatureKey == nil || strings.TrimSpace(*filterConfig.SignatureKey) == "" {
 		app.Log(map[string]any{
 			LogFieldKeyError:   "signature key in invalid or empty",
 			LogFieldKeyMessage: "filter cannot run without a valid signature key or empty",

@@ -279,9 +279,10 @@ the exact server profiles tested, see the
 | [`redis/`](./redis/) | Operations, concurrent pool use, operation/context timeouts, startup failure, reconnect after server-dropped client connections, and TLS rejection | `make integration-test-redis-e2e` starts and removes disposable Redis; external TLS checks use the configured endpoint |
 
 The PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, and ScyllaDB suites each
-exercise `GET /gorest/storage` against the configured external integration
-service. These tests verify the driver-specific storage query, response
-status, scope, measurement name, and non-negative byte estimate. Use
+exercise `GET /gorest/storage` and `GET /gorest/database` against the configured
+external integration service. These tests verify the driver-specific storage
+query, response status, scope, measurement name, and non-empty human-readable
+storage value, as well as the application-scoped metrics response. Use
 disposable test services with the `GOREST_IT_*` variables described below;
 set `GOREST_IT_REQUIRED=1` to fail instead of skipping when a service is not
 configured. ScyllaDB requires storage estimates to be available for the

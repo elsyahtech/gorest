@@ -29,6 +29,12 @@ func Run(config ...Config) Config {
 }
 
 func New(config *Config) (*Server, string, error) {
+	return NewWithMiddleware(config)
+}
+
+// NewWithMiddleware creates a server and installs the supplied handlers after
+// compression but before the remaining default middleware and application routes.
+func NewWithMiddleware(config *Config, middleware ...fiber.Handler) (*Server, string, error) {
 	var cfg Config
 
 	if config == nil {
@@ -44,6 +50,11 @@ func New(config *Config) (*Server, string, error) {
 	server.Use(recover.New(*cfg.Recover))
 	server.Use(requestid.New(*cfg.Requestid))
 	server.Use(compress.New(*cfg.Compress))
+
+	for _, handler := range middleware {
+		server.Use(handler)
+	}
+
 	server.Use(helmet.New(*cfg.Helmet))
 	server.Use(cors.New(*cfg.Cors))
 	server.Use(limiter.New(*cfg.Limiter))

@@ -202,11 +202,109 @@ default:
   allocation, heap system memory, and GC cycles. These are JSON runtime
   statistics, not a Prometheus exposition endpoint or a replacement for
   Prometheus/OpenTelemetry instrumentation.
+- `GET /gorest/http` — application-scoped HTTP server metrics. The route is
+  registered by default, but access is denied unless the connection peer IP
+  matches `HTTPMetricsAllowedIPs`.
 - `GET /gorest/storage` — a point-in-time estimate of storage used by the
   configured database. The response identifies the driver, scope, and
   measurement method. Values are driver-specific estimates, not free disk
   space, maximum capacity, or a cross-driver comparison. Collection failures
   return `503` with a sanitized reason and do not affect readiness.
+- `GET /gorest/database` — storage, table/row estimates, and metrics observed
+  by the application's configured database client and connection pool. This
+  is application-scoped, not a view of other applications or global database
+  server activity. Unsupported or unavailable values are `null` and are named
+  in `unavailable_metrics`; a `partial` response means at least one metric is
+  unavailable.
+
+#### HTTP server metrics
+
+Configure access and optional route-level collection on `gorest.Config`:
+
+```go
+app := gorest.New(gorest.Config{
+    HTTPMetricsAllowedIPs: []string{"127.0.0.1/32", "::1/128"},
+    EnablePerRouteHTTPMetrics: false,
+})
+```
+
+`HTTPMetricsAllowedIPs` accepts IP literals and CIDR ranges. It defaults to an
+empty list, which denies all access. Invalid entries abort application
+initialization. The endpoint checks the TCP connection's peer IP; it does not
+trust `X-Forwarded-For`. Behind a reverse proxy, the peer IP is the proxy's IP,
+so allow only trusted proxy addresses and also restrict access at the proxy or
+network layer. This allowlist protects `/gorest/http` only; it does not protect
+the older operational endpoints. Those endpoints require a separate access
+control review.
+
+The endpoint returns JSON with `status` (`available` or `partial`) and a
+`metrics` object. `partial` means at least one metric is unavailable; the
+corresponding value is `null` and its reason appears in `unavailable_metrics`.
+The global metric names and meanings are:
+
+| Metric | Meaning |
+| --- | --- |
+| `request_total` | Completed application requests with a final HTTP status from 200 through 599. |
+| `request_success_total` | Responses with status 2xx or 3xx. |
+| `request_client_error_total` | Responses with status 4xx. |
+| `request_server_error_total` | Responses with status 5xx. |
+| `request_error_total` | Sum of 4xx and 5xx responses. |
+| `request_duration_avg` | Arithmetic mean request-processing duration. |
+| `request_duration_p50`, `request_duration_p95`, `request_duration_p99` | Estimated latency percentiles, reported as the upper bound of a fixed histogram bucket. |
+| `request_duration_max` | Maximum observed request-processing duration. |
+| `request_in_flight` | Requests currently inside the HTTP metrics middleware. |
+| `request_bytes_total` | Cumulative request-body bytes when every completed request body can be measured. |
+| `response_bytes_total` | Cumulative response-body bytes prepared by the application before compression, when every completed response can be measured. |
+| `status_code_total` | Counts of completed responses by exact status code. |
+
+Durations use milliseconds. Measurement begins when a request enters the HTTP
+metrics middleware and ends after the inner application middleware and handler
+prepare the response. It is not end-to-end network latency and excludes
+compression and delivery time. Percentiles use fixed histogram buckets with
+upper bounds at 1, 2, 5, 10, 20, 50, 100, 250, and 500 ms, then 1, 2, 5, 10,
+30, 60, and 300 seconds, plus an overflow bucket. They are estimates reported
+as bucket upper bounds, not exact sample quantiles. If a percentile falls in
+the overflow bucket, that percentile is `null`.
+
+Counters are cumulative for one application instance, beginning when its
+collector is initialized; they are not reset by reading the endpoint and
+return to zero when the process/application instance restarts. Instances do
+not share counters. `request_total` and the three status categories are based
+on final statuses, so this invariant holds:
+
+```text
+request_total = request_success_total
+             + request_client_error_total
+             + request_server_error_total
+```
+
+Requests that unwind without a final status are omitted from status counters
+and latency distributions; `request_in_flight` is decremented on normal,
+error, panic-recovery, and unwind paths. A panic recovered into a 500 is
+counted as a server error. A disconnected client is not necessarily detectable
+by the application: if application handling still prepares a final status,
+that response is counted, but this does not prove that the client received it.
+The metrics endpoint's own request is observed only after its response is
+prepared, so its returned snapshot does not include that same request in
+completed totals; `request_in_flight` includes the metrics request itself.
+
+For body-byte metrics, `0` means all measured payloads were empty, a number is
+the complete cumulative total, and `null` means a complete total cannot be
+established. One unmeasurable observation makes that cumulative byte metric
+unavailable for the lifetime of the collector; partial totals are not
+presented. Request streams and response streams are not read or buffered just
+for metrics. `response_bytes_total` is application-layer payload size before
+compression; it is not bandwidth or network traffic. Delivery failures after
+the application prepares a response cannot be reflected in this value.
+
+Global metrics are enabled whenever the HTTP metrics middleware is active.
+`EnablePerRouteHTTPMetrics` adds a `routes` array grouped by HTTP method and
+registered route template (for example, `/users/:id`), never by actual URL or
+parameter values. It is disabled by default; enabling it adds bounded memory
+and synchronization overhead proportional to the registered route templates.
+Per-route objects contain the same counters except `request_in_flight`, which
+is global only. Snapshots are collected from concurrent atomic counters, so
+individual fields can represent adjacent instants while requests are active.
 
 The storage endpoint uses database statistics scoped to the configured
 database, schema, file, or keyspace. PostgreSQL reports database size; MySQL
@@ -237,18 +335,109 @@ collection returns HTTP `200`; for example:
     "driver": "postgres",
     "scope": "configured_database",
     "measurement": "database_size",
-    "used_bytes": 123456
+    "storage_used": "120.6 KiB"
   }
 }
 ```
 
 The `driver`, `scope`, and `measurement` describe what was measured.
-`used_bytes` is an integer byte estimate and can legitimately be `0` for an
-empty database or schema. Driver-specific scope and measurement names are
-listed above. A collection or permission problem returns HTTP `503`, for
-example `{"status":"unavailable","reason":"collection_failed"}`; an
-unsupported driver returns `reason: "unsupported_driver"`. The endpoint does
-not include database credentials or raw query errors in its response.
+`storage_used` is the measured amount currently in use, formatted for people
+with binary units (`B`, `KiB`, `MiB`, and so on). For example, `196608` bytes
+is `"192 KiB"`. It does not represent maximum capacity, remaining capacity,
+or a percentage. The value can legitimately be zero for an empty database or
+schema.
+Driver-specific scope and measurement names are listed above. A collection
+or permission problem returns HTTP `503`, for example
+`{"status":"unavailable","reason":"collection_failed"}`; an unsupported
+driver returns `reason: "unsupported_driver"`. The endpoint does not include
+database credentials or raw query errors in its response.
+
+#### Database usage and client metrics
+
+Request the application-scoped database metrics with:
+
+```sh
+curl --show-error --include http://localhost:3000/gorest/database
+```
+
+The endpoint returns the same human-readable `storage_used` value as
+`/gorest/storage`, plus table and row estimates, connection-pool snapshots,
+and cumulative operation counters. SQL pool metrics come from the application's
+`database/sql` pool. SQL query and transaction counters are recorded by
+instrumenting the SQL driver used by GOREST; MongoDB command/pool events and
+ScyllaDB query observer events are recorded from the configured client. Only
+operations made through that configured client are in scope. Work performed by
+separate clients, other applications, or directly on the database server is
+not included.
+
+`query_total`, `query_slow_total`, `query_error_total`,
+`transaction_commit_total`, and `transaction_rollback_total` start accumulating
+when the configured database client is initialized. They are cumulative for
+that client. A slow query is an instrumented operation
+taking at least one second. SQL transaction counters count successful driver
+commits and rollbacks; MongoDB counters count successful `commitTransaction`
+and `abortTransaction` commands. ScyllaDB does not expose SQL-like transaction
+totals. Monitoring requests use the same configured client and may themselves
+contribute to query counters. Query errors are database-driver errors observed
+by the configured client; failures before a request reaches that driver (for
+example, a separate client or pool-acquisition failure) may not be represented
+as query errors.
+
+`row_count` is an estimate, not an exact `COUNT(*)` across every table.
+PostgreSQL uses catalog row estimates, MySQL uses `information_schema`
+estimates, SQL Server uses partition row metadata, Oracle uses collected table
+statistics, and MongoDB uses database statistics. SQLite and ScyllaDB do not
+currently provide a suitable low-cost row estimate here, so `row_count` is
+`null`. Oracle row estimates are unavailable until statistics exist. These
+estimates can be stale and should not be used for billing or correctness
+decisions.
+
+SQL connection metrics report the GOREST pool's active/idle counts,
+configured maximum, cumulative pool waits, and cumulative wait duration.
+`connection_max` and `pool_usage_percent` are `null` when the SQL pool is
+unlimited. MongoDB reports active/idle/max connections after its pool emits
+monitoring events; wait counts and wait duration are currently unavailable for
+MongoDB. ScyllaDB pool metrics are unavailable because its client does not
+expose equivalent pool statistics. For unsupported metrics, JSON values are
+`null` and `unavailable_metrics` identifies the reason, rather than reporting
+an invented zero.
+
+Example (individual values depend on the driver and workload):
+
+```json
+{
+  "status": "partial",
+  "database": {
+    "driver": "sqlite",
+    "scope": "application_database_client",
+    "counter_period": "since_client_init",
+    "slow_query_threshold": "1s",
+    "storage_used": "192 KiB",
+    "storage_scope": "configured_database_file",
+    "storage_measurement": "database_page_bytes",
+    "table_count": 4,
+    "row_count": null,
+    "connection_active": 0,
+    "connection_idle": 1,
+    "connection_max": 10,
+    "connection_wait_count": 0,
+    "connection_wait_duration": "0s",
+    "query_total": 128,
+    "query_slow_total": 0,
+    "query_error_total": 2,
+    "transaction_commit_total": 3,
+    "transaction_rollback_total": 1,
+    "pool_usage_percent": 0,
+    "unavailable_metrics": {
+      "row_count": "unsupported"
+    }
+  }
+}
+```
+
+This endpoint exposes operational database usage details. Restrict access at
+the application, proxy, or network layer as appropriate; built-in monitoring
+routes do not add authentication or authorization.
 
 To exercise the driver-specific query against an isolated external test
 database, configure that driver's `GOREST_IT_<DRIVER>_*` variables and run
@@ -272,8 +461,8 @@ query; do not point integration tests at production data. See the
 driver caveats.
 
 Control endpoint exposure through `gorest.Config.DisableMonitoringEndpoints`.
-It defaults to `false` (enabled); set it to `true` to prevent all four routes
-from being registered:
+It defaults to `false` (enabled); set it to `true` to prevent the built-in
+operational routes, including `/gorest/http`, from being registered:
 
 ```go
 app := gorest.New(gorest.Config{
@@ -281,11 +470,14 @@ app := gorest.New(gorest.Config{
 })
 ```
 
-Disabling these routes does not disable the HTTP server, application services,
-or their internal instrumentation. When enabled, the endpoints are served by
-the application's HTTP server and have no built-in authentication specific to
-the monitoring group. If their information should remain private, disable them
-or restrict access at the network, proxy, or application layer.
+Disabling these routes does not disable the HTTP server or application
+services. It also disables HTTP metrics collection. When enabled, the
+endpoints are served by the application's HTTP server. `/gorest/http` is
+restricted by `HTTPMetricsAllowedIPs` (empty by default); this is an IP
+allowlist, not user authentication. The older operational endpoints are not
+covered by that allowlist and do not add authentication or authorization.
+Restrict all exposed operational endpoints at the network, proxy, or
+application layer as appropriate.
 
 The readiness endpoint reports all component statuses in its JSON response.
 An unconfigured optional Redis or JWT filter is reported as `not running`;

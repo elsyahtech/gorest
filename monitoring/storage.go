@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/elsyahtech/gorest/database"
@@ -12,6 +13,8 @@ import (
 )
 
 const collectionTimeout = 3 * time.Second
+const collectionFailedReason = "collection_failed"
+const metricUnsupportedReason = "unsupported"
 
 var errUnsupportedDriver = errors.New("storage metrics do not support configured database driver")
 
@@ -19,7 +22,7 @@ type storageMetric struct {
 	Driver      string `json:"driver"`
 	Scope       string `json:"scope"`
 	Measurement string `json:"measurement"`
-	UsedBytes   int64  `json:"used_bytes"` //nolint:tagliatelle // Operational responses use snake_case JSON keys.
+	StorageUsed string `json:"storage_used"` //nolint:tagliatelle // Operational responses use snake_case JSON keys.
 }
 
 type storageResponse struct {
@@ -33,6 +36,8 @@ func Register(routes *server.Server, config database.Config, databaseConn *datab
 	if routes == nil {
 		return
 	}
+
+	registerDatabaseMetrics(routes, config, databaseConn)
 
 	routes.Get("/storage", func(requestContext *server.Context) error {
 		ctx, cancel := context.WithTimeout(requestContext.Context(), collectionTimeout)
@@ -95,9 +100,34 @@ func collectStorage(ctx context.Context, config database.Config, databaseConn *d
 		return nil, errors.New("storage usage returned a negative value")
 	}
 
-	metric.UsedBytes = usedBytes
+	metric.StorageUsed = formatStorageSize(usedBytes)
 
 	return metric, nil
+}
+
+func formatStorageSize(size int64) string {
+	const unit = 1024
+
+	units := [...]string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+
+	if size < unit {
+		return strconv.FormatInt(size, 10) + " B"
+	}
+
+	value := float64(size)
+
+	unitIndex := 0
+	for value >= unit && unitIndex < len(units)-1 {
+		value /= unit
+		unitIndex++
+	}
+
+	formatted := strconv.FormatFloat(value, 'f', 1, 64)
+	if len(formatted) >= 2 && formatted[len(formatted)-2:] == ".0" {
+		formatted = formatted[:len(formatted)-2]
+	}
+
+	return formatted + " " + units[unitIndex]
 }
 
 func storageFailureReason(err error) string {
@@ -105,5 +135,5 @@ func storageFailureReason(err error) string {
 		return "unsupported_driver"
 	}
 
-	return "collection_failed"
+	return collectionFailedReason
 }

@@ -70,8 +70,29 @@ func TestSQLiteStorageEndpointReportsDatabasePageBytes(t *testing.T) {
 		result.Database.Measurement != "database_page_bytes" {
 		t.Errorf("database metric = %#v; want SQLite configured file page bytes", result.Database)
 	}
-	if result.Database.UsedBytes <= 0 {
-		t.Errorf("database used bytes = %d, want positive value", result.Database.UsedBytes)
+	if result.Database.StorageUsed == "" || result.Database.StorageUsed == "0 B" {
+		t.Errorf("database storage used = %q, want positive formatted value", result.Database.StorageUsed)
+	}
+}
+
+func TestFormatStorageSize(t *testing.T) {
+	tests := []struct {
+		size int64
+		want string
+	}{
+		{size: 0, want: "0 B"},
+		{size: 512, want: "512 B"},
+		{size: 1024, want: "1 KiB"},
+		{size: 196608, want: "192 KiB"},
+		{size: 1572864, want: "1.5 MiB"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.want, func(t *testing.T) {
+			if got := formatStorageSize(test.size); got != test.want {
+				t.Errorf("formatStorageSize(%d) = %q, want %q", test.size, got, test.want)
+			}
+		})
 	}
 }
 

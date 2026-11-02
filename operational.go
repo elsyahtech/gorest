@@ -50,6 +50,7 @@ func (app *App) registerOperationalRoutes() {
 	startedAt := time.Now()
 	operational := app.Group("/gorest")
 	monitoring.Register(operational, app.GetDBConfig(), app.database)
+	monitoring.RegisterHTTPMetrics(operational, app.httpMetrics)
 	liveHandler := func(c *Context) error {
 		return c.Status(200).JSON(Map{"status": "alive"})
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	gocql "github.com/apache/cassandra-gocql-driver/v2"
+	"github.com/elsyahtech/gorest/monitoring/dbmetrics"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -30,7 +31,9 @@ func New(ctx context.Context, config *Config, timezone string) (*Database, strin
 		return nil, message, errors.New("database service is not running")
 	}
 
-	database, message, err := execConn(ctx, config, timezone, config.Driver)
+	metrics := dbmetrics.New()
+
+	database, message, err := execConn(ctx, config, timezone, config.Driver, metrics)
 	if err != nil {
 		return nil, message, err
 	}
@@ -48,63 +51,63 @@ func New(ctx context.Context, config *Config, timezone string) (*Database, strin
 }
 
 //nolint:revive
-func execConn(ctx context.Context, config *Config, timezone string, driver string) (*Database, string, error) {
+func execConn(ctx context.Context, config *Config, timezone string, driver string, metrics *dbmetrics.Stats) (*Database, string, error) {
 	switch driver {
 	case MYSQL:
-		mysqlConn, message, err := mysqlConnection(ctx, config, timezone, driver)
+		mysqlConn, message, err := mysqlConnection(ctx, config, timezone, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(mysqlConn, nil, nil), "", nil
+		return initDB(mysqlConn, nil, nil, metrics), "", nil
 
 	case POSTGRES:
-		postgreConn, message, err := postgresqlConnection(ctx, config, timezone, driver)
+		postgreConn, message, err := postgresqlConnection(ctx, config, timezone, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(postgreConn, nil, nil), "", nil
+		return initDB(postgreConn, nil, nil, metrics), "", nil
 
 	case SQLSERVER:
-		mssqlConn, message, err := mssqlConnection(ctx, config, timezone, driver)
+		mssqlConn, message, err := mssqlConnection(ctx, config, timezone, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(mssqlConn, nil, nil), "", nil
+		return initDB(mssqlConn, nil, nil, metrics), "", nil
 
 	case SQLITE:
-		sqliteConn, message, err := sqliteConnection(ctx, config, timezone, driver)
+		sqliteConn, message, err := sqliteConnection(ctx, config, timezone, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(sqliteConn, nil, nil), "", nil
+		return initDB(sqliteConn, nil, nil, metrics), "", nil
 
 	case ORACLE:
-		oracleConn, message, err := oracleConnection(ctx, config, timezone, driver)
+		oracleConn, message, err := oracleConnection(ctx, config, timezone, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(oracleConn, nil, nil), "", nil
+		return initDB(oracleConn, nil, nil, metrics), "", nil
 
 	case MONGO:
-		mongoConn, message, err := mongoConnection(ctx, config, driver)
+		mongoConn, message, err := mongoConnection(ctx, config, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(nil, mongoConn, nil), "", nil
+		return initDB(nil, mongoConn, nil, metrics), "", nil
 
 	case SCYLLA:
-		scyllaConn, message, err := scyllaConnection(config, driver)
+		scyllaConn, message, err := scyllaConnection(config, driver, metrics)
 		if err != nil {
 			return nil, message, fmt.Errorf("%w", err)
 		}
 
-		return initDB(nil, nil, scyllaConn), "", nil
+		return initDB(nil, nil, scyllaConn, metrics), "", nil
 
 	default:
 		message := "The application must use one of the following databases: " +
@@ -115,10 +118,11 @@ func execConn(ctx context.Context, config *Config, timezone string, driver strin
 	}
 }
 
-func initDB(sqlDB *sql.DB, mongoDB *mongo.Client, scylla *gocql.Session) *Database {
+func initDB(sqlDB *sql.DB, mongoDB *mongo.Client, scylla *gocql.Session, metrics *dbmetrics.Stats) *Database {
 	return &Database{
-		SQL:    sqlDB,
-		Mongo:  mongoDB,
-		Scylla: scylla,
+		SQL:     sqlDB,
+		Mongo:   mongoDB,
+		Scylla:  scylla,
+		metrics: metrics,
 	}
 }

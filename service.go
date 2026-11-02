@@ -138,11 +138,13 @@ func (app *App) useCaseFilter(args []any, idx int) {
 
 func (app *App) initializeConfiguredFilter(config *filter.Config) {
 	filterConfig := filter.Run(*config)
-	if filterConfig.SignatureKey == nil || strings.TrimSpace(*filterConfig.SignatureKey) == "" {
-		app.abortStartup(errors.New("JWT filter was configured without a signature key"))
-	}
 
 	app.filterInit(&filterConfig)
+
+	if filterConfig.SignatureKey != nil && strings.TrimSpace(*filterConfig.SignatureKey) != "" &&
+		app.filter == nil {
+		app.abortStartup(errors.New("failed to run JWT filter; check the application log for details"))
+	}
 }
 
 //nolint:unparam

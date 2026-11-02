@@ -50,6 +50,12 @@ type Config struct {
 	// Default: UTC
 	Timezone string `json:"timezone"`
 
+	// HTTPMetricsAllowedIPs lists peer IP addresses or CIDR ranges allowed to
+	// access GET /gorest/http. An empty list denies access. The connection peer
+	// is checked directly; forwarded headers are not used.
+	//nolint:tagliatelle // Keep snake_case JSON config keys consistent.
+	HTTPMetricsAllowedIPs []string `json:"http_metrics_allowed_ips"`
+
 	// This function allows to enable or disable debug mode globally.
 	// Default: false
 	Debug bool `json:"debug"`
@@ -61,9 +67,14 @@ type Config struct {
 
 	// DisableMonitoringEndpoints controls whether monitoring endpoints are registered.
 	// When true, built-in endpoints such as /gorest/live, /gorest/ready,
-	// /gorest/metrics, and /gorest/storage
+	// /gorest/metrics, /gorest/storage, /gorest/database, and /gorest/http
 	// are not exposed. Monitoring endpoints are enabled by default.
 	DisableMonitoringEndpoints bool `json:"disable_monitoring_endpoints"`
+
+	// EnablePerRouteHTTPMetrics adds bounded method and route-template metrics
+	// to GET /gorest/http. Disabled by default.
+	//nolint:tagliatelle // Keep snake_case JSON config keys consistent.
+	EnablePerRouteHTTPMetrics bool `json:"enable_per_route_http_metrics"`
 }
 
 var ConfigDefault = Config{
@@ -79,6 +90,8 @@ var ConfigDefault = Config{
 	Debug:                      false,
 	AllowInsecureProduction:    false,
 	DisableMonitoringEndpoints: false,
+	HTTPMetricsAllowedIPs:      nil,
+	EnablePerRouteHTTPMetrics:  false,
 }
 
 func configDefault(config ...Config) Config {
