@@ -17,8 +17,12 @@ import (
 )
 
 const (
-	startupRetryAttempts    = 3
-	insecureApprovalTimeout = 30 * time.Second
+	startupRetryAttempts     = 3
+	insecureApprovalTimeout  = 30 * time.Second
+	preforkWorkerEnvironment = "GOREST_PREFORK_WORKER"
+	preforkChildEnvironment  = "FASTHTTP_PREFORK_CHILD"
+	preforkControlAddress    = "GOREST_PREFORK_CONTROL_ADDR"
+	preforkControlToken      = "GOREST_PREFORK_CONTROL_TOKEN"
 )
 
 var (
@@ -35,6 +39,13 @@ func defaultIsInteractiveTerminal() bool {
 
 	info, err := file.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func isManagedPreforkWorker() bool {
+	return os.Getenv(preforkWorkerEnvironment) == "1" &&
+		os.Getenv(preforkChildEnvironment) == "1" &&
+		os.Getenv(preforkControlAddress) != "" &&
+		os.Getenv(preforkControlToken) != ""
 }
 
 func validateProductionSQLiteHost(host string) error {
@@ -213,16 +224,19 @@ func forwardShutdownSignal(
 }
 
 func (app *App) runStartup(startupCtx context.Context, shutdownSignal <-chan os.Signal) {
-	if err := app.runMigration(); err != nil {
-		if startupCtx.Err() != nil {
-			app.shutdownAfterSignal(<-shutdownSignal)
+	isPreforkWorker := isManagedPreforkWorker()
+	if !isPreforkWorker {
+		if err := app.runMigration(); err != nil {
+			if startupCtx.Err() != nil {
+				app.shutdownAfterSignal(<-shutdownSignal)
+
+				return
+			}
+
+			app.abortStartup(err)
 
 			return
 		}
-
-		app.abortStartup(err)
-
-		return
 	}
 
 	if startupCtx.Err() != nil {
@@ -231,7 +245,9 @@ func (app *App) runStartup(startupCtx context.Context, shutdownSignal <-chan os.
 		return
 	}
 
-	app.checkForGorestUpdates(startupCtx)
+	if !isPreforkWorker {
+		app.checkForGorestUpdates(startupCtx)
+	}
 
 	if app.httpServerDisabled() {
 		app.Log(nil, true).Info("gorest is ready; HTTP server is disabled")

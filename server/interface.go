@@ -2,6 +2,7 @@ package server
 
 import (
 	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -11,6 +12,8 @@ type Server struct {
 	SRV             *fiber.App
 	listening       chan struct{}
 	listenDone      chan struct{}
+	prefork         *preforkSupervisor
+	shutdownTimeout time.Duration
 	listeningOnce   sync.Once
 	listenDoneOnce  sync.Once
 	lifecycleMu     sync.Mutex

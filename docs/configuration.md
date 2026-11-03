@@ -28,6 +28,13 @@ Logger Parameter Breakdown:
 
 The logger rotates the configured file by size and enforces the configured backup count and age during rotation. New log directories are created with mode `0700`; new log files use mode `0600`. Existing directories and existing log-file permissions are not tightened automatically, so verify their ownership and access controls in deployment. One process should own a given log file; do not have multiple application processes write to the same rotating file.
 
+When GOREST-managed prefork is enabled, each worker gets a PID-suffixed log
+file (for example, `app-12345.log`) to avoid multiple processes rotating the
+same file. The master continues to use the configured filename. Worker log
+files remain after a worker exits; configure external log retention for these
+files because the logger's backup cleanup does not remove inactive PID-named
+files.
+
 `app.Close()` calls Zap's `Sync()` and closes the rotating file writer. The rotating sink does not expose an `fsync` operation, so this is not a guarantee that data has been durably committed to physical storage. Zap does not return a write error from each `Info`/`Error` call; output write failures are reported through Zap's internal error output (stderr by default), and logging calls do not make business operations transactional or durable. The logger initialized by GOREST and exposed through `app.Log(...)` redacts recognized sensitive field names and common message patterns (credential assignments, Bearer/Basic authorization values, JWTs, email addresses, and phone numbers) to `xxxxx`, including fields attached with Zap's `With(...)`. This does not affect separate logger instances or other logging libraries. This heuristic cannot reliably identify arbitrary names, addresses, identifiers, custom encodings, or secrets without recognizable labels, and it may produce false positives. Do not rely on it as a substitute for data minimization; avoid logging credentials, session data, and unnecessary personal data, and redact application-specific values before passing them to `app.Log(...)`.
 
 ### 2. HTTP Server Configuration (`server.Run(...)`)
@@ -35,11 +42,62 @@ For the HTTP layer, Gorest integrates **Fiber** as its core HTTP engine under th
 
 The default server configuration provides initial timeout and middleware settings. Review them for your application's traffic, security policy, and deployment. You can configure the server engine, address, port, and middleware using `server.Config`:
 
-When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the GOREST core defaults; GOREST preserves its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout. When `server.New()` receives a `Core` with zero `ReadTimeout` or `WriteTimeout`, it preserves the values and logs a warning; it does not reject startup. Configure finite positive timeouts unless the unlimited behavior is intentional and documented for the application. On `SIGINT` or `SIGTERM`, `app.Start()` gracefully shuts down Fiber before closing Redis, database, and logger resources, waiting up to 30 seconds for active requests. A timeout is reported and remaining services are then closed; `app.Close()` uses the same shutdown sequence. Unit coverage that constructs a server directly verifies `app.Close()` waits for in-flight requests and stops the listener, while a separate helper-process integration test exercises `app.Start()` plus `SIGTERM`. These tests model local behavior and cannot guarantee identical signal delivery, traffic, dependency behavior, or termination timing in every application's deployment; verify shutdown with the application's actual process supervisor/container and real handlers.
+When `Core` is omitted (`nil`), Gorest sets finite Fiber timeouts: `ReadTimeout` to 10 seconds, `WriteTimeout` to 30 seconds, and `IdleTimeout` to 120 seconds. These defaults reduce exposure to slow or idle connections that can occupy server resources. If an application uses long-running responses or streaming (for example, SSE), choose timeouts appropriate to that workload. Supplying `Core` replaces the GOREST core defaults; GOREST preserves its values, including zero timeouts. In Fiber, a zero read or write timeout is unlimited, and a zero idle timeout falls back to the read timeout. When `server.New()` receives a `Core` with zero `ReadTimeout` or `WriteTimeout`, it preserves the values and logs a warning; it does not reject startup. Configure finite positive timeouts unless the unlimited behavior is intentional and documented for the application. On `SIGINT` or `SIGTERM`, `app.Start()` gracefully shuts down Fiber (and managed prefork workers, when enabled) before closing Redis, database, and logger resources, waiting up to 30 seconds for active requests. A timeout is reported and remaining services are then closed; `app.Close()` uses the same shutdown sequence. Unit coverage that constructs a server directly verifies `app.Close()` waits for in-flight requests and stops the listener, while helper-process integration tests exercise `app.Start()` plus `SIGTERM`, TLS/mTLS, Unix sockets, prefork recovery, and in-flight shutdown. These tests model local behavior and cannot guarantee identical signal delivery, traffic, dependency behavior, or termination timing in every application's deployment; verify shutdown with the application's actual process supervisor/container and real handlers.
 
 `ReadTimeout` applies to reading the full request, including its body, so it bounds how long a slow client can take to send a request. `BodyLimit` limits request size, but does not limit how slowly those bytes can arrive; it is not a substitute for a finite `ReadTimeout`. GOREST's server tests include a local TCP test that sends an incomplete request body and verifies Fiber returns `408 Request Timeout` when a finite read timeout expires. This verifies the configured server behavior in the test environment, not behavior through every reverse proxy, load balancer, network, or production deployment.
 
 Both `server.Run(...)` and `server.New(...)` apply GOREST defaults to omitted sections. This includes all six middleware configurations: CORS, Recover, Request ID, Compress, Helmet, and Limiter. Therefore, `server.New(&server.Config{})` installs the default middleware just like `server.New(nil)`; a nil middleware field means “use the GOREST default,” not “disable it.” `server.New(...)` currently has no nil-based middleware opt-out.
+
+Listener deployment options are configured through the GOREST-owned
+`server.ListenerConfig`, nested in `server.Config.Listener`. GOREST maps the
+supported fields to Fiber internally and keeps ownership of startup and
+graceful shutdown. Defaults use TCP4, TLS 1.2 as the minimum when TLS is
+configured, and a 30-second graceful shutdown timeout. Set `TLSCertFile` and
+`TLSCertKeyFile` together to enable HTTPS; optionally set `TLSCertClientFile`
+to require and verify client certificates. `Network: "unix"` requires
+`UnixSocketPath` and uses mode `0770` when `UnixSocketFileMode` is zero;
+`Network` accepts `tcp`, `tcp4`, `tcp6`, or `unix` and defaults to `tcp4`;
+`Host` and `Port` are used for TCP listeners. `TLSMinVersion` accepts TLS 1.2
+or TLS 1.3. GOREST-managed prefork is supported on macOS and Linux with TCP4
+or TCP6. GOREST starts
+`runtime.GOMAXPROCS(0)` worker processes by re-executing the application
+executable, supervises worker recovery, and signals and waits for workers
+during shutdown. The worker shutdown grace period controls when GOREST force
+kills workers; its default is 5 seconds and it can be shorter than
+`ShutdownTimeout`, so configure both to match the longest in-flight request
+that must drain. Workers initialize the application independently; in-memory
+state is not shared. This includes in-memory rate-limit state and HTTP metrics:
+limits apply per worker, and each `/gorest/http` response reports only the
+worker that served that request, not an aggregate. Application setup must
+therefore be safe to run in each worker. GOREST runs configured database
+migrations and seeders and its update check in the master only, before workers
+start. `PreforkRecoverInterval` delays a restart after a worker crash;
+`PreforkRecoverThreshold` is the maximum number of worker restarts before a
+later crash stops the supervisor (default: at least one, or half of
+`GOMAXPROCS`); a zero recovery interval restarts immediately. Workers use
+PID-suffixed log files. Prefork startup fails if workers do not become ready
+within 30 seconds.
+Invalid network, TLS pair, TLS version, prefork/network combination, or
+duration settings are rejected during server initialization. Negative
+shutdown timeout is not an unlimited-shutdown option.
+
+```go
+server.Run(server.Config{
+    Listener: server.ListenerConfig{
+        Network:        "tcp4",
+        TLSCertFile:    "/etc/gorest/tls/server.crt",
+        TLSCertKeyFile: "/etc/gorest/tls/server.key",
+        ShutdownTimeout: 30 * time.Second,
+    },
+})
+```
+
+`EnablePrintRoutes` prints the route list in addition to the GOREST startup
+banner. In prefork mode GOREST prints this list from the master process.
+Prefork and TLS are deployment choices, not requirements: TLS may instead
+terminate at a trusted reverse proxy. Prefork is not supported on Windows and
+should be enabled only after validating the worker process model with the
+application's dependencies and deployment.
 
 These middleware provide HTTP behavior and configurable controls, not a complete application security policy. CORS controls browser cross-origin access; it does not authenticate callers or authorize API operations. Recover handles panics in the request pipeline, Request ID supports request correlation, Compress changes response encoding, Helmet adds configured response headers, and Limiter applies a request limit. Review and tune their settings for the application and deployment. Define authentication and per-resource authorization in application code or an explicitly integrated identity layer; configure TLS, trusted proxies, secrets, network access, and suitable middleware policies for the serving environment. The presence of middleware or default configuration is not proof that an endpoint or deployment is secure.
 

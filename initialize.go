@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	golog "log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/elsyahtech/gorest/database"
@@ -21,7 +23,19 @@ func (app *App) logInit() {
 
 	app.registerService("Logger")
 
-	logInitialized, message, err := log.New(app.config.log, app.config.AppName)
+	logConfig := app.config.log
+	if isManagedPreforkWorker() {
+		config := log.Run()
+		if logConfig != nil {
+			config = log.Run(*logConfig)
+		}
+		extension := filepath.Ext(config.LogFile)
+		name := strings.TrimSuffix(config.LogFile, extension)
+		config.LogFile = fmt.Sprintf("%s-%d%s", name, os.Getpid(), extension)
+		logConfig = &config
+	}
+
+	logInitialized, message, err := log.New(logConfig, app.config.AppName)
 	if err != nil {
 		golog.Fatalf("failed to run logger: %v. message: %v", err, message)
 	}

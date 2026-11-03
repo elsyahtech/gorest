@@ -9,9 +9,15 @@ Select the suite that matches the required verification scope:
 | App, filter, logger | `make integration-test-app-filter-log` | No external service |
 | Redis, managed disposable | `make integration-test-redis-e2e` | Docker; starts and removes a disposable `redis:7-alpine` container |
 | Redis, external endpoint | `go test -tags=integration ./integration_test/redis -count=1 -v` | Configured Redis service; use for TLS endpoint validation |
+| Listener lifecycle | `go test -tags=integration ./integration_test/app -run TestGORESTListenerConfigurationE2E -count=1 -v` | Local subprocesses; generates temporary TLS certificates, Unix socket, and prefork listener |
 
 These suites verify framework and driver behavior. They do not validate an
 application's schema, business logic, authorization policy, or deployment.
+The listener lifecycle test exercises `app.Start()` and signal-driven shutdown
+with HTTPS/mTLS, Unix domain sockets, prefork worker recovery, route printing,
+and an in-flight request. Its certificates, sockets, and processes are
+temporary; it requires no external database or container. Unix sockets are
+skipped on Windows; prefork is supported on macOS and Linux.
 For a manual CRUD walkthrough, see the
 [`main.go` ORM tutorial](../docs/guide/orm-tutorial.md#2-run-one-manual-crud-flow).
 Recorded endpoint-specific verification results are maintained in the

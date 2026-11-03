@@ -1,16 +1,25 @@
 package server
 
 import (
+	"cmp"
 	"fmt"
+	stdlog "log"
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/elsyahtech/gorest/log"
+	"github.com/gofiber/fiber/v3"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
+)
+
+const (
+	developmentBuildVersion = "development (untagged)"
+	develBuildVersion       = "(devel)"
 )
 
 //nolint:revive
@@ -25,7 +34,7 @@ func printStartupBanner(
 	modules []string,
 	routes ...any,
 ) {
-	address := serverAddress(config.Host, config.Port)
+	address := listenerAddress(*config)
 
 	memoryUsage := getMemoryUsage()
 	processorUsage := getProcessorUsage()
@@ -78,15 +87,38 @@ func printStartupBanner(
 
 	fmt.Println("╚═════════════════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
+
+	if config.Listener.EnablePrefork && config.Listener.EnablePrintRoutes {
+		printPreforkRoutes(server)
+	}
+}
+
+func printPreforkRoutes(server *Server) {
+	routes := server.SRV.GetRoutes()
+	slices.SortStableFunc(routes, func(left, right fiber.Route) int {
+		if left.Path == right.Path {
+			return cmp.Compare(left.Method, right.Method)
+		}
+
+		return cmp.Compare(left.Path, right.Path)
+	})
+
+	stdlog.Println("method  | path | name")
+
+	for _, route := range routes {
+		stdlog.Printf("%-7s | %s | %s", route.Method, route.Path, route.Name)
+	}
+
+	stdlog.Println()
 }
 
 func gorestVersion() string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return "development (untagged)"
+		return developmentBuildVersion
 	}
 
-	if info.Main.Path == "github.com/elsyahtech/gorest" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+	if info.Main.Path == "github.com/elsyahtech/gorest" && info.Main.Version != "" && info.Main.Version != develBuildVersion {
 		return info.Main.Version
 	}
 
@@ -96,19 +128,21 @@ func gorestVersion() string {
 		}
 
 		if dependency.Replace != nil {
-			if dependency.Replace.Version != "" && dependency.Replace.Version != "(devel)" {
+			if dependency.Replace.Version != "" && dependency.Replace.Version != develBuildVersion {
 				return dependency.Replace.Version
 			}
-			return "development (untagged)"
+
+			return developmentBuildVersion
 		}
 
-		if dependency.Version != "" && dependency.Version != "(devel)" {
+		if dependency.Version != "" && dependency.Version != develBuildVersion {
 			return dependency.Version
 		}
-		return "development (untagged)"
+
+		return developmentBuildVersion
 	}
 
-	return "development (untagged)"
+	return developmentBuildVersion
 }
 
 func getRegisteredEndpoints(server *Server) []string {
