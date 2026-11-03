@@ -1,4 +1,31 @@
-# GOREST
+<h1 align="center">
+    <a href="https://github.com/elsyahtech/gorest">
+    <picture>
+      <source height="125" media="(prefers-color-scheme: dark)" srcset="./docs/logo.jpeg">
+      <img height="125" alt="Gorest" src="./docs/logo.jpeg">
+    </picture>
+  </a>
+  <br>
+  <a href="https://pkg.go.dev/github.com/elsyahtech/gorest#pkg-overview">
+    <img alt="Go package documentation" src="https://img.shields.io/badge/%F0%9F%93%9A%20godoc-pkg-00ACD7.svg?color=00ACD7&style=flat-square">
+  </a>
+  <a href="https://github.com/elsyahtech/gorest/actions/workflows/test.yml">
+    <img alt="Test workflow status" src="https://img.shields.io/github/actions/workflow/status/elsyahtech/gorest/test.yml?branch=main&style=flat-square&label=tests">
+  </a>
+  <a href="https://go.dev/doc/install">
+    <img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/elsyahtech/gorest?style=flat-square">
+  </a>
+  <a href="https://github.com/elsyahtech/gorest/blob/main/LICENSE">
+    <img alt="MIT license" src="https://img.shields.io/github/license/elsyahtech/gorest?style=flat-square">
+  </a>
+  <a href="https://github.com/elsyahtech/gorest/tree/main/docs">
+    <img alt="GOREST documentation" src="https://img.shields.io/badge/docs-available-2ea44f?style=flat-square">
+  </a>
+  <a href="https://codecov.io/gh/elsyahtech/gorest">
+    <img alt="Code coverage" src="https://codecov.io/gh/elsyahtech/gorest/branch/main/graph/badge.svg">
+  </a>
+</h1>
+
 
 GOREST is an opinionated Go framework for building websites, REST APIs, and
 backend services. It brings common application lifecycle, HTTP, logging,

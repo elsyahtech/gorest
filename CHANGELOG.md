@@ -2,13 +2,160 @@
 
 This changelog summarizes changes recorded between GOREST's Git version tags.
 Each release links to its GitHub comparison or tag so readers can inspect the
-corresponding source changes. The latest release is expanded by default; older
-releases can be opened as needed.
+corresponding source changes. The latest changes are expanded by default;
+older releases can be opened as needed.
 
 The public release history begins with `v0.0.71`. Earlier versions
 (`v0.0.1`–`v0.0.70`) were development iterations and are not included here.
 
 <details open>
+<summary><strong>Unreleased</strong></summary>
+
+### Fixed
+
+- Treat a GitHub 404 response for `releases/latest` as an informational skipped
+  update check instead of reporting it as a warning. Other request failures and
+  unexpected HTTP responses remain warnings.
+
+### Added
+
+- Added a GitHub Actions test workflow for unit and app, filter, and logger
+  integration tests, with unit coverage reporting.
+
+</details>
+
+<details>
+<summary><strong>v1.1.18</strong> - 2026-11-03</summary>
+
+[Compare v1.1.17 to v1.1.18](https://github.com/elsyahtech/gorest/compare/v1.1.17...v1.1.18)
+
+### Fixed
+
+- Initialize the JWT filter only when a filter configuration is registered;
+  applications that do not use JWT no longer attempt filter initialization
+  during `New()`.
+
+</details>
+
+<details>
+<summary><strong>v1.1.17</strong> - 2026-11-03</summary>
+
+[Compare v1.1.16 to v1.1.17](https://github.com/elsyahtech/gorest/compare/v1.1.16...v1.1.17)
+
+### Added
+
+- Added validated listener configuration for TCP and Unix sockets, TLS/mTLS,
+  route printing, and graceful-shutdown settings.
+- Added GOREST-managed prefork workers with readiness checks, crash recovery,
+  and graceful shutdown. Added end-to-end listener lifecycle coverage.
+
+</details>
+
+<details>
+<summary><strong>v1.1.16</strong> - 2026-11-03</summary>
+
+[Compare v1.1.15 to v1.1.16](https://github.com/elsyahtech/gorest/compare/v1.1.15...v1.1.16)
+
+### Changed
+
+- Clarified and standardized monitoring and database configuration field names
+  across code, tests, and documentation.
+
+</details>
+
+<details>
+<summary><strong>v1.1.15</strong> - 2026-11-02</summary>
+
+[Compare v1.1.14 to v1.1.15](https://github.com/elsyahtech/gorest/compare/v1.1.14...v1.1.15)
+
+### Fixed
+
+- Register operational endpoints independently so a disabled or unavailable
+  endpoint does not prevent the other configured endpoints from being served.
+
+</details>
+
+<details>
+<summary><strong>v1.1.14</strong> - 2026-11-02</summary>
+
+[Compare v1.1.13 to v1.1.14](https://github.com/elsyahtech/gorest/compare/v1.1.13...v1.1.14)
+
+### Added
+
+- Added an asynchronous startup notification when a newer official GOREST
+  release is available. The check has a timeout, can be disabled, and never
+  installs or upgrades the application.
+- Added runtime GOREST version detection for release and development builds.
+
+</details>
+
+<details>
+<summary><strong>v1.1.13</strong> - 2026-11-02</summary>
+
+[Compare v1.1.12 to v1.1.13](https://github.com/elsyahtech/gorest/compare/v1.1.12...v1.1.13)
+
+### Added
+
+- Centralized monitoring configuration and lifecycle management.
+- Expanded operational endpoints with application liveness, readiness, and
+  metrics reporting for configured services.
+
+</details>
+
+<details>
+<summary><strong>v1.1.12</strong> - 2026-11-02</summary>
+
+[Compare v1.1.11 to v1.1.12](https://github.com/elsyahtech/gorest/compare/v1.1.11...v1.1.12)
+
+### Added
+
+- Added HTTP request metrics and database connection/query metrics, including
+  collection and operational endpoint support.
+
+### Fixed
+
+- Refined JWT filter startup handling so applications without a configured
+  signing key can run without enabling JWT authentication.
+
+</details>
+
+<details>
+<summary><strong>v1.1.11</strong> - 2026-11-01</summary>
+
+[Compare v1.1.10 to v1.1.11](https://github.com/elsyahtech/gorest/compare/v1.1.10...v1.1.11)
+
+### Added
+
+- Added a database storage monitoring endpoint and storage reporting for
+  supported SQL and NoSQL database adapters.
+
+</details>
+
+<details>
+<summary><strong>v1.1.10</strong> - 2026-11-01</summary>
+
+[Compare v1.1.9 to v1.1.10](https://github.com/elsyahtech/gorest/compare/v1.1.9...v1.1.10)
+
+### Added
+
+- Added configurable logging for JWT authentication events, including event
+  selection and logging controls.
+
+</details>
+
+<details>
+<summary><strong>v1.1.9</strong> - 2026-11-01</summary>
+
+[Compare v1.1.8 to v1.1.9](https://github.com/elsyahtech/gorest/compare/v1.1.8...v1.1.9)
+
+### Fixed
+
+- Added a guard for token validation to handle invalid or missing token input
+  safely.
+
+</details>
+
+<details>
 <summary><strong>v1.1.8</strong> - 2026-10-31</summary>
 
 [Compare v1.1.7 to v1.1.8](https://github.com/elsyahtech/gorest/compare/v1.1.7...v1.1.8)
