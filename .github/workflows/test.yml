@@ -30,6 +30,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: integration_test/reports/unit-coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
       - name: Run app, filter, and logger integration tests
