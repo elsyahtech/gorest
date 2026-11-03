@@ -20,6 +20,8 @@ const (
 	maxReleaseResponse     = 1 << 20
 )
 
+var errNoPublishedGORESTRelease = errors.New("no published GOREST release found")
+
 type releaseInfo struct {
 	TagName string `json:"tag_name"`
 }
@@ -45,6 +47,14 @@ func (app *App) checkForGorestUpdates(parent context.Context) {
 		installedVersion := currentGORESTVersion()
 		notice, err := checkForUpdate(ctx, installedVersion, http.DefaultClient, latestGORESTReleaseURL)
 		if err != nil {
+			if errors.Is(err, errNoPublishedGORESTRelease) {
+				app.Log(map[string]any{
+					"installed_version": installedVersion,
+				}, true).Info("no published GOREST release found; update check skipped")
+
+				return
+			}
+
 			app.Log(map[string]any{
 				"error":             err,
 				"installed_version": installedVersion,
@@ -101,6 +111,10 @@ func checkForUpdate(
 	}
 
 	defer response.Body.Close()
+
+	if response.StatusCode == http.StatusNotFound {
+		return nil, errNoPublishedGORESTRelease
+	}
 
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("latest GOREST release request returned HTTP %d", response.StatusCode)

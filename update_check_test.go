@@ -2,6 +2,7 @@ package gorest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,12 +14,13 @@ import (
 
 func TestCheckForUpdate(t *testing.T) {
 	tests := []struct {
-		name        string
-		installed   string
-		status      int
-		body        string
-		wantVersion string
-		wantErr     bool
+		name          string
+		installed     string
+		status        int
+		body          string
+		wantVersion   string
+		wantErr       bool
+		wantNoRelease bool
 	}{
 		{
 			name:        "newer release available",
@@ -51,6 +53,13 @@ func TestCheckForUpdate(t *testing.T) {
 			status:    http.StatusServiceUnavailable,
 			body:      `{}`,
 			wantErr:   true,
+		},
+		{
+			name:          "no published latest release",
+			installed:     "v1.1.18",
+			status:        http.StatusNotFound,
+			body:          `{"message":"Not Found"}`,
+			wantNoRelease: true,
 		},
 		{
 			name:      "invalid release version",
@@ -93,7 +102,11 @@ func TestCheckForUpdate(t *testing.T) {
 			defer server.Close()
 
 			notice, err := checkForUpdate(context.Background(), test.installed, server.Client(), server.URL)
-			if (err != nil) != test.wantErr {
+			if test.wantNoRelease {
+				if !errors.Is(err, errNoPublishedGORESTRelease) {
+					t.Fatalf("checkForUpdate() error = %v, want no-published-release result", err)
+				}
+			} else if (err != nil) != test.wantErr {
 				t.Fatalf("checkForUpdate() error = %v, wantErr %t", err, test.wantErr)
 			}
 			if test.wantVersion != "" {

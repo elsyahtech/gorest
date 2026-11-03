@@ -1,4 +1,31 @@
-# GOREST
+<h1 align="center">
+    <a href="https://github.com/elsyahtech/gorest">
+    <picture>
+      <source height="125" media="(prefers-color-scheme: dark)" srcset="./docs/logo.jpeg">
+      <img height="125" alt="Gorest" src="./docs/logo.jpeg">
+    </picture>
+  </a>
+  <br>
+  <a href="https://pkg.go.dev/github.com/elsyahtech/gorest#pkg-overview">
+    <img alt="Go package documentation" src="https://img.shields.io/badge/%F0%9F%93%9A%20godoc-pkg-00ACD7.svg?color=00ACD7&style=flat-square">
+  </a>
+  <a href="https://github.com/elsyahtech/gorest/actions/workflows/test.yml">
+    <img alt="Test workflow status" src="https://img.shields.io/github/actions/workflow/status/elsyahtech/gorest/test.yml?branch=main&style=flat-square&label=tests">
+  </a>
+  <a href="https://go.dev/doc/install">
+    <img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/elsyahtech/gorest?style=flat-square">
+  </a>
+  <a href="https://github.com/elsyahtech/gorest/blob/main/LICENSE">
+    <img alt="MIT license" src="https://img.shields.io/github/license/elsyahtech/gorest?style=flat-square">
+  </a>
+  <a href="https://github.com/elsyahtech/gorest/tree/main/docs">
+    <img alt="GOREST documentation" src="https://img.shields.io/badge/docs-available-2ea44f?style=flat-square">
+  </a>
+  <a href="https://codecov.io/gh/elsyahtech/gorest">
+    <img alt="Code coverage" src="https://codecov.io/gh/elsyahtech/gorest/branch/main/graph/badge.svg">
+  </a>
+</h1>
+
 
 GOREST is an opinionated Go framework for building websites, REST APIs, and
 backend services. It brings common application lifecycle, HTTP, logging,
@@ -326,7 +353,7 @@ app := gorest.New(gorest.Config{
 - **Timezone:** Configures the timezone for database drivers that support it (currently MySQL and Oracle). It does not change Go's process-wide `time.Local`; configure timezone handling explicitly in application code for logs, token expiration, and other values.
 - **Debug:** When set to true, prevents the HTTP server listener from starting. It does not itself make migrations or seeders a dry run.
 - **AllowInsecureProduction:** Application-wide explicit opt-in for intentional non-TLS database or Redis connections in production-like environments. It does not waive TLS when TLS is available; configure the backend securely by default and use this only for trusted, documented exceptions. Foreground startup may prompt interactively, while headless startup requires this typed opt-in or the corresponding component opt-in.
-- **CheckForUpdates:** A `*bool` controlling update notifications. `nil` defaults to enabled; use `gorest.EnableAutoUpdate` to enable or `gorest.DisableAutoUpdate` to disable. The asynchronous startup check compares the official GitHub latest release and only logs a notice; it never upgrades the application. It has a three-second timeout and does not block/fail startup. When enabled, it makes an outbound request to GitHub at each application start.
+- **CheckForUpdates:** A `*bool` controlling update notifications. `nil` defaults to enabled; use `gorest.EnableAutoUpdate` to enable or `gorest.DisableAutoUpdate` to disable. The asynchronous startup check compares the official GitHub latest release and only logs a notice; it never upgrades the application. It has a three-second timeout and does not block/fail startup. When enabled, it makes an outbound request to GitHub at each application start. If GitHub returns 404 because no published latest release is available, GOREST logs an informational skip rather than a warning; this does not assert that the installed version is current.
 ---
 
 ### 2. Custom Subsystem Configuration (`app.Use`)
