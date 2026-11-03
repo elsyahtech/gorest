@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/filter"
 )
 
 func TestNewInitializesApplicationDefaultsAndServices(t *testing.T) {
@@ -23,6 +24,12 @@ func TestNewInitializesApplicationDefaultsAndServices(t *testing.T) {
 	}
 	if app.server == nil || app.log == nil || app.services == nil {
 		t.Fatal("New() did not initialize server, logger, and service registry")
+	}
+	if app.config.filter == nil || app.config.filter.SigningMethod != filter.DefaultSigningMethod {
+		t.Fatal("New() did not initialize default filter configuration")
+	}
+	if app.filter != nil {
+		t.Fatal("New() initialized the JWT filter before it was configured through app.Use()")
 	}
 	if message, code, err := app.Close(); err != nil {
 		t.Fatalf("close newly initialized application: HTTP %d, %s: %v", code, message, err)
