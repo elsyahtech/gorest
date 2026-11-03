@@ -109,6 +109,7 @@ func (app *Server) validateServer(method string) {
 			method,
 		)
 	}
+
 	if app.Router == nil || app.SRV == nil {
 		golog.Fatalf(
 			"cannot register %s route: router is not running. Ensure server.Run(...) is registered with app.Use(...) before registering routes.",
@@ -119,9 +120,11 @@ func (app *Server) validateServer(method string) {
 
 func (app *Server) validateRegistration(method string, handler HandlerFunc, handlers ...HandlerFunc) {
 	app.validateServer(method)
+
 	if handler == nil {
 		golog.Fatalf("cannot register %s route: route handler is nil", method)
 	}
+
 	validateHandlers(method, handlers...)
 }
 
@@ -149,6 +152,7 @@ func wrapHandlers(handlers ...HandlerFunc) []any {
 
 func wrapHandler(handler HandlerFunc) func(fiber.Ctx) error {
 	current := handler
+
 	return func(ctx fiber.Ctx) error {
 		return current(&Context{Ctx: ctx})
 	}

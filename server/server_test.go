@@ -3,11 +3,13 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,6 +55,9 @@ func TestNewAppliesDefaultsForNilAndEmptyConfig(t *testing.T) {
 					DefaultServerIdleTimeout,
 				)
 			}
+			if server.shutdownTimeout != DefaultServerShutdownTimeout {
+				t.Errorf("shutdown timeout = %s, want %s", server.shutdownTimeout, DefaultServerShutdownTimeout)
+			}
 
 			server.SRV.Get("/", func(c fiber.Ctx) error {
 				return c.SendString("ok")
@@ -89,6 +94,162 @@ func TestConfigDefaultAppliesFiniteTimeoutsWhenCoreIsNil(t *testing.T) {
 	if config.Core.IdleTimeout != DefaultServerIdleTimeout || config.Core.IdleTimeout <= 0 {
 		t.Errorf("IdleTimeout = %s, want finite default %s", config.Core.IdleTimeout, DefaultServerIdleTimeout)
 	}
+}
+
+func TestListenerConfigDefaultsAndFiberMapping(t *testing.T) {
+	defaults := configDefault(Config{}).Listener
+	if defaults.Network != fiber.NetworkTCP4 ||
+		defaults.TLSMinVersion != tls.VersionTLS12 ||
+		defaults.UnixSocketFileMode != 0o770 ||
+		defaults.ShutdownTimeout != DefaultServerShutdownTimeout {
+		t.Fatalf("listener defaults = %#v", defaults)
+	}
+
+	listener := ListenerConfig{
+		TLSCertFile:                "server.crt",
+		TLSCertKeyFile:             "server.key",
+		TLSCertClientFile:          "client-ca.crt",
+		TLSMinVersion:              tls.VersionTLS13,
+		EnablePrefork:              true,
+		Network:                    fiber.NetworkTCP6,
+		UnixSocketFileMode:         0o700,
+		ShutdownTimeout:            15 * time.Second,
+		PreforkRecoverInterval:     time.Second,
+		PreforkShutdownGracePeriod: 2 * time.Second,
+		PreforkRecoverThreshold:    3,
+		EnablePrintRoutes:          true,
+	}
+	mapped := listener.fiberListenConfig()
+	if mapped.CertFile != listener.TLSCertFile ||
+		mapped.CertKeyFile != listener.TLSCertKeyFile ||
+		mapped.CertClientFile != listener.TLSCertClientFile ||
+		mapped.TLSMinVersion != listener.TLSMinVersion ||
+		!mapped.EnablePrefork ||
+		mapped.ListenerNetwork != listener.Network ||
+		mapped.UnixSocketFileMode != listener.UnixSocketFileMode ||
+		mapped.ShutdownTimeout != listener.ShutdownTimeout ||
+		mapped.PreforkRecoverInterval != listener.PreforkRecoverInterval ||
+		mapped.PreforkShutdownGracePeriod != listener.PreforkShutdownGracePeriod ||
+		mapped.PreforkRecoverThreshold != listener.PreforkRecoverThreshold ||
+		!mapped.EnablePrintRoutes ||
+		!mapped.DisableStartupMessage {
+		t.Fatalf("Fiber listener mapping = %#v", mapped)
+	}
+}
+
+func TestValidateListenerConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  ListenerConfig
+		wantErr bool
+	}{
+		{name: "default TCP listener", config: configDefault(Config{}).Listener},
+		{
+			name: "Unix listener requires a socket path",
+			config: ListenerConfig{
+				Network:       fiber.NetworkUnix,
+				TLSMinVersion: tls.VersionTLS12,
+			},
+			wantErr: true,
+		},
+		{
+			name: "Unix listener with socket path",
+			config: ListenerConfig{
+				Network:        fiber.NetworkUnix,
+				UnixSocketPath: "/tmp/gorest.sock",
+				TLSMinVersion:  tls.VersionTLS12,
+			},
+		},
+		{
+			name: "certificate and key must be paired",
+			config: ListenerConfig{
+				Network:       fiber.NetworkTCP4,
+				TLSCertFile:   "server.crt",
+				TLSMinVersion: tls.VersionTLS12,
+			},
+			wantErr: true,
+		},
+		{
+			name: "client CA requires server TLS",
+			config: ListenerConfig{
+				Network:           fiber.NetworkTCP4,
+				TLSCertClientFile: "client-ca.crt",
+				TLSMinVersion:     tls.VersionTLS12,
+			},
+			wantErr: true,
+		},
+		{
+			name: "unsupported TLS version",
+			config: ListenerConfig{
+				Network:       fiber.NetworkTCP4,
+				TLSMinVersion: tls.VersionTLS11,
+			},
+			wantErr: true,
+		},
+		{
+			name: "prefork requires TCP4 or TCP6",
+			config: ListenerConfig{
+				Network:       fiber.NetworkTCP,
+				EnablePrefork: true,
+				TLSMinVersion: tls.VersionTLS12,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config := listenerConfigDefault(test.config)
+			err := validateListenerConfig(config)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateListenerConfig() error = %v, wantErr %t", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidatePreforkPlatform(t *testing.T) {
+	config := configDefault(Config{Listener: ListenerConfig{EnablePrefork: true}}).Listener
+	err := validateListenerConfig(config)
+	supported := runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+	if supported && err != nil {
+		t.Fatalf("validateListenerConfig() error = %v on supported platform %s", err, runtime.GOOS)
+	}
+	if !supported && err == nil {
+		t.Fatalf("validateListenerConfig() error = nil on unsupported platform %s", runtime.GOOS)
+	}
+}
+
+func TestPreforkSupervisorIgnoresInvalidLocalRegistration(t *testing.T) {
+	supervisor, err := newPreforkSupervisor(&Server{}, ListenerConfig{})
+	if err != nil {
+		t.Fatalf("newPreforkSupervisor() error = %v", err)
+	}
+	go supervisor.acceptWorkers()
+
+	connection, err := net.Dial("tcp4", supervisor.control.Addr().String())
+	if err != nil {
+		t.Fatalf("dial supervisor control listener: %v", err)
+	}
+	if _, err := connection.Write([]byte(strings.Repeat("x", preforkRegistrationLimit+1))); err != nil {
+		t.Fatalf("write invalid registration: %v", err)
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatalf("close invalid registration connection: %v", err)
+	}
+
+	select {
+	case err := <-supervisor.failures:
+		t.Fatalf("invalid local registration caused supervisor failure: %v", err)
+	case registration := <-supervisor.ready:
+		t.Fatalf("invalid local registration was accepted: %#v", registration)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if err := supervisor.control.Close(); err != nil {
+		t.Fatalf("close supervisor control listener: %v", err)
+	}
+	close(supervisor.done)
 }
 
 func TestConfigDefaultPreservesExplicitCoreTimeouts(t *testing.T) {
@@ -132,6 +293,10 @@ func TestRunAndStartServerInputValidation(t *testing.T) {
 	}
 	if message, err := StartServer(server, &config, nil, "", "", "", "", nil); err == nil || message == "" {
 		t.Fatalf("StartServer(nil logger) = (%q, %v), want a logger error", message, err)
+	}
+
+	if _, _, err := New(&Config{Listener: ListenerConfig{Network: "udp"}}); err == nil {
+		t.Fatal("New() error = nil for unsupported listener network")
 	}
 }
 
@@ -281,6 +446,39 @@ func TestServerAddress(t *testing.T) {
 				t.Fatalf("serverAddress(%q, %d) = %q, want %q", test.host, test.port, got, test.want)
 			}
 		})
+	}
+}
+
+func TestListenerAddressUsesUnixSocketPath(t *testing.T) {
+	config := configDefault(Config{
+		Host: "0.0.0.0",
+		Port: 8080,
+		Listener: ListenerConfig{
+			Network:        fiber.NetworkUnix,
+			UnixSocketPath: "/run/gorest/server.sock",
+		},
+	})
+	if got, want := listenerAddress(config), "/run/gorest/server.sock"; got != want {
+		t.Fatalf("listenerAddress() = %q, want %q", got, want)
+	}
+}
+
+func TestShutdownUsesConfiguredTimeout(t *testing.T) {
+	server, _, err := New(&Config{Listener: ListenerConfig{
+		ShutdownTimeout: 10 * time.Millisecond,
+	}})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	server.ExpectListen()
+
+	startedAt := time.Now()
+	err = server.Shutdown(context.Background())
+	if err == nil {
+		t.Fatal("Shutdown() error = nil, want timeout while waiting for listener")
+	}
+	if elapsed := time.Since(startedAt); elapsed < 10*time.Millisecond || elapsed > time.Second {
+		t.Errorf("Shutdown() elapsed = %s, want approximately configured timeout", elapsed)
 	}
 }
 

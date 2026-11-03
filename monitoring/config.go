@@ -24,8 +24,8 @@ type Config struct {
 
 var ConfigDefault = Config{
 	MonitoringAllowedIPs:        nil,
-	DisableMonitoringEndpoints:  false,
-	EnableHTTPMetricsMonitoring: false,
+	DisableMonitoringEndpoints:  DefaultDisableMonitoringEndpoints,
+	EnableHTTPMetricsMonitoring: DefaultEnableHTTPMetricsMonitoring,
 }
 
 func configDefault(config ...Config) Config {

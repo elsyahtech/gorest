@@ -18,6 +18,7 @@ import (
 	"time"
 
 	gorest "github.com/elsyahtech/gorest"
+	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/server"
 )
 
@@ -134,7 +135,7 @@ func runAppHelper(t *testing.T) {
 	configuration.Host = "127.0.0.1"
 	configuration.Port = port
 	application := gorest.New()
-	application.Use(configuration)
+	application.Use(configuration, monitoring.Config{MonitoringAllowedIPs: []string{"127.0.0.1/32"}})
 	application.RegisterServices([]gorest.RouterRegistrar{
 		func(app *gorest.App) {
 			app.Get("/ready", func(ctx *gorest.Context) error {

@@ -637,10 +637,7 @@ func (app *App) Close() (string, int, error) {
 	)
 
 	if app.server != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), server.DefaultServerShutdownTimeout)
-		err := app.server.Shutdown(ctx)
-
-		defer cancel()
+		err := app.server.Shutdown(context.Background())
 
 		if err != nil {
 			const msg = "failed to gracefully shut down HTTP server"

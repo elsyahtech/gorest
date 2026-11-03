@@ -51,6 +51,7 @@ func (app *App) checkForGorestUpdates(parent context.Context) {
 			}, true).Warn("could not check for GOREST updates")
 			return
 		}
+
 		if notice == nil {
 			return
 		}
@@ -76,9 +77,11 @@ func checkForUpdate(
 	if !semver.IsValid(installedVersion) {
 		return nil, nil
 	}
+
 	if ctx == nil {
 		return nil, errors.New("update check context is nil")
 	}
+
 	if client == nil {
 		return nil, errors.New("update check HTTP client is nil")
 	}
@@ -87,6 +90,7 @@ func checkForUpdate(
 	if err != nil {
 		return nil, fmt.Errorf("create GOREST release request: %w", err)
 	}
+
 	request.Header.Set("Accept", "application/vnd.github+json")
 	request.Header.Set("User-Agent", "gorest-update-check")
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
@@ -95,6 +99,7 @@ func checkForUpdate(
 	if err != nil {
 		return nil, fmt.Errorf("request latest GOREST release: %w", err)
 	}
+
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
@@ -105,17 +110,21 @@ func checkForUpdate(
 	if err != nil {
 		return nil, fmt.Errorf("read latest GOREST release response: %w", err)
 	}
+
 	if len(body) > maxReleaseResponse {
 		return nil, fmt.Errorf("latest GOREST release response exceeds %d bytes", maxReleaseResponse)
 	}
 
 	var release releaseInfo
+
 	if err := json.Unmarshal(body, &release); err != nil {
 		return nil, fmt.Errorf("decode latest GOREST release response: %w", err)
 	}
+
 	if !semver.IsValid(release.TagName) {
 		return nil, fmt.Errorf("latest GOREST release has invalid version tag %q", release.TagName)
 	}
+
 	if semver.Compare(installedVersion, release.TagName) >= 0 {
 		return nil, nil
 	}

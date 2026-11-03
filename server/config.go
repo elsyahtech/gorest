@@ -1,8 +1,11 @@
 package server
 
 import (
+	"crypto/tls"
 	"log"
-	"strings"
+	"os"
+	"runtime"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/compress"
@@ -12,6 +15,23 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 )
+
+// ListenerConfig describes deployment-level HTTP listener options.
+type ListenerConfig struct {
+	Network                    string
+	TLSCertKeyFile             string
+	TLSCertClientFile          string
+	TLSCertFile                string
+	UnixSocketPath             string
+	PreforkRecoverInterval     time.Duration
+	ShutdownTimeout            time.Duration
+	PreforkShutdownGracePeriod time.Duration
+	PreforkRecoverThreshold    int
+	UnixSocketFileMode         os.FileMode
+	TLSMinVersion              uint16
+	EnablePrefork              bool
+	EnablePrintRoutes          bool
+}
 
 type Config struct {
 	// Core defines the core Fiber framework configuration options. When nil,
@@ -54,9 +74,20 @@ type Config struct {
 	// Default: "127.0.0.1"
 	Host string
 
+	Listener ListenerConfig
+
 	// Port is server port
 	// Default: 3000
 	Port int
+}
+
+var defaultListenerConfig = ListenerConfig{
+	Network:                    fiber.NetworkTCP4,
+	TLSMinVersion:              tls.VersionTLS12,
+	UnixSocketFileMode:         0o770,
+	ShutdownTimeout:            DefaultServerShutdownTimeout,
+	PreforkShutdownGracePeriod: 5 * time.Second,
+	PreforkRecoverThreshold:    max(1, runtime.GOMAXPROCS(0)/2),
 }
 
 var ConfigDefault = Config{
@@ -89,6 +120,8 @@ var ConfigDefault = Config{
 
 	// Default: 3000
 	Port: DefaultServerPort,
+
+	Listener: defaultListenerConfig,
 }
 
 // configDefault returns the standard ConfigDefault when no config is provided.
@@ -148,33 +181,53 @@ func configDefault(config ...Config) Config {
 		log.Fatalf("Config Server: Port must be greater than or equal to 0") //nolint:revive
 	}
 
+	cfg.Listener = listenerConfigDefault(cfg.Listener)
+
 	return cfg
 }
 
-func warnOnUnboundedTimeouts(core *fiber.Config) {
-	if core == nil {
-		return
+func listenerConfigDefault(config ListenerConfig) ListenerConfig {
+	if config.Network == "" {
+		config.Network = defaultListenerConfig.Network
 	}
 
-	var unbounded []string
-
-	if core.ReadTimeout == 0 {
-		unbounded = append(unbounded, "ReadTimeout")
+	if config.TLSMinVersion == 0 {
+		config.TLSMinVersion = defaultListenerConfig.TLSMinVersion
 	}
 
-	if core.WriteTimeout == 0 {
-		unbounded = append(unbounded, "WriteTimeout")
+	if config.UnixSocketFileMode == 0 {
+		config.UnixSocketFileMode = defaultListenerConfig.UnixSocketFileMode
 	}
 
-	if len(unbounded) == 0 {
-		return
+	if config.ShutdownTimeout == 0 {
+		config.ShutdownTimeout = defaultListenerConfig.ShutdownTimeout
 	}
 
-	log.Printf(
-		"WARNING: server Core sets %s to zero, which Fiber treats as unlimited; "+
-			"slow request bodies or response writes can hold connections for an unbounded time. "+
-			"Configure finite positive timeouts unless this is intentional. "+
-			"Fiber uses ReadTimeout when IdleTimeout is zero.",
-		strings.Join(unbounded, " and "),
-	)
+	if config.PreforkShutdownGracePeriod == 0 {
+		config.PreforkShutdownGracePeriod = defaultListenerConfig.PreforkShutdownGracePeriod
+	}
+
+	if config.PreforkRecoverThreshold == 0 {
+		config.PreforkRecoverThreshold = defaultListenerConfig.PreforkRecoverThreshold
+	}
+
+	return config
+}
+
+func (config ListenerConfig) fiberListenConfig() fiber.ListenConfig {
+	return fiber.ListenConfig{
+		ListenerNetwork:            config.Network,
+		CertFile:                   config.TLSCertFile,
+		CertKeyFile:                config.TLSCertKeyFile,
+		CertClientFile:             config.TLSCertClientFile,
+		ShutdownTimeout:            config.ShutdownTimeout,
+		PreforkRecoverInterval:     config.PreforkRecoverInterval,
+		PreforkShutdownGracePeriod: config.PreforkShutdownGracePeriod,
+		UnixSocketFileMode:         config.UnixSocketFileMode,
+		TLSMinVersion:              config.TLSMinVersion,
+		EnablePrefork:              config.EnablePrefork,
+		PreforkRecoverThreshold:    config.PreforkRecoverThreshold,
+		EnablePrintRoutes:          config.EnablePrintRoutes,
+		DisableStartupMessage:      true,
+	}
 }
