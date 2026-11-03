@@ -248,12 +248,15 @@ func (app *App) filterInit(config *filter.Config) {
 	if config == nil {
 		app.config.filter = nil
 		app.filter = nil
-		app.Log(nil, true).Info("JWT filter is disabled.")
+		app.Log(nil, true).Info("Filter is disabled.")
 
 		return
 	}
 
 	filterConfig := filter.Run(*config)
+
+	app.Log(nil, true).Info("Starting filter...")
+
 	if filterConfig.SignatureKey == nil || strings.TrimSpace(*filterConfig.SignatureKey) == "" {
 		app.Log(map[string]any{
 			LogFieldKeyError:   "signature key in invalid or empty",
@@ -287,6 +290,8 @@ func (app *App) filterInit(config *filter.Config) {
 		Config: &filterConfig,
 		Logger: app.log.Log(nil, true),
 	}
+
+	app.Log(nil, true).Info("Filter initialized successfully, filter is running")
 
 	app.registerService("Filter")
 }

@@ -2,9 +2,8 @@ package gorest
 
 import (
 	"context"
-	"os"
-
 	golog "log"
+	"os"
 )
 
 func New(config ...Config) *App {
@@ -29,9 +28,6 @@ func New(config ...Config) *App {
 
 	// initialize the server
 	app.serverInit()
-
-	// initialize the filter
-	app.filterInit(app.config.filter)
 
 	return app
 }

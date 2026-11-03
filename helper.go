@@ -183,11 +183,13 @@ func (app *App) logProductionWarnings() {
 		}, true).Warn(level)
 	}
 
-	if warning, shouldWarn := productionFilterCookieWarning(app.config.filter); shouldWarn {
-		app.Log(Map{
-			"environment": app.config.Environment,
-			"message":     warning,
-		}, true).Warn("JWT cookie transport security is not guaranteed in a production environment")
+	if app.filter != nil {
+		if warning, shouldWarn := productionFilterCookieWarning(app.filter.Config); shouldWarn {
+			app.Log(Map{
+				"environment": app.config.Environment,
+				"message":     warning,
+			}, true).Warn("JWT cookie transport security is not guaranteed in a production environment")
+		}
 	}
 }
 
