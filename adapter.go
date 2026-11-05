@@ -41,6 +41,10 @@ func (app *App) Timezone() string { return app.config.Timezone }
 // IsDebug is a getter that reports whether debug mode is enabled in the config.
 func (app *App) IsDebug() bool { return app.config.Debug }
 
+func (app *App) AllowInsecureProduction() bool { return app.config.AllowInsecureProduction }
+
+func (app *App) CheckForUpdates() bool { return *app.config.CheckForUpdates }
+
 // Database returns a new DBSession wrapper around the application's registered
 // database services. The wrapper does not create a new connection pool.
 // Common query methods validate inputs and return errors; RawQuery methods are

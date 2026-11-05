@@ -375,7 +375,7 @@ func productionDatabaseTLSWarning(cfg *database.Config) (string, bool) {
 	case database.SQLITE:
 		return "", false
 	case database.MYSQL:
-		return mysqlCaseOnProductionDatabaseTLSWarning(cfg, tlsMode)
+		return mysqlCaseOnProductionDatabaseTLSWarning(tlsMode)
 	case database.POSTGRES:
 		return postgresCaseOnProductionDatabaseTLSWarning(tlsMode)
 	case database.SQLSERVER:
@@ -415,14 +415,19 @@ func isProductionEnvironment(environment string) bool {
 	}
 }
 
-func mysqlCaseOnProductionDatabaseTLSWarning(cfg *database.Config, tlsMode string) (string, bool) {
-	if cfg.SSLCAPath == "" || tlsMode != database.TLSTrue {
-		return "MySQL TLS is disabled or cannot be verified from this configuration. " +
-			"Set TLS to \"true\" to use the driver's system certificate roots, or register and verify a go-sql-driver/mysql TLS profile; " +
-			"GOREST only passes the TLS option when SSLCAPath is set.", true
+func mysqlCaseOnProductionDatabaseTLSWarning(tlsMode string) (string, bool) {
+	switch tlsMode {
+	case database.TLSTrue:
+		return "", false
+	case "", database.TLSDisabled, database.TLSFalse:
+		return "MySQL TLS is disabled. Set TLS to \"true\" to use system certificate roots and verify the server hostname.", true
+	case "skip-verify":
+		return "MySQL TLS mode \"skip-verify\" disables server certificate verification; use TLS \"true\" or a verified TLS profile.", true
+	case "preferred":
+		return "MySQL TLS mode \"preferred\" may fall back to an unencrypted connection and disables certificate verification; use TLS \"true\" or a verified TLS profile.", true
+	default:
+		return "MySQL TLS profile cannot be verified from GOREST configuration. Ensure the registered driver profile validates the server certificate and hostname.", true
 	}
-
-	return "", false
 }
 
 func postgresCaseOnProductionDatabaseTLSWarning(tlsMode string) (string, bool) {

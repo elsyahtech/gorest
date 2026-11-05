@@ -17,16 +17,17 @@ operations, transactions, migrations, and application lifecycle.
 
 ## TLS
 
-With the MySQL Go driver, `TLS: "true"` uses system root certificates and
-verifies the hostname derived from the connection address. GOREST requires a
-non-empty `SSLCAPath` to enable forwarding the TLS option, but does not load
-that path as a custom CA certificate.
+With the MySQL Go driver, `TLS: "true"` enables TLS using system root
+certificates and verifies the hostname derived from the connection address.
+No CA path is needed when the server certificate chains to a trusted system
+root. The connection fails verification if the certificate is invalid, the
+hostname does not match, or its issuing CA is not trusted.
 
 For a private CA or mTLS, register a TLS profile with
 `mysql.RegisterTLSConfig` before initializing the database. Configure its
 `RootCAs`, `ServerName`, and, for mTLS, client certificate. Set `TLS` to that
-profile name and keep `SSLCAPath` non-empty. GOREST does not map
-`SSLCertPath` or `SSLKeyPath` into the MySQL driver profile.
+profile name. `SSLCAPath` is not used by the MySQL driver, and GOREST does not
+map `SSLCertPath` or `SSLKeyPath` into the MySQL driver profile.
 
 Avoid `skip-verify` and `preferred` modes where server identity must be
 verified. See the [database configuration guide](../configuration.md) for

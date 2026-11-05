@@ -56,11 +56,11 @@ type Config struct {
 	// Transport Layer Security (TLS) mode for database connections. The accepted
 	// value is driver-specific:
 	//   - PostgreSQL: "disable", "require", "verify-ca", or "verify-full".
-	//   - MySQL: driver TLS mode; a non-empty SSLCAPath enables passing this
-	//     mode to the driver, but the path itself is not loaded by Gorest.
-	//     "true" uses the driver's system certificate roots. For a custom CA
-	//     or client certificate, register a driver TLS profile and set TLS to
-	//     its name; SSLCAPath must still be non-empty to enable that option.
+	//   - MySQL: driver TLS mode. "true" uses the driver's system certificate
+	//     roots and verifies the server hostname. A custom CA or client
+	//     certificate requires a driver TLS profile registered with
+	//     mysql.RegisterTLSConfig; set TLS to that profile name. SSLCAPath is
+	//     not used by the MySQL driver.
 	//   - SQL Server: "disable", "optional", "mandatory", or "strict"; keep
 	//     TrustServerCertificate false to validate the server certificate.
 	//   - Oracle: "enable" uses TCPS and requires an Oracle wallet via SSLCAPath;
@@ -100,9 +100,8 @@ type Config struct {
 
 	// Path to CA certificate file for server certificate verification.
 	// Example: "./data/cert/ca.crt"
-	// MySQL note: a non-empty value only enables its TLS option; Gorest does not
-	// load this path as a CA file. The driver uses system roots for TLS "true";
-	// use a registered driver TLS profile for a custom CA or client certificate.
+	// MySQL does not use this field. TLS "true" uses system roots; use a
+	// registered driver TLS profile for a custom CA or client certificate.
 	// Oracle: repurposed as the path to the Oracle Wallet directory (equivalent to
 	// TNS_ADMIN), containing cwallet.sso, tnsnames.ora, sqlnet.ora, etc. Required
 	// when TLS is "enable". Example: "./data/oracle/wallet"
