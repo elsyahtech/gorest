@@ -37,6 +37,7 @@ Makefile
 cmd/
 coba/
 logs/
+cert/
 
 database/gorest.db
 

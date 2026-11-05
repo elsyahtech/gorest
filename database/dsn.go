@@ -1,9 +1,12 @@
 package database
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 
 func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 	dsnConfig := mysql.NewConfig()
+
 	dsnConfig.User = cfg.Username
 	dsnConfig.Passwd = cfg.Password
 	dsnConfig.Net = "tcp"
@@ -31,7 +35,40 @@ func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 		return nil, fmt.Errorf("configure MySQL charset: %w", err)
 	}
 
-	if cfg.TLS != "" && cfg.TLS != TLSDisabled {
+	if cfg.TLS == TLSTrue && (cfg.SSLCAPath != "" || cfg.SSLCertPath != "" || cfg.SSLKeyPath != "") {
+		if (cfg.SSLCertPath == "") != (cfg.SSLKeyPath == "") {
+			return nil, fmt.Errorf("MySQL client certificate and key must be configured together")
+		}
+
+		tlsConfig := &tls.Config{
+			ServerName: cfg.Host,
+		}
+
+		if cfg.SSLCAPath != "" {
+			caCert, err := os.ReadFile(cfg.SSLCAPath)
+			if err != nil {
+				return nil, fmt.Errorf("read MySQL CA certificate: %w", err)
+			}
+
+			rootCertPool := x509.NewCertPool()
+			if !rootCertPool.AppendCertsFromPEM(caCert) {
+				return nil, fmt.Errorf("parse MySQL CA certificate %q: no valid PEM certificates found", cfg.SSLCAPath)
+			}
+
+			tlsConfig.RootCAs = rootCertPool
+		}
+
+		if cfg.SSLCertPath != "" {
+			clientCert, err := tls.LoadX509KeyPair(cfg.SSLCertPath, cfg.SSLKeyPath)
+			if err != nil {
+				return nil, fmt.Errorf("load MySQL client certificate and key: %w", err)
+			}
+
+			tlsConfig.Certificates = []tls.Certificate{clientCert}
+		}
+
+		dsnConfig.TLS = tlsConfig
+	} else if cfg.TLS != "" && cfg.TLS != TLSDisabled {
 		dsnConfig.TLSConfig = cfg.TLS
 	}
 

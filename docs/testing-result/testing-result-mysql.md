@@ -23,11 +23,12 @@ No CA path is needed when the server certificate chains to a trusted system
 root. The connection fails verification if the certificate is invalid, the
 hostname does not match, or its issuing CA is not trusted.
 
-For a private CA or mTLS, register a TLS profile with
-`mysql.RegisterTLSConfig` before initializing the database. Configure its
-`RootCAs`, `ServerName`, and, for mTLS, client certificate. Set `TLS` to that
-profile name. `SSLCAPath` is not used by the MySQL driver, and GOREST does not
-map `SSLCertPath` or `SSLKeyPath` into the MySQL driver profile.
+For a private CA, set `SSLCAPath` while `TLS` is `"true"`; GOREST loads the PEM
+file as the trust pool and keeps hostname verification enabled. For mTLS, set
+both `SSLCertPath` and `SSLKeyPath`, also with `TLS: "true"`. These file paths
+are ignored when `TLS` names a registered MySQL TLS profile. For other custom
+TLS settings, register a profile with `mysql.RegisterTLSConfig` and set `TLS`
+to that profile name.
 
 Avoid `skip-verify` and `preferred` modes where server identity must be
 verified. See the [database configuration guide](../configuration.md) for

@@ -18,8 +18,8 @@ The public release history begins with `v0.0.71`. Earlier versions
   unexpected HTTP responses remain warnings.
 - Enable MySQL TLS when `TLS` is configured without requiring `SSLCAPath`.
   `TLS: "true"` now uses the driver's system certificate roots and verifies the
-  server hostname; custom CA and mTLS configurations use a registered MySQL TLS
-  profile.
+  server hostname. Optional `SSLCAPath`, `SSLCertPath`, and `SSLKeyPath`
+  configure a private CA or mTLS directly.
 
 ### Added
 

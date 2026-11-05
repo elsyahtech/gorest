@@ -75,6 +75,11 @@ For an external MySQL TLS endpoint, the driver suite checks successful
 system-root and hostname validation and rejection of an untrusted CA and
 hostname. It also logs the server-reported `@@version_comment` alongside
 `VERSION()`; these are server claims, not cryptographic vendor attestation.
+The direct-CA test sets `TLS: "true"` with `GOREST_IT_MYSQL_SSL_CA` and verifies
+that a TLS session is negotiated. It uses `GOREST_IT_MYSQL_HOST`, `_PORT`,
+`_NAME`, `_USERNAME`, and `_PASSWORD` for the endpoint and credentials.
+Optionally set `GOREST_IT_MYSQL_SSL_CERT` and `_SSL_KEY` when that endpoint
+requires a client certificate; the test uses the pair together.
 The optional MySQL mTLS test requires a separate disposable account and
 endpoint configured to require a client certificate (for example, account
 `REQUIRE X509`). Set `GOREST_IT_MYSQL_MTLS_HOST`, `_PORT`, `_NAME`,

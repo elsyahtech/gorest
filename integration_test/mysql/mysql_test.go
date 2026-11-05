@@ -190,6 +190,53 @@ func TestMySQLTLSVerifiesServerCertificateAndHostname(t *testing.T) {
 	}
 }
 
+func TestMySQLTLSWithDirectCAConfig(t *testing.T) {
+	if os.Getenv("GOREST_IT_MYSQL_HOST") == "" &&
+		!strings.EqualFold(os.Getenv("GOREST_IT_REQUIRED"), "true") &&
+		os.Getenv("GOREST_IT_REQUIRED") != "1" {
+		t.Skip("set GOREST_IT_MYSQL_HOST to run MySQL TLS configuration tests")
+	}
+
+	cfg := database.ConfigFromEnv("GOREST_IT_MYSQL")
+	cfg.Driver = database.MYSQL
+	cfg.Timeout = 10 * time.Second
+	cfg.TLS = database.TLSTrue
+	if cfg.SSLCAPath == "" {
+		t.Skip("set GOREST_IT_MYSQL_SSL_CA to run MySQL TLS configuration tests")
+	}
+
+	systemRootsConfig := cfg
+	systemRootsConfig.SSLCAPath = ""
+	systemRootsContext, systemRootsCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	_, _, systemRootsErr := database.New(systemRootsContext, &systemRootsConfig, "UTC")
+	systemRootsCancel()
+	var unknownAuthorityErr x509.UnknownAuthorityError
+	if !errors.As(systemRootsErr, &unknownAuthorityErr) {
+		t.Fatalf("MySQL TLS connection without CA error = %v, want system-root verification failure", systemRootsErr)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db, _, err := database.New(ctx, &cfg, "UTC")
+	if err != nil {
+		t.Fatalf("connect to MySQL with TLS and configured CA: %v", err)
+	}
+	defer func() {
+		if _, _, err := db.Close(ctx, &cfg); err != nil {
+			t.Errorf("close MySQL connection: %v", err)
+		}
+	}()
+
+	var status, cipher string
+	if err := db.SQL.QueryRowContext(ctx, "SHOW SESSION STATUS LIKE 'Ssl_cipher'").Scan(&status, &cipher); err != nil {
+		t.Fatalf("query MySQL TLS status: %v", err)
+	}
+	if status != "Ssl_cipher" || cipher == "" {
+		t.Fatalf("MySQL connection did not negotiate TLS (status=%q, cipher=%q)", status, cipher)
+	}
+}
+
 func TestMySQLMutualTLSRequiresClientCertificate(t *testing.T) {
 	const (
 		noClientCertificateProfile = "gorest_integration_mtls_without_client_cert"

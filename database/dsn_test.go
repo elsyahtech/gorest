@@ -1,7 +1,15 @@
 package database
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -16,7 +24,6 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	cfg.Port = MYSQL_PORT
 	cfg.Charset = "utf8mb4"
 	cfg.TLS = "false"
-	cfg.SSLCAPath = "/tmp/ca cert.pem"
 	driverConfig, err := mysqlDriverConfig(cfg, "UTC")
 	if err != nil {
 		t.Fatalf("mysqlDriverConfig() error = %v", err)
@@ -51,6 +58,81 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	}
 }
 
+func TestMySQLDriverConfigLoadsOptionalCAAndClientCertificate(t *testing.T) {
+	caPath, clientCertPath, clientKeyPath := writeMySQLTestCertificates(t)
+	cfg := testDSNConfig()
+	cfg.TLS = TLSTrue
+	cfg.SSLCAPath = caPath
+	cfg.SSLCertPath = clientCertPath
+	cfg.SSLKeyPath = clientKeyPath
+
+	driverConfig, err := mysqlDriverConfig(cfg, "UTC")
+	if err != nil {
+		t.Fatalf("mysqlDriverConfig() error = %v", err)
+	}
+	if driverConfig.TLS == nil {
+		t.Fatal("TLS config is nil, want direct TLS config for custom certificate paths")
+	}
+	if driverConfig.TLS.ServerName != cfg.Host {
+		t.Errorf("TLS ServerName = %q, want %q", driverConfig.TLS.ServerName, cfg.Host)
+	}
+	if driverConfig.TLS.InsecureSkipVerify {
+		t.Error("TLS config enabled InsecureSkipVerify")
+	}
+	if driverConfig.TLS.RootCAs == nil || len(driverConfig.TLS.RootCAs.Subjects()) == 0 {
+		t.Error("TLS RootCAs is empty, want configured CA certificate")
+	}
+	if len(driverConfig.TLS.Certificates) != 1 {
+		t.Errorf("TLS client certificates = %d, want 1", len(driverConfig.TLS.Certificates))
+	}
+	if _, err := mysql.NewConnector(driverConfig); err != nil {
+		t.Fatalf("mysql.NewConnector() with custom TLS config error = %v", err)
+	}
+}
+
+func TestMySQLDriverConfigRejectsInvalidCertificatePaths(t *testing.T) {
+	t.Run("incomplete client certificate pair", func(t *testing.T) {
+		cfg := testDSNConfig()
+		cfg.TLS = TLSTrue
+		cfg.SSLCertPath = "client.crt"
+
+		if _, err := mysqlDriverConfig(cfg, "UTC"); err == nil {
+			t.Fatal("mysqlDriverConfig() error = nil, want incomplete client certificate pair error")
+		}
+	})
+
+	t.Run("invalid CA PEM", func(t *testing.T) {
+		caPath := filepath.Join(t.TempDir(), "ca.pem")
+		if err := os.WriteFile(caPath, []byte("not a PEM certificate"), 0o600); err != nil {
+			t.Fatalf("write invalid CA file: %v", err)
+		}
+		cfg := testDSNConfig()
+		cfg.TLS = TLSTrue
+		cfg.SSLCAPath = caPath
+
+		if _, err := mysqlDriverConfig(cfg, "UTC"); err == nil {
+			t.Fatal("mysqlDriverConfig() error = nil, want invalid CA PEM error")
+		}
+	})
+
+	t.Run("named profile takes precedence over certificate paths", func(t *testing.T) {
+		cfg := testDSNConfig()
+		cfg.TLS = "private-profile"
+		cfg.SSLCAPath = filepath.Join(t.TempDir(), "unused-ca.pem")
+
+		driverConfig, err := mysqlDriverConfig(cfg, "UTC")
+		if err != nil {
+			t.Fatalf("mysqlDriverConfig() error = %v", err)
+		}
+		if driverConfig.TLSConfig != cfg.TLS {
+			t.Errorf("TLSConfig = %q, want named profile %q", driverConfig.TLSConfig, cfg.TLS)
+		}
+		if driverConfig.TLS != nil {
+			t.Error("TLS config is set, want named profile to take precedence")
+		}
+	})
+}
+
 func TestMySQLDriverConfigTLSDoesNotRequireCAPath(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -77,6 +159,63 @@ func TestMySQLDriverConfigTLSDoesNotRequireCAPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func writeMySQLTestCertificates(t *testing.T) (caPath, clientCertPath, clientKeyPath string) {
+	t.Helper()
+
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate CA key: %v", err)
+	}
+
+	now := time.Now()
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "GOREST test CA"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create CA certificate: %v", err)
+	}
+
+	clientKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate client key: %v", err)
+	}
+	clientTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "GOREST test client"},
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	clientDER, err := x509.CreateCertificate(rand.Reader, clientTemplate, caTemplate, &clientKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create client certificate: %v", err)
+	}
+
+	directory := t.TempDir()
+	caPath = filepath.Join(directory, "ca.pem")
+	clientCertPath = filepath.Join(directory, "client.crt")
+	clientKeyPath = filepath.Join(directory, "client.key")
+	for path, data := range map[string][]byte{
+		caPath:         pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}),
+		clientCertPath: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientDER}),
+		clientKeyPath:  pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(clientKey)}),
+	} {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatalf("write test TLS file %q: %v", path, err)
+		}
+	}
+
+	return caPath, clientCertPath, clientKeyPath
 }
 
 func TestMSSQLDSNRoundTripsCredentials(t *testing.T) {
