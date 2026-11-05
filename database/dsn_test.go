@@ -51,6 +51,34 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	}
 }
 
+func TestMySQLDriverConfigTLSDoesNotRequireCAPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		tls     string
+		wantTLS string
+	}{
+		{name: "system roots", tls: TLSTrue, wantTLS: TLSTrue},
+		{name: "custom profile", tls: "private-ca", wantTLS: "private-ca"},
+		{name: "disabled", tls: TLSDisabled},
+		{name: "omitted", tls: ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := testDSNConfig()
+			cfg.TLS = test.tls
+
+			driverConfig, err := mysqlDriverConfig(cfg, "UTC")
+			if err != nil {
+				t.Fatalf("mysqlDriverConfig() error = %v", err)
+			}
+			if driverConfig.TLSConfig != test.wantTLS {
+				t.Errorf("TLSConfig = %q, want %q", driverConfig.TLSConfig, test.wantTLS)
+			}
+		})
+	}
+}
+
 func TestMSSQLDSNRoundTripsCredentials(t *testing.T) {
 	cfg := testDSNConfig()
 	cfg.TLS = "mandatory"

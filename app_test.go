@@ -148,14 +148,12 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 			},
 		},
 		{
-			name: "mysql tls missing ca setting",
+			name: "mysql tls uses system roots without ca path",
 			config: &database.Config{
 				Disable: false,
 				Driver:  database.MYSQL,
 				TLS:     database.TLSTrue,
 			},
-			wantWarn:   true,
-			wantReason: "MySQL TLS",
 		},
 		{
 			name: "mysql tls preferred can fall back to plaintext",
@@ -166,26 +164,24 @@ func TestProductionDatabaseTLSWarning(t *testing.T) {
 				SSLCAPath: "/etc/ssl/db-ca.pem",
 			},
 			wantWarn:   true,
-			wantReason: "MySQL TLS is disabled or cannot be verified",
+			wantReason: "may fall back to an unencrypted connection",
 		},
 		{
 			name: "mysql custom tls profile cannot be inspected",
 			config: &database.Config{
-				Disable:   false,
-				Driver:    database.MYSQL,
-				TLS:       "private-ca-profile",
-				SSLCAPath: "/etc/ssl/db-ca.pem",
+				Disable: false,
+				Driver:  database.MYSQL,
+				TLS:     "private-ca-profile",
 			},
 			wantWarn:   true,
-			wantReason: "cannot be verified from this configuration",
+			wantReason: "cannot be verified from GOREST configuration",
 		},
 		{
 			name: "mysql tls configured",
 			config: &database.Config{
-				Disable:   false,
-				Driver:    database.MYSQL,
-				TLS:       database.TLSTrue,
-				SSLCAPath: "/etc/ssl/db-ca.pem",
+				Disable: false,
+				Driver:  database.MYSQL,
+				TLS:     database.TLSTrue,
 			},
 		},
 		{

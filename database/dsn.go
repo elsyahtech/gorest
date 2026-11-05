@@ -31,7 +31,7 @@ func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 		return nil, fmt.Errorf("configure MySQL charset: %w", err)
 	}
 
-	if cfg.SSLCAPath != "" && cfg.TLS != TLSDisabled {
+	if cfg.TLS != "" && cfg.TLS != TLSDisabled {
 		dsnConfig.TLSConfig = cfg.TLS
 	}
 
