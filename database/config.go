@@ -57,10 +57,10 @@ type Config struct {
 	// value is driver-specific:
 	//   - PostgreSQL: "disable", "require", "verify-ca", or "verify-full".
 	//   - MySQL: driver TLS mode. "true" uses the driver's system certificate
-	//     roots and verifies the server hostname. A custom CA or client
-	//     certificate requires a driver TLS profile registered with
-	//     mysql.RegisterTLSConfig; set TLS to that profile name. SSLCAPath is
-	//     not used by the MySQL driver.
+	//     roots and verifies the server hostname. With TLS "true", SSLCAPath
+	//     optionally supplies a custom CA and SSLCertPath/SSLKeyPath optionally
+	//     configure mTLS. A named profile registered with mysql.RegisterTLSConfig
+	//     takes precedence over these file paths.
 	//   - SQL Server: "disable", "optional", "mandatory", or "strict"; keep
 	//     TrustServerCertificate false to validate the server certificate.
 	//   - Oracle: "enable" uses TCPS and requires an Oracle wallet via SSLCAPath;
@@ -85,14 +85,14 @@ type Config struct {
 	// Path to SSL certificate file (client certificate for mutual TLS).
 	// Example: "./data/cert/client.crt"
 	// PostgreSQL and MongoDB use this with SSLKeyPath for client-certificate authentication.
-	// MySQL does not load this path; use a registered driver TLS profile instead.
+	// MySQL uses this with TLS "true" for client-certificate authentication.
 	// Oracle uses a wallet via SSLCAPath and does not use this field.
 	// Default: empty
 	SSLCertPath string
 
 	// Path to SSL key file (client private key).
 	// Example: "./data/cert/client.key"
-	// MongoDB uses this with SSLCertPath for client-certificate authentication.
+	// MySQL and MongoDB use this with SSLCertPath for client-certificate authentication.
 	// Not applicable for Oracle: same reason as SSLCertPath, Oracle wallet bundles
 	// certificate/key/trust material together instead of using discrete files. Leave empty for Oracle.
 	// Default: empty
@@ -100,8 +100,7 @@ type Config struct {
 
 	// Path to CA certificate file for server certificate verification.
 	// Example: "./data/cert/ca.crt"
-	// MySQL does not use this field. TLS "true" uses system roots; use a
-	// registered driver TLS profile for a custom CA or client certificate.
+	// MySQL uses this with TLS "true" to add a custom CA trust pool.
 	// Oracle: repurposed as the path to the Oracle Wallet directory (equivalent to
 	// TNS_ADMIN), containing cwallet.sso, tnsnames.ora, sqlnet.ora, etc. Required
 	// when TLS is "enable". Example: "./data/oracle/wallet"
