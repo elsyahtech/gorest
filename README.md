@@ -12,6 +12,9 @@
   <a href="https://github.com/elsyahtech/gorest/actions/workflows/test.yml">
     <img alt="Test workflow status" src="https://img.shields.io/github/actions/workflow/status/elsyahtech/gorest/test.yml?branch=main&style=flat-square&label=tests">
   </a>
+  <a href="https://github.com/elsyahtech/gorest/blob/main/docs/production-validation.md">
+    <img alt="Production readiness is deployment dependent" src="https://img.shields.io/badge/production%20readiness-deployment%20dependent-orange?style=flat-square">
+  </a>
   <a href="https://go.dev/doc/install">
     <img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/elsyahtech/gorest?style=flat-square">
   </a>
