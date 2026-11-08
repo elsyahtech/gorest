@@ -55,21 +55,21 @@ func (orm *ORM) buildWhereClauseFindScylla(currrentIsSlice bool, prefix string) 
 	isSlice := currrentIsSlice
 	limitVal := orm.LimitVal
 
+	activeDriver := ""
+	if orm.DatabaseConfig != nil {
+		activeDriver = orm.DatabaseConfig.Driver
+	}
+
 	var err error
 
-	if len(orm.WhereClauses) > 0 {
-		argIndex := 0
+	if err := orm.validatePlaceholderArguments("Find", "WHERE clause", orm.WhereClauses, orm.WhereArgs, activeDriver); err != nil {
+		return nil, 0, err
+	}
 
-		data, argIndex, err = orm.execBuildWhereClauseFindScylla(data, prefix)
+	if len(orm.WhereClauses) > 0 {
+		data, _, err = orm.execBuildWhereClauseFindScylla(data, prefix, activeDriver)
 		if err != nil {
 			return nil, 0, orm.Error
-		}
-
-		if argIndex != len(orm.WhereArgs) {
-			return nil, 0, orm.setError(
-				"Ensure the number of arguments matches the number of placeholders across all .Where() clauses.",
-				errors.New("find: unused arguments provided to .Where()"),
-			)
 		}
 	} else if !isSlice && !orm.limitSet && limitVal <= 0 {
 		// Single struct tanpa Where: implicit LIMIT 1
@@ -87,6 +87,7 @@ func (orm *ORM) buildWhereClauseFindScylla(currrentIsSlice bool, prefix string) 
 func (orm *ORM) execBuildWhereClauseFindScylla(
 	req *structBuildWhereClauseFindScylla,
 	prefix string,
+	activeDriver string,
 ) (data *structBuildWhereClauseFindScylla, argIndex int, err error) {
 	argIndex = 0
 	data = req
@@ -101,14 +102,7 @@ func (orm *ORM) execBuildWhereClauseFindScylla(
 			)
 		}
 
-		placeholderCount := strings.Count(clause, "?")
-
-		if argIndex+placeholderCount > len(orm.WhereArgs) {
-			return nil, 0, orm.setError(
-				"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
-				errors.New("find: mismatched where clause placeholders and arguments"),
-			)
-		}
+		placeholderCount := countActivePlaceholders(clause, activeDriver)
 
 		data.whereParts = append(data.whereParts, strings.ReplaceAll(clause, prefix, ""))
 		data.valueArgs = append(data.valueArgs, orm.WhereArgs[argIndex:argIndex+placeholderCount]...)

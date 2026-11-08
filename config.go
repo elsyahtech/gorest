@@ -3,6 +3,7 @@ package gorest
 import (
 	dbimpr "github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
+	"github.com/elsyahtech/gorest/hardening"
 	logimpr "github.com/elsyahtech/gorest/log"
 	monitoringimpr "github.com/elsyahtech/gorest/monitoring"
 	redisimpr "github.com/elsyahtech/gorest/redis"
@@ -27,6 +28,9 @@ type Config struct {
 
 	//nolint:revive
 	monitoring *monitoringimpr.Config `json:"-"`
+
+	//nolint:revive
+	hardening *hardening.Config `json:"-"`
 
 	// This function allows to setup app name for the app
 	//
@@ -109,6 +113,7 @@ func configDefault(config ...Config) Config {
 	cfg.database = ConfigDefault.database
 	cfg.filter = ConfigDefault.filter
 	cfg.monitoring = ConfigDefault.monitoring
+	cfg.hardening = ConfigDefault.hardening
 
 	if cfg.AppName == "" {
 		cfg.AppName = ConfigDefault.AppName

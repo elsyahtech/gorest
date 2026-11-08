@@ -16,7 +16,7 @@ Browse the packages on [pkg.go.dev](https://pkg.go.dev/github.com/elsyahtech/gor
 | [`redis`](https://pkg.go.dev/github.com/elsyahtech/gorest/redis) | Redis configuration and client |
 | [`filter`](https://pkg.go.dev/github.com/elsyahtech/gorest/filter) | JWT configuration, token details, and authentication |
 | [`log`](https://pkg.go.dev/github.com/elsyahtech/gorest/log) | Logger configuration and structured logger |
-| [`helper`](https://pkg.go.dev/github.com/elsyahtech/gorest/helper) | Request parsing, conversion, and hashing helpers |
+| [`helper`](https://pkg.go.dev/github.com/elsyahtech/gorest/helper) | Request parsing, environment configuration, conversion, and hashing helpers |
 | [`view`](https://pkg.go.dev/github.com/elsyahtech/gorest/view) | JSON response envelope |
 
 To inspect the API for the version currently checked out locally, run:

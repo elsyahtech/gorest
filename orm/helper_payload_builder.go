@@ -3,6 +3,7 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -287,15 +288,8 @@ type reqBuildDeletePayloadByWhereClause struct {
 func (orm *ORM) buildDeletePayloadByWhereClause(req *reqBuildDeletePayloadByWhereClause) (whereClause string, whereArgs []any, err error) {
 	rawWhereClause := strings.Join(orm.WhereClauses, " AND ")
 
-	// Sanity check
-	if expected := countActivePlaceholders(rawWhereClause, req.activeDriver); expected != len(orm.WhereArgs) {
-		return "", nil, orm.setError(
-			fmt.Sprintf(
-				"WHERE clause expects %d bound value(s) but %d were provided via .Where(...) args",
-				expected, len(orm.WhereArgs),
-			),
-			errors.New("delete: mismatched WHERE placeholder count"),
-		)
+	if err := orm.validatePlaceholderArguments("Delete", "WHERE clause", orm.WhereClauses, orm.WhereArgs, req.activeDriver); err != nil {
+		return "", nil, err
 	}
 
 	whereClause, _ = normalizeWherePlaceholders(rawWhereClause, req.activeDriver, 1)
@@ -377,7 +371,7 @@ func (orm *ORM) buildDeletePayloadMongo(rowsVal []reflect.Value, meta columnMeta
 		case len(orm.WhereClauses) > 0:
 			translated, message, err := convertWhereToMongoFilter(orm.WhereClauses, orm.WhereArgs)
 			if err != nil {
-				return nil, orm.setError(message, err)
+				return nil, orm.setError(message, err, http.StatusBadRequest)
 			}
 
 			filter = translated

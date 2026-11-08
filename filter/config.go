@@ -1,8 +1,14 @@
 package filter
 
-import "time"
+import (
+	golog "log"
+	"time"
+)
 
 type Config struct {
+	// CookieConfig holds the configuration for cookie settings
+	CookieConfig CookieConfig
+
 	// LoggerConfig holds the configuration for logging authentication events
 	LoggerConfig LoggerConfig
 
@@ -15,6 +21,26 @@ type Config struct {
 	// Issuer identifies the principal that issued the token
 	Issuer string
 
+	// AccessTokenDuration lifespan duration for access tokens
+	AccessTokenDuration time.Duration
+
+	// RefreshTokenDuration lifespan duration for refresh tokens
+	RefreshTokenDuration time.Duration
+
+	// AllowedIPs is an optional allowlist of IP addresses or CIDR ranges for
+	// routes protected by Authentication(). When non-empty, peers not in the
+	// list are rejected. The connection peer IP is checked; forwarded headers
+	// are not trusted.
+	AllowedIPs []string
+
+	// BlockedIPs is an optional denylist of IP addresses or CIDR ranges for
+	// routes protected by Authentication(). A blocked peer is rejected even
+	// when it also matches AllowedIPs. The connection peer IP is checked;
+	// forwarded headers are not trusted.
+	BlockedIPs []string
+}
+
+type CookieConfig struct {
 	// SameSite cookie SameSite attribute policy
 	CookieSameSite string
 
@@ -23,12 +49,6 @@ type Config struct {
 
 	// Path cookie path scope
 	CookiePath string
-
-	// AccessTokenDuration lifespan duration for access tokens
-	AccessTokenDuration time.Duration
-
-	// RefreshTokenDuration lifespan duration for refresh tokens
-	RefreshTokenDuration time.Duration
 
 	// CookieMaxAge is deprecated. Access and refresh token cookie lifetimes are
 	// derived from their respective token durations.
@@ -44,6 +64,9 @@ type Config struct {
 
 	// SessionOnly specifies whether the cookie expires when the browser session ends
 	CookieSessionOnly bool
+
+	// DisableStoreTokenCookie disables storing access and refresh tokens in cookies.
+	DisableStoreTokenCookie bool
 }
 
 type LoggerConfig struct {
@@ -69,6 +92,16 @@ const (
 )
 
 var ConfigDefault = Config{
+	CookieConfig: CookieConfig{
+		CookieSameSite:          DefaultCookieSameSite,
+		CookieDomain:            DefaultCookieDomain,
+		CookiePath:              DefaultCookiePath,
+		CookieMaxAge:            DefaultCookieMaxAge,
+		CookieSecure:            DefaultCookieSecure,
+		CookieHTTPOnly:          DefaultCookieHTTPOnly,
+		CookieSessionOnly:       DefaultCookieSessionOnly,
+		DisableStoreTokenCookie: DisableStoreTokenCookie,
+	},
 	LoggerConfig: LoggerConfig{
 		DisableLogging: false,
 		EnabledEvents:  []AuthenticationLogEvent{AuthenticationEventMissingCredentials},
@@ -78,13 +111,6 @@ var ConfigDefault = Config{
 	AccessTokenDuration:  DefaultAccessTokenDuration,
 	RefreshTokenDuration: DefaultRefreshTokenDuration,
 	Issuer:               DefaultIssuer,
-	CookieSameSite:       DefaultCookieSameSite,
-	CookieDomain:         DefaultCookieDomain,
-	CookiePath:           DefaultCookiePath,
-	CookieMaxAge:         DefaultCookieMaxAge,
-	CookieSecure:         DefaultCookieSecure,
-	CookieHTTPOnly:       DefaultCookieHTTPOnly,
-	CookieSessionOnly:    DefaultCookieSessionOnly,
 }
 
 func configDefault(config ...Config) Config {
@@ -96,6 +122,8 @@ func configDefault(config ...Config) Config {
 	}
 
 	cfg := config[0]
+	cfg.AllowedIPs = append([]string(nil), cfg.AllowedIPs...)
+	cfg.BlockedIPs = append([]string(nil), cfg.BlockedIPs...)
 	if cfg.LoggerConfig.EnabledEvents == nil {
 		cfg.LoggerConfig.EnabledEvents = cloneAuthenticationLogEvents(ConfigDefault.LoggerConfig.EnabledEvents)
 	} else {
@@ -118,20 +146,24 @@ func configDefault(config ...Config) Config {
 		cfg.Issuer = ConfigDefault.Issuer
 	}
 
-	if cfg.CookieSameSite == "" {
-		cfg.CookieSameSite = ConfigDefault.CookieSameSite
+	if cfg.CookieConfig.CookieSameSite == "" {
+		cfg.CookieConfig.CookieSameSite = ConfigDefault.CookieConfig.CookieSameSite
 	}
 
-	if cfg.CookieDomain == "" {
-		cfg.CookieDomain = ConfigDefault.CookieDomain
+	if cfg.CookieConfig.CookieDomain == "" {
+		cfg.CookieConfig.CookieDomain = ConfigDefault.CookieConfig.CookieDomain
 	}
 
-	if cfg.CookiePath == "" {
-		cfg.CookiePath = ConfigDefault.CookiePath
+	if cfg.CookieConfig.CookiePath == "" {
+		cfg.CookieConfig.CookiePath = ConfigDefault.CookieConfig.CookiePath
 	}
 
-	if cfg.CookieMaxAge == 0 {
-		cfg.CookieMaxAge = ConfigDefault.CookieMaxAge
+	if cfg.CookieConfig.CookieMaxAge == 0 {
+		cfg.CookieConfig.CookieMaxAge = ConfigDefault.CookieConfig.CookieMaxAge
+	}
+
+	if cfg.CookieConfig.CookieMaxAge < 0 {
+		golog.Fatalf("CookieMaxAge must be a non-negative integer, got %d", cfg.CookieConfig.CookieMaxAge)
 	}
 
 	return cfg

@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -150,6 +151,15 @@ func TestBuildMongoUpsertOpsValidatesAndBuildsDocuments(t *testing.T) {
 	if _, err := (&ORM{UpsertClauses: []string{"status LIKE ?"}, UpsertArgs: []any{"a%"}}).
 		buildMongoUpsertOps([]any{map[string]any{"email": "ada@example.test"}}, nil); err == nil {
 		t.Fatal("buildMongoUpsertOps() accepted an unsupported conditional clause")
+	}
+	for _, args := range [][]any{nil, {"active", "extra"}} {
+		query := &ORM{UpsertClauses: []string{"status = ?"}, UpsertArgs: args}
+		if _, err := query.buildMongoUpsertOps([]any{map[string]any{"email": "ada@example.test"}}, nil); err == nil {
+			t.Fatalf("buildMongoUpsertOps() accepted invalid argument count %#v", args)
+		}
+		if query.HTTPCode != http.StatusBadRequest {
+			t.Fatalf("HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
+		}
 	}
 	if _, err := (&ORM{}).buildMongoUpsertOps([]any{"not a document"}, nil); err == nil {
 		t.Fatal("buildMongoUpsertOps() accepted a non-document row")

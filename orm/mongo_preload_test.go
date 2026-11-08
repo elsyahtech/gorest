@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -165,14 +166,26 @@ func TestParseMongoPreloadFilterAndBuildFilter(t *testing.T) {
 		}
 	}
 
+	query = &ORM{}
 	if _, err := query.buildMongoFilter([]string{"status = ?"}, nil, "users", nil); err == nil {
 		t.Fatal("buildMongoFilter() accepted a missing argument")
 	}
+	if query.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("missing argument HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
+	}
+	query = &ORM{}
 	if _, err := query.buildMongoFilter([]string{"status = ?"}, []any{"active", "extra"}, "users", nil); err == nil {
 		t.Fatal("buildMongoFilter() accepted an unused argument")
 	}
+	if query.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("surplus argument HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
+	}
+	query = &ORM{}
 	if _, err := query.buildMongoFilter(nil, []any{"extra"}, "users", nil); err == nil {
 		t.Fatal("buildMongoFilter() accepted arguments without a clause")
+	}
+	if query.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("argument without clause HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
 	}
 }
 

@@ -18,7 +18,7 @@ func TestProductionFilterCookieWarning(t *testing.T) {
 		{
 			name: "secure cookies",
 			config: &filter.Config{
-				CookieSecure: true,
+				CookieConfig: filter.CookieConfig{CookieSecure: true},
 			},
 		},
 		{

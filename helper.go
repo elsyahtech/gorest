@@ -397,12 +397,12 @@ func productionDatabaseTLSWarning(cfg *database.Config) (string, bool) {
 }
 
 func productionFilterCookieWarning(cfg *filter.Config) (string, bool) {
-	if cfg == nil || cfg.CookieSecure {
+	if cfg == nil || cfg.CookieConfig.CookieSecure {
 		return "", false
 	}
 
 	return "JWT cookies are configured without the Secure attribute. " +
-		"They may be sent over unencrypted HTTP; set CookieSecure to true when clients use HTTPS. " +
+		"They may be sent over unencrypted HTTP; set CookieConfig.CookieSecure to true when clients use HTTPS. " +
 		"This warning does not prevent startup and may be acceptable for trusted intranet deployments.", true
 }
 

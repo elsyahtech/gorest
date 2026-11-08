@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -40,6 +41,14 @@ func TestBuildBulkMongoFilterCombinesPrimaryKeyAndWhere(t *testing.T) {
 	if _, err := invalid.buildBulkMongoFilter(row, meta); err == nil || invalid.Error == nil {
 		t.Fatal("buildBulkMongoFilter() accepted a missing WHERE argument")
 	}
+	if invalid.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("missing argument HTTP code = %d, want %d", invalid.HTTPCode, http.StatusBadRequest)
+	}
+
+	invalid = &ORM{WhereClauses: []string{"tenant = ?"}, WhereArgs: []any{4, "extra"}}
+	if _, err := invalid.buildBulkMongoFilter(row, meta); err == nil || invalid.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("extra argument result = (%v, %d), want HTTP 400 error", err, invalid.HTTPCode)
+	}
 	if got := invalid.HTTPCode; got == 0 {
 		t.Fatal("buildBulkMongoFilter() did not report an HTTP error status")
 	}
@@ -74,6 +83,14 @@ func TestBuildSingleMongoFilterUsesWhereBeforePrimaryKey(t *testing.T) {
 	invalid := &ORM{WhereClauses: []string{"active = ?"}}
 	if _, err := invalid.buildSingleMongoFilter(row, meta); err == nil || invalid.Error == nil {
 		t.Fatal("buildSingleMongoFilter() accepted a missing WHERE argument")
+	}
+	if invalid.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("missing argument HTTP code = %d, want %d", invalid.HTTPCode, http.StatusBadRequest)
+	}
+
+	invalid = &ORM{WhereClauses: []string{"active = ?"}, WhereArgs: []any{true, "extra"}}
+	if _, err := invalid.buildSingleMongoFilter(row, meta); err == nil || invalid.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("extra argument result = (%v, %d), want HTTP 400 error", err, invalid.HTTPCode)
 	}
 
 	withoutKey := &ORM{}

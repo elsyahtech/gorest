@@ -3,9 +3,7 @@ package orm
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -253,6 +251,10 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 	valueArgs := req.joinArgs
 	limitVal := orm.LimitVal
 
+	if err := orm.validatePlaceholderArguments("Find", "WHERE clause", orm.WhereClauses, orm.WhereArgs, req.activeDriver); err != nil {
+		return nil, err
+	}
+
 	if req.activeDriver == database.SQLSERVER && orm.limitSet && limitVal == 0 {
 		whereParts = append(whereParts, "1 = 0")
 	}
@@ -262,13 +264,6 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 
 		for _, clause := range orm.WhereClauses {
 			placeholderCount := countActivePlaceholders(clause, req.activeDriver)
-
-			if argIndex+placeholderCount > len(orm.WhereArgs) {
-				return nil, orm.setError(
-					"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
-					errors.New("find: mismatched where clause placeholders and arguments"),
-				)
-			}
 
 			normalized, nextCounter := normalizeWherePlaceholders(clause, req.activeDriver, argCounter)
 
@@ -280,12 +275,6 @@ func (orm *ORM) buildWhereClauseFindSQL(req *reqBuildWhereClauseFindSQL) (*resBu
 			argIndex += placeholderCount
 		}
 
-		if argIndex != len(orm.WhereArgs) {
-			return nil, orm.setError(
-				"Ensure the number of arguments matches the number of placeholders across all .Where() clauses.",
-				errors.New("find: unused arguments provided to .Where()"),
-			)
-		}
 	} else if !req.isSlice && !orm.limitSet {
 		if orm.LimitVal <= 0 {
 			limitVal = 1
@@ -314,7 +303,15 @@ func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounterParam i
 	}
 
 	if len(orm.HavingClauses) == 0 {
+		if err := orm.validatePlaceholderArguments("Find", "HAVING clause", nil, orm.HavingArgs, activeDriver); err != nil {
+			return nil, 0, err
+		}
+
 		return valueArgs, argCounter, nil
+	}
+
+	if err := orm.validatePlaceholderArguments("Find", "HAVING clause", orm.HavingClauses, orm.HavingArgs, activeDriver); err != nil {
+		return nil, 0, err
 	}
 
 	var (
@@ -329,14 +326,6 @@ func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounterParam i
 
 		placeholderCount := countActivePlaceholders(clause, activeDriver)
 
-		if argIndex+placeholderCount > len(orm.HavingArgs) {
-			return nil, 0, orm.setError(
-				"Ensure the number of placeholders in .Having() matches the number of arguments provided.",
-				errors.New("find: mismatched having clause placeholders and arguments"),
-				http.StatusBadRequest,
-			)
-		}
-
 		normalized, nextCounter := normalizeWherePlaceholders(clause, activeDriver, argCounter)
 
 		argCounter = nextCounter
@@ -345,14 +334,6 @@ func (orm *ORM) buildGroupByHavingFindSQL(activeDriver string, argCounterParam i
 		valueArgs = append(valueArgs, orm.HavingArgs[argIndex:argIndex+placeholderCount]...)
 
 		argIndex += placeholderCount
-	}
-
-	if argIndex != len(orm.HavingArgs) {
-		return nil, 0, orm.setError(
-			"Ensure the number of arguments matches the number of placeholders across all .Having() clauses.",
-			errors.New("find: unused arguments provided to .Having()"),
-			http.StatusBadRequest,
-		)
 	}
 
 	orm.safeWriteString(" HAVING ")

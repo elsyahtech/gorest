@@ -23,6 +23,9 @@ func mysqlDriverConfig(cfg *Config, timezone string) (*mysql.Config, error) {
 	dsnConfig.Addr = net.JoinHostPort(cfg.Host, cfg.Port)
 	dsnConfig.DBName = cfg.Name
 	dsnConfig.ParseTime = true
+	dsnConfig.Timeout = cfg.Timeout
+	dsnConfig.ReadTimeout = cfg.Timeout
+	dsnConfig.WriteTimeout = cfg.Timeout
 
 	location, err := time.LoadLocation(timezone)
 	if err != nil {

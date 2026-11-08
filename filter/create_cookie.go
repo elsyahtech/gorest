@@ -40,12 +40,12 @@ func (filter *Filter) createCookie(ctx server.Context, cookieName, token string,
 	cookie := Cookie{
 		Name:        cookieName,
 		Value:       token,
-		Path:        filter.Config.CookiePath,
-		Domain:      filter.Config.CookieDomain,
-		SameSite:    filter.Config.CookieSameSite,
-		Secure:      filter.Config.CookieSecure,
-		HTTPOnly:    filter.Config.CookieHTTPOnly,
-		SessionOnly: filter.Config.CookieSessionOnly,
+		Path:        filter.Config.CookieConfig.CookiePath,
+		Domain:      filter.Config.CookieConfig.CookieDomain,
+		SameSite:    filter.Config.CookieConfig.CookieSameSite,
+		Secure:      filter.Config.CookieConfig.CookieSecure,
+		HTTPOnly:    filter.Config.CookieConfig.CookieHTTPOnly,
+		SessionOnly: filter.Config.CookieConfig.CookieSessionOnly,
 	}
 	if !cookie.SessionOnly {
 		cookie.Expires = expiresAt

@@ -1,8 +1,11 @@
 # GOREST Filter (Middleware Authentication)
 
-GOREST uses JSON Web Tokens (JWTs) for access and refresh tokens. Its optional
-Filter issues these tokens, stores them in `HttpOnly` cookies, and provides
-middleware to authenticate requests. The filter is configured only when a
+GOREST uses JSON Web Tokens (JWTs) for access and refresh tokens. The access
+token is the normal credential for protected requests. The refresh token lets a
+client continue a session by obtaining a replacement access token after the
+access token expires. Its optional Filter issues both tokens, stores them in
+`HttpOnly` cookies by default, and provides middleware to authenticate
+requests. The filter is configured only when a
 non-empty `SignatureKey` is configured. Without a key, the filter remains
 disabled by default; applications that enable JWT must provide a valid
 configuration.
@@ -13,7 +16,7 @@ filterConfig := filter.ConfigDefault
 filterConfig.SignatureKey = &key
 filterConfig.AccessTokenDuration = 15 * time.Minute
 filterConfig.RefreshTokenDuration = 30 * 24 * time.Hour
-filterConfig.CookieSecure = true
+filterConfig.CookieConfig.CookieSecure = true
 
 app := gorest.New()
 app.Use(filterConfig)
@@ -71,41 +74,110 @@ An HTTP handler can issue both tokens with:
 
 ```go
 func issueTokens(ctx *gorest.Context) error {
-	message, status, err := app.Filter().CreateToken(*ctx, "user-id")
+	tokenResponse, message, status, err := app.Filter().CreateToken(*ctx, "user-id")
 	if err != nil {
 		return ctx.Status(status).SendString(message)
 	}
-	return ctx.Status(status).SendString(message)
+	return ctx.Status(status).JSON(tokenResponse)
 }
 ```
 
-The generated cookies are named `access` and `refresh`. Each cookie's
-`Max-Age` is derived from that token's configured duration, rounded up to the
-nearest whole second. The JWT's own expiration remains authoritative.
-`CookieMaxAge` remains for source compatibility but is deprecated and ignored
-for these token cookies. Set `CookieSessionOnly` to create browser-session
-cookies; the JWT's own expiration still applies. An empty `CookieDomain`
-creates host-only cookies; set a domain only when sharing cookies across
-subdomains is intended.
+`CreateToken()` returns both generated token details in `TokenResponse`.
+By default, it also sets cookies named `access` and `refresh`. Set
+`CookieConfig.DisableStoreTokenCookie` to `true` when the application wants to
+transport or store the returned tokens itself; in that mode GOREST does not
+set token cookies. The application is then responsible for protecting tokens
+in its response and client-side storage. This option controls token storage
+when tokens are issued; it does not make `Authentication()` return a renewed
+token to the application.
+
+Each cookie's `Max-Age` is derived from that token's configured duration,
+rounded up to the nearest whole second. The JWT's own expiration remains
+authoritative. `CookieConfig.CookieMaxAge` remains for source compatibility
+but is deprecated and ignored for these token cookies. Set
+`CookieConfig.CookieSessionOnly` to create browser-session cookies; the JWT's
+own expiration still applies. An empty `CookieConfig.CookieDomain` creates
+host-only cookies; set a domain only when sharing cookies across subdomains is
+intended.
+
+### Optional IP restrictions
+
+`filter.Config.AllowedIPs` and `filter.Config.BlockedIPs` optionally restrict
+requests that pass through `Authentication()`:
+
+```go
+filterConfig.AllowedIPs = []string{"203.0.113.8", "198.51.100.0/24"}
+filterConfig.BlockedIPs = []string{"198.51.100.42"}
+```
+
+Entries accept individual IPv4/IPv6 addresses or CIDR ranges. An empty
+allowlist allows any peer not in the blocklist. When the allowlist is
+non-empty, peers outside it are denied. A blocklist match always denies,
+including when that peer also matches the allowlist. Denied requests receive
+HTTP 403. Invalid IP/CIDR entries prevent the filter from initializing.
+
+These settings are an optional IP access control for routes where the
+application installs `Authentication()`; they are not a host/network firewall
+and do not protect unguarded routes or other services. GOREST checks the
+connection peer IP and does not trust `X-Forwarded-For` for this decision. If
+the application is behind a reverse proxy, the peer is normally the proxy.
+For example, when browser API requests pass through Cloudflare to the GOREST
+origin, GOREST normally sees a Cloudflare edge address, not the browser's
+public IP. Allowlisting Cloudflare addresses therefore permits requests
+arriving through those edges; it does not distinguish or allowlist individual
+visitors. Blocklisting an edge address may deny many unrelated visitors.
+Cookies sent by the browser do not change the network peer IP used by this
+check. The same applies when a frontend server proxies requests: GOREST sees
+that server or its immediate proxy.
+
+Use the trusted edge's firewall/WAF rules to restrict original visitor IPs.
+Alternatively, a trusted-proxy-aware application design can use a forwarded
+client-IP header only when direct untrusted access to the origin is prevented
+and the trusted proxy overwrites that header. Do not treat
+`filter.GetClientIP()` as safe for access control by itself.
 
 `filter.GetClientIP()` uses the first valid IP address in `X-Forwarded-For`,
-which supports deployments behind reverse proxies and services such as
-Cloudflare; if the header is absent or invalid, it falls back to Fiber's
-connection IP. Because forwarded headers can be supplied by clients, configure
-the public edge to overwrite or sanitize `X-Forwarded-For` and prevent direct
-untrusted access to the application when using this value for security
-decisions.
+which may be useful for application-level logging or display behind a proxy;
+if the header is absent or invalid, it falls back to Fiber's connection IP.
+Because forwarded headers can be supplied by clients, configure the public
+edge to overwrite or sanitize `X-Forwarded-For` before relying on this helper
+for any security-sensitive decision.
 
 ## Authenticating requests
 
-`app.Filter().Authentication()` returns middleware that validates the access
-token from the `Authorization` header when sent as a bearer token, or from the
-`access` cookie. If access validation fails, it tries the `refresh` cookie. A
-valid refresh token causes GOREST to issue a new access cookie and lets the
-current request continue.
-Consequently, a valid refresh cookie also authenticates requests protected by
-this middleware; use a separate, restricted refresh endpoint if your
-application requires refresh tokens to be used only for token renewal.
+`app.Filter().Authentication()` returns middleware that validates an access
+token from the `Authorization` header using the `Bearer` scheme, or from the
+`access` cookie when no Bearer token is supplied. A Bearer token is always
+validated as an **access token**; putting a refresh token in the `Authorization`
+header does not make it a refresh credential. Refresh tokens are read only
+from the `refresh` cookie.
+
+If access-token validation fails for any reason, the middleware tries the
+refresh cookie. A valid refresh token causes GOREST to issue a replacement
+access token and, by default, set it in the `access` cookie. The middleware
+then continues the **same request** using the validated refresh token's
+identity; the client does not need to repeat the request with the new access
+token. This fallback is intended to keep cookie-based sessions seamless and
+avoid an extra round trip. It also means that a valid refresh cookie can
+authorize the current protected request when the access token is invalid or
+expired. If a request includes an invalid Bearer token and a valid refresh
+cookie, the refresh fallback can still continue that request.
+
+On the fallback path, the `filter.TokenDetail` stored in request locals under
+`tokenJWT` describes the refresh token that authenticated the request
+(`TokenType` is `"refresh"`); it does not describe the newly issued access
+token. Applications that inspect `tokenJWT` should account for this, and must
+still perform their own account-state and resource-authorization checks.
+
+`CookieConfig.DisableStoreTokenCookie` disables writing both initial and
+renewed token cookies. With this option enabled, a valid refresh cookie can
+still authorize the current request, but `Authentication()` does not expose
+the replacement access token to the handler or return it in the response.
+Applications that manage token transport themselves need to implement their
+own renewal flow; the middleware fallback alone cannot deliver the replacement
+token to that transport. For integrations using Bearer authentication without
+a refresh cookie, an invalid or expired access token is rejected and the
+integration must obtain another access token through its own credential flow.
 
 The middleware verifies the configured signing algorithm, signature, issuer,
 token type, required identity and time claims, and GOREST's `expires_at`.
@@ -146,12 +218,13 @@ Available event constants are:
 | `AuthenticationEventRefreshTokenInvalid` | A supplied refresh token failed validation. |
 | `AuthenticationEventRefreshTokenExpired` | A supplied refresh token expired. |
 | `AuthenticationEventRefreshFailed` | A valid refresh token could not be used to issue a replacement access token. |
-| `AuthenticationEventAuthenticationSucceeded` | A valid access token authenticated the request. |
+| `AuthenticationEventAuthenticationSucceeded` | A valid access token, or a valid refresh token on the fallback path, authenticated the request. |
 | `AuthenticationEventRefreshSucceeded` | A refresh token issued a replacement access token and authenticated the current request. |
 
 An access-token failure that is recovered by a valid refresh token is not
-logged as an authentication failure. If both supplied tokens fail, the
-selected access and refresh failure events can both be recorded. If both
+logged as an authentication failure. If access and refresh credentials are
+both supplied and both fail, the selected access and refresh failure events
+can both be recorded. If both
 success events are enabled, a request authenticated through refresh emits both
 `authentication_succeeded` and `refresh_succeeded`; otherwise each event can
 be selected independently. Failure events are logged at `WARN`, while success
@@ -185,16 +258,18 @@ and expiration using GOREST's `expires_at` claim before trusting the claims.
 
 ## Cookie transport warning
 
-`CookieSecure` defaults to `false` so applications that intentionally operate
-over HTTP, including trusted intranet deployments, are not prevented from
-starting. In production-like environments GOREST logs a warning when the
-configured JWT cookies do not have the `Secure` attribute. This is a warning,
-not an enforcement: cookies may be sent over unencrypted HTTP. Set
-`CookieSecure: true` when clients access the application over HTTPS, and verify
-TLS at the application or trusted reverse-proxy boundary.
+`CookieConfig.CookieSecure` defaults to `false` so applications that
+intentionally operate over HTTP, including trusted intranet deployments, are
+not prevented from starting. In production-like environments GOREST logs a
+warning when the configured JWT cookies do not have the `Secure` attribute.
+This is a warning, not an enforcement: cookies may be sent over unencrypted
+HTTP. Set `CookieConfig.CookieSecure: true` when clients access the application
+over HTTPS, and verify TLS at the application or trusted reverse-proxy
+boundary.
 
-When starting from `filter.ConfigDefault`, `HttpOnly` defaults to `true` and
-`SameSite` defaults to `Lax`. A partial `filter.Config` literal uses Go's zero
-values for boolean fields; set `CookieHTTPOnly` explicitly or start from
+When starting from `filter.ConfigDefault`, `CookieConfig.CookieHTTPOnly`
+defaults to `true` and `CookieConfig.CookieSameSite` defaults to `Lax`. A
+partial `filter.Config` literal uses Go's zero values for boolean fields; set
+`CookieConfig.CookieHTTPOnly` explicitly or start from
 `filter.ConfigDefault`. Review cookie domain, path, SameSite policy, CSRF
 defenses, and the deployment's transport security for the application.

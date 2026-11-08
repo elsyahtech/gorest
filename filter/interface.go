@@ -64,3 +64,11 @@ type TokenDetail struct {
 	// ExpiresAt represents the expiration time of the token expressed as a Unix timestamp (seconds).
 	ExpiresAt int64
 }
+
+type TokenResponse struct {
+	// AccessToken contains the details of the generated access token.
+	AccessToken *TokenDetail
+
+	// RefreshToken contains the details of the generated refresh token.
+	RefreshToken *TokenDetail
+}

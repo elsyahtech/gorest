@@ -237,6 +237,8 @@ Gorest provides modular database adapters supporting both SQL and NoSQL environm
 
 `database.Run(config)` applies database defaults and returns a normalized `database.Config`; it does not establish a connection. Pass its result to `app.Use(...)` to register and initialize the database. `app.Use(...)` does not call `database.Run(...)` automatically. The `Disable` field defaults to `false`, so the database is enabled unless you explicitly set `Disable: true`. A partial config literal also has `Disable: false` by Go's zero-value rule; use `database.ConfigDefault` when you want the other configured defaults as well.
 
+`database.Config.Timeout` defaults to 5 seconds and is applied according to each driver's supported timeout settings. For MySQL, GOREST sets the driver's `Timeout`, `ReadTimeout`, and `WriteTimeout` to this value, covering connection dialing and network I/O. These are driver I/O limits, not a universal deadline for total query execution. Use a context with a deadline or cancellation for an individual operation. SQL transactions started through `DBSession.BeginTx()` are capped by the configured timeout; `DBSession.BeginTxContext(ctx)` also honors cancellation or an earlier deadline from `ctx`.
+
 GOREST accepts custom `Environment` labels such as `staging`, `uat`, or `preview`; `development`, `testing`, and `production` are conventions, not an allowlist. The TLS warning policy treats every non-empty environment other than `development` and `testing` as production-like, so custom deployment environments do not silently bypass the production database TLS warning.
 
 For compatibility and ease of local development, an omitted `TLS` value defaults to disabled for network database drivers (MongoDB defaults to `false`; SQLite does not use TLS). Gorest does not automatically enable TLS based on the database host: TLS modes and certificate or wallet requirements differ by driver, and automatically enabling one could break existing local or legacy deployments. This is not a secure production default. A remote database connection without TLS can expose credentials and data to interception or modification on an untrusted network. Configure a driver-supported TLS mode explicitly for production and validate the server certificate; do not treat a private IP, VPN, or firewall as a replacement for transport encryption.
@@ -600,6 +602,46 @@ connection's peer IP, so a reverse proxy's address is used when applicable.
 Include trusted health-check clients and proxies in the allowlist, and apply
 network or proxy restrictions as appropriate.
 
+### Hardening report endpoint
+
+The optional `GET /gorest/hardening` endpoint inventories the running process's
+effective GOREST configuration and returns an advisory report. It is not part
+of `monitoring`, does not scan application source code, and does not connect to
+databases or Redis. Enable it explicitly and configure a narrow peer-IP
+allowlist:
+
+```go
+import "github.com/elsyahtech/gorest/hardening"
+
+app.Use(hardening.Config{
+    Enable:              true,
+    HardeningAllowedIPs: []string{"127.0.0.1/32", "::1/128"},
+})
+```
+
+The endpoint is disabled by default. When enabled with an empty allowlist,
+every request is denied; non-allowlisted peers receive HTTP 403. The check
+uses the connection peer IP and ignores forwarded headers, so behind a reverse
+proxy the configured IPs must match the proxy peers. Restrict direct access to
+the application origin.
+
+JSON is returned by default. Use `GET /gorest/hardening?format=html` or send
+`Accept: text/html` for an HTML report. Reports are generated in memory,
+returned with `Cache-Control: no-store`, and are not written to files. They
+contain configuration metadata such as hosts, paths, and usernames; passwords,
+signing keys, private keys, and token values are redacted. Treat reports as
+sensitive and restrict endpoint access.
+
+The report assesses only effective configuration available to the running
+process. It does not inspect source code, validate external infrastructure,
+verify network topology, or certify an application as production-ready. Only
+the checks listed in the [hardening report guide](../hardening/readme.md) are
+implemented; unknown or unimplemented checks must not be interpreted as
+passed. Disabling monitoring endpoints with
+`monitoring.Config.DisableMonitoringEndpoints` does not disable this route;
+its exposure is controlled separately by `hardening.Config.Enable` and
+`HardeningAllowedIPs`.
+
 The readiness endpoint reports all component statuses in its JSON response.
 An unconfigured optional Redis or JWT filter is reported as `not running`;
 an unavailable configured dependency or failed health check marks readiness
@@ -631,7 +673,7 @@ app.Use(database.Run(database.Config{
     MaxOpenConnections:    50,               // Default: 50; zero uses the default
     MaxIdleConnections:    5,                // Default: 5; zero uses the default
     ConnectionMaxLifetime: 10 * time.Minute, // Default: 10 minutes; zero uses the default
-    Timeout:               5 * time.Second,  // Connection and operation timeout limit
+    Timeout:               5 * time.Second,  // Driver-specific connection/I/O timeouts; transaction timeout
 
     // Security, TLS & Encryption (Driver-aware behavior)
     TLS:                     "disable", // Local/development compatibility default only; explicitly configure production TLS
@@ -658,7 +700,8 @@ Database Parameter Breakdown:
 - **Driver & Target** (Driver, Host, Port, Name): Specifies the database engine and connection routing. Note that for Oracle, Name acts as the service name instead of the SID.
 - **Credentials** (Username, Password): Supplies driver connection credentials. Load production secrets from a deployment secret store or environment configuration; do not commit them.
 - **MongoDB authentication database** (`AuthSource`): Selects the database that stores the MongoDB user's credentials. It defaults to `admin`; set it when the user was created in another database.
-- **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime, Timeout): Controls connection pool limits and lifetimes. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid. Tune these values for the database limits and application concurrency.
+- **Connection Pool Management** (MaxOpenConnections, MaxIdleConnections, ConnectionMaxLifetime): Controls connection pool limits and lifetimes. `database.Run(...)` fills zero-valued pool fields with defaults (50 open, 5 idle, 10 minutes maximum lifetime); negative pool values are invalid. Tune these values for the database limits and application concurrency.
+- **Timeout**: Defaults to 5 seconds and maps to driver-supported connection/I/O settings. For MySQL, it sets dial, read, and write timeouts. It does not impose a universal deadline on total query execution; use a context deadline for individual operations. SQL transactions started through `DBSession.BeginTx()` also use this timeout.
 - **TLS configuration** (TLS, SSLCertPath, SSLKeyPath, SSLCAPath, TrustServerCertificate): Requests driver-specific encrypted connections and certificate behavior. Support and semantics vary by driver; verify the negotiated connection and certificate validation in the target environment. MongoDB uses `SSLCertPath` and `SSLKeyPath` together for a client certificate and private key when mTLS is required. For Oracle, `SSLCAPath` is used as the Oracle Wallet directory path (`TNS_ADMIN`) when TLS is set to `"enable"`.
 - **Migrations & Seeders** (Migration, Seeder, directories, QueryLogging): Automates database bootstrapping and gives developers direct visibility into query generation during development.
 
@@ -684,7 +727,7 @@ filterConfig := filter.ConfigDefault
 filterConfig.SignatureKey = &signingKey
 filterConfig.AccessTokenDuration = 15 * time.Minute
 filterConfig.RefreshTokenDuration = 30 * 24 * time.Hour
-filterConfig.CookieSecure = true
+filterConfig.CookieConfig.CookieSecure = true
 
 app := gorest.New(gorest.Config{AppName: "my-service"})
 app.Use(filter.Run(filterConfig))
@@ -706,13 +749,16 @@ filter config.
 | `Issuer` | Defaults to `gorest`, but GOREST sets the effective JWT issuer to the application's `gorest.Config.AppName`. |
 | `AccessTokenDuration` | 15 minutes; minimum one second. |
 | `RefreshTokenDuration` | 30 days; minimum one second. |
-| `CookieSameSite` | `Lax`. |
-| `CookieDomain` | Empty, producing host-only cookies. Set only when sharing cookies across subdomains is intended. |
-| `CookiePath` | `/`. |
-| `CookieSecure` | `false`; set to `true` when cookies are served over HTTPS. |
-| `CookieHTTPOnly` | `true` with `filter.ConfigDefault`; prevents browser JavaScript from reading token cookies. |
-| `CookieSessionOnly` | `false`; cookies expire based on their token duration. When true, browser-session cookies are used, but the JWT's own expiry still applies. |
-| `CookieMaxAge` | Deprecated and ignored for token-cookie lifetime; expiry is derived from each token duration. |
+| `CookieConfig.CookieSameSite` | `Lax`. |
+| `CookieConfig.CookieDomain` | Empty, producing host-only cookies. Set only when sharing cookies across subdomains is intended. |
+| `CookieConfig.CookiePath` | `/`. |
+| `CookieConfig.CookieSecure` | `false`; set to `true` when cookies are served over HTTPS. |
+| `CookieConfig.CookieHTTPOnly` | `true` with `filter.ConfigDefault`; prevents browser JavaScript from reading token cookies. |
+| `CookieConfig.CookieSessionOnly` | `false`; cookies expire based on their token duration. When true, browser-session cookies are used, but the JWT's own expiry still applies. |
+| `CookieConfig.CookieMaxAge` | Deprecated and ignored for token-cookie lifetime; expiry is derived from each token duration. |
+| `CookieConfig.DisableStoreTokenCookie` | `false`; when true, `CreateToken()` returns token details without setting access/refresh cookies. The application must protect and transport the returned tokens. |
+| `AllowedIPs` | Empty; no allowlist restriction. When configured, only matching connection peer IP addresses/CIDR ranges can access routes using `Authentication()`. |
+| `BlockedIPs` | Empty; no blocklist restriction. Matching peer addresses are denied even if they also match `AllowedIPs`. |
 | `LoggerConfig` | Controls authentication event logging. By default, logging is enabled for `missing_credentials`; other event types, including success events, must be selected explicitly. |
 
 `LoggerConfig.DisableLogging` disables all authentication event logs.
@@ -730,15 +776,21 @@ responsibilities, and a configuration example are in the
 
 Use `filter.ConfigDefault` when customizing the filter. A partial
 `filter.Config{...}` literal gets zero values for boolean fields, so
-`CookieHTTPOnly` and `CookieSecure` will both be false unless set explicitly.
+`CookieConfig.CookieHTTPOnly` and `CookieConfig.CookieSecure` will both be
+false unless set explicitly.
 With the defaults, GOREST issues cookies named `access` and `refresh`.
 Authentication middleware accepts an access JWT from the `Authorization`
-header using the `Bearer` scheme, or from the `access` cookie; if access
-validation fails, it tries the `refresh` cookie. A valid refresh cookie can
-renew access and continue the current protected request. The middleware
-verifies the token signature, signing method, issuer, type, required claims,
-and expiry. It then places a `filter.TokenDetail` in request locals under
-`tokenJWT`. It does not authenticate user credentials, check account state, or
-authorize application resources. For middleware, token creation, claims,
-refresh behavior, and cookie security, see the
+header using the `Bearer` scheme, or from the `access` cookie; the Bearer
+credential is validated only as an access token. If access validation fails,
+it tries the `refresh` cookie. A valid refresh cookie can issue a replacement
+access cookie and continue the current request without an additional client
+round trip, even if an invalid Bearer token was supplied. On this fallback
+path, `tokenJWT` describes the refresh token used for the request, not the
+replacement access token. When `CookieConfig.DisableStoreTokenCookie` is
+enabled, middleware does not write or expose the replacement token;
+applications managing token transport must provide their own renewal flow.
+The middleware verifies the token signature, signing method, issuer, type,
+required claims, and expiry. It does not authenticate user credentials, check
+account state, or authorize application resources. For middleware, token
+creation, claims, refresh behavior, IP restrictions, and cookie security, see
 [JWT filter guide](./guide/filter.md).

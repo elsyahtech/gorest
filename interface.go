@@ -8,10 +8,12 @@ import (
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
+	"github.com/elsyahtech/gorest/hardening"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/redis"
 	"github.com/elsyahtech/gorest/server"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type App struct {
@@ -24,6 +26,7 @@ type App struct {
 	services      *service
 	filter        *filter.Filter
 	monitoring    *monitoring.Monitoring
+	hardening     *hardening.Hardening
 	config        Config
 	configured    Config
 	modules       []string
@@ -36,11 +39,13 @@ type service struct {
 type RouterRegistrar func(*App)
 
 type DBSession struct {
-	database *database.Database
-	config   *database.Config
-	Tx       *sql.Tx
-	txCancel context.CancelFunc
-	txDone   atomic.Bool
+	database     *database.Database
+	config       *database.Config
+	Tx           *sql.Tx
+	mongoSession *mongo.Session
+	txContext    context.Context
+	txCancel     context.CancelFunc
+	txDone       atomic.Bool
 }
 
 type RedisSession struct {

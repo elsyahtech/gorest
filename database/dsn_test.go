@@ -24,6 +24,7 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	cfg.Port = MYSQL_PORT
 	cfg.Charset = "utf8mb4"
 	cfg.TLS = "false"
+	cfg.Timeout = 15 * time.Second
 	driverConfig, err := mysqlDriverConfig(cfg, "UTC")
 	if err != nil {
 		t.Fatalf("mysqlDriverConfig() error = %v", err)
@@ -43,6 +44,15 @@ func TestMySQLDriverConfigPreservesCredentials(t *testing.T) {
 	}
 	if !driverConfig.ParseTime {
 		t.Error("ParseTime = false, want true")
+	}
+	if driverConfig.Timeout != cfg.Timeout {
+		t.Errorf("dial timeout = %s, want %s", driverConfig.Timeout, cfg.Timeout)
+	}
+	if driverConfig.ReadTimeout != cfg.Timeout {
+		t.Errorf("read timeout = %s, want %s", driverConfig.ReadTimeout, cfg.Timeout)
+	}
+	if driverConfig.WriteTimeout != cfg.Timeout {
+		t.Errorf("write timeout = %s, want %s", driverConfig.WriteTimeout, cfg.Timeout)
 	}
 	if driverConfig.Loc == nil || driverConfig.Loc.String() != "UTC" {
 		t.Errorf("location = %v, want UTC", driverConfig.Loc)

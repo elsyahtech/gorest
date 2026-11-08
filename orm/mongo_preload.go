@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -277,6 +278,7 @@ func (orm *ORM) buildMongoFilter(clauses []string, args []any, collectionName st
 					"field op ? (=, !=, <>, >, >=, <, <=, LIKE, NOT LIKE, IN, NOT IN, IS NULL, IS NOT NULL) joined by AND / OR, "+
 					"without parentheses.",
 				errors.New("unused arguments provided to .Where()"),
+				http.StatusBadRequest,
 			)
 		}
 
@@ -313,6 +315,7 @@ func (orm *ORM) buildMongoFilter(clauses []string, args []any, collectionName st
 		return nil, orm.setError(
 			"Ensure the number of provided arguments matches the placeholders consumed by all WHERE clauses",
 			errors.New("unused arguments provided to .Where()"),
+			http.StatusBadRequest,
 		)
 	}
 
@@ -334,12 +337,13 @@ func (orm *ORM) buildFieldAndBundleInparseMongoCondition(
 		return field, bundle, countSbm, errors.New("error")
 	}
 
-	countSbm = strings.Count(sbm, "?")
+	countSbm = countActivePlaceholders(sbm, "")
 
 	if countSbm == 0 {
 		return field, bundle, countSbm, orm.setError(
 			"Ensure the where condition uses a '?' placeholder for dynamic values",
 			fmt.Errorf("where condition %q must use a ? placeholder", strings.TrimSpace(cond)),
+			http.StatusBadRequest,
 		)
 	}
 
@@ -347,6 +351,7 @@ func (orm *ORM) buildFieldAndBundleInparseMongoCondition(
 		return field, bundle, countSbm, orm.setError(
 			"Ensure the number of provided arguments matches the placeholders required by the where clause",
 			errors.New("mismatched where clause placeholders and arguments"),
+			http.StatusBadRequest,
 		)
 	}
 

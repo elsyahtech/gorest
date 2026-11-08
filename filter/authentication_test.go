@@ -102,6 +102,82 @@ func TestAuthenticationRejectsMissingTokensWhenLoggingDisabled(t *testing.T) {
 	}
 }
 
+func TestAuthenticationIPRestrictions(t *testing.T) {
+	tests := []struct {
+		name       string
+		allowedIPs []string
+		blockedIPs []string
+		wantStatus int
+	}{
+		{
+			name:       "allowlist matching peer",
+			allowedIPs: []string{"0.0.0.0/0", "::/0"},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "allowlist excludes peer",
+			allowedIPs: []string{"192.0.2.0/24"},
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "blocklist takes precedence",
+			allowedIPs: []string{"0.0.0.0/0", "::/0"},
+			blockedIPs: []string{"0.0.0.0/0", "::/0"},
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "empty lists allow all peers",
+			wantStatus: http.StatusOK,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config := Config{
+				SignatureKey: authenticationStringPointer("authentication-test-key"),
+				AllowedIPs:   test.allowedIPs,
+				BlockedIPs:   test.blockedIPs,
+			}
+			tokenFilter := newTestFilter(t, config)
+			accessToken := createAuthenticationTestToken(t, tokenFilter, "access", time.Minute)
+			app := newAuthenticationTestApp(tokenFilter)
+
+			request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+			request.Header.Set("Authorization", "Bearer "+accessToken)
+			response, err := app.Test(request)
+			if err != nil {
+				t.Fatalf("send request: %v", err)
+			}
+			defer response.Body.Close()
+
+			if response.StatusCode != test.wantStatus {
+				t.Fatalf("status = %d, want %d", response.StatusCode, test.wantStatus)
+			}
+		})
+	}
+}
+
+func TestAuthenticationIPRestrictionsIgnoreForwardedHeaders(t *testing.T) {
+	tokenFilter := newTestFilter(t, Config{
+		SignatureKey: authenticationStringPointer("authentication-test-key"),
+		AllowedIPs:   []string{"192.0.2.42"},
+	})
+	app := newAuthenticationTestApp(tokenFilter)
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("X-Forwarded-For", "192.0.2.42")
+	request.Header.Set("Authorization", "Bearer "+createAuthenticationTestToken(t, tokenFilter, "access", time.Minute))
+
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; forwarded header must not override the connection peer IP",
+			response.StatusCode, http.StatusForbidden)
+	}
+}
+
 func TestAuthenticationRejectsRefreshTokenAsAccessToken(t *testing.T) {
 	tokenFilter := newTestFilter(t, Config{SignatureKey: authenticationStringPointer("authentication-test-key")})
 	refreshToken := createAuthenticationTestToken(t, tokenFilter, "refresh", time.Hour)
@@ -117,6 +193,40 @@ func TestAuthenticationRejectsRefreshTokenAsAccessToken(t *testing.T) {
 
 	if response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthenticationRejectsRefreshTokenInBearerHeader(t *testing.T) {
+	tokenFilter := newTestFilter(t, Config{SignatureKey: authenticationStringPointer("authentication-test-key")})
+	refreshToken := createAuthenticationTestToken(t, tokenFilter, "refresh", time.Hour)
+	app := newAuthenticationTestApp(tokenFilter)
+
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Authorization", "Bearer "+refreshToken)
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthenticationAcceptsBearerAccessToken(t *testing.T) {
+	tokenFilter := newTestFilter(t, Config{SignatureKey: authenticationStringPointer("authentication-test-key")})
+	accessToken := createAuthenticationTestToken(t, tokenFilter, "access", time.Minute)
+	app := newAuthenticationTestApp(tokenFilter)
+
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Authorization", "bEaReR "+accessToken)
+	response, err := app.Test(request)
+	if err != nil {
+		t.Fatalf("send request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
 	}
 }
 
@@ -215,7 +325,7 @@ func createAuthenticationTestToken(t *testing.T, tokenFilter *Filter, tokenType 
 	if err != nil {
 		t.Fatalf("generate %s token: %v", tokenType, err)
 	}
-	return token
+	return token.Token
 }
 
 func authenticationStringPointer(value string) *string {

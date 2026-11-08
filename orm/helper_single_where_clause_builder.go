@@ -22,18 +22,15 @@ func (orm *ORM) buildSingleWhereClause(
 	valueArgs := field.values
 	argCounter := len(valueArgs) + 1
 
+	if err := orm.validatePlaceholderArguments("Update", "WHERE clause", orm.WhereClauses, orm.WhereArgs, activeDriver); err != nil {
+		return nil, err
+	}
+
 	if len(orm.WhereClauses) > 0 {
 		whereArgIndex := 0
 
 		for _, clause := range orm.WhereClauses {
 			placeholderCount := countActivePlaceholders(clause, activeDriver)
-
-			if whereArgIndex+placeholderCount > len(orm.WhereArgs) {
-				return nil, orm.setError(
-					"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
-					errors.New("update: mismatched where clause placeholders and arguments"),
-				)
-			}
 
 			normalized, nextCounter := normalizeWherePlaceholders(clause, activeDriver, argCounter)
 
@@ -45,12 +42,6 @@ func (orm *ORM) buildSingleWhereClause(
 			whereArgIndex += placeholderCount
 		}
 
-		if whereArgIndex != len(orm.WhereArgs) {
-			return nil, orm.setError(
-				"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
-				errors.New("update: mismatched where clause placeholders and arguments"),
-			)
-		}
 	} else {
 		for pkIdxPos, pkFieldIdx := range meta.primaryKeyIndex {
 			placeholder := getPlaceholder(activeDriver, argCounter)

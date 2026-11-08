@@ -3,6 +3,7 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strings"
@@ -94,11 +95,15 @@ func translateUpsertClausesToMongo(clauses []string, args []any) ([]bson.M, erro
 
 // buildMongoUpsertOps constructs the filter and update for each document (mapping columns to values ​​from createMongo).
 func (orm *ORM) buildMongoUpsertOps(rowsVal []any, primaryKeyCols []string) ([]mongoUpsertOp, error) {
+	if err := orm.validatePlaceholderArguments("Create", "Upsert clause", orm.UpsertClauses, orm.UpsertArgs, ""); err != nil {
+		return nil, err
+	}
+
 	conds, err := translateUpsertClausesToMongo(orm.UpsertClauses, orm.UpsertArgs)
 	if err != nil {
 		const message = "Use Upsert(\"field\") or simple conditions such as Upsert(\"email = ? AND deleted_at IS NULL\", value) on MongoDB."
 
-		return nil, orm.setError(message, fmt.Errorf("create: %w", err))
+		return nil, orm.setError(message, fmt.Errorf("create: %w", err), http.StatusBadRequest)
 	}
 
 	ops := make([]mongoUpsertOp, 0, len(rowsVal))

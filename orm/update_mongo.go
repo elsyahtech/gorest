@@ -43,6 +43,10 @@ func (orm *ORM) updateMongo(data any) error {
 		return err
 	}
 
+	if err := orm.validatePlaceholderArguments("Update", "WHERE clause", orm.WhereClauses, orm.WhereArgs, activeDriver); err != nil {
+		return err
+	}
+
 	// 5. Set context timeout
 	execCtx, cancel := orm.newContext()
 	defer cancel()

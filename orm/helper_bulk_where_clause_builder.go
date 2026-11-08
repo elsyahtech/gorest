@@ -59,18 +59,15 @@ func (orm *ORM) buildBulkWhereClause(req *reqBuildBulkWhereClause) ([]string, er
 		whereClauses = append(whereClauses, "("+strings.Join(primaryKeyInClauses, " OR ")+")")
 	}
 
+	if err := orm.validatePlaceholderArguments("Update", "WHERE clause", orm.WhereClauses, orm.WhereArgs, req.driver); err != nil {
+		return nil, err
+	}
+
 	if len(orm.WhereClauses) > 0 {
 		whereArgIndex := 0
 
 		for _, clause := range orm.WhereClauses {
 			placeholderCount := countActivePlaceholders(clause, req.driver)
-
-			if whereArgIndex+placeholderCount > len(orm.WhereArgs) {
-				return nil, orm.setError(
-					"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
-					errors.New("update: mismatched where clause placeholders and arguments"),
-				)
-			}
 
 			normalized, nextCounter := normalizeWherePlaceholders(clause, req.driver, req.query.argCounter)
 
@@ -82,12 +79,6 @@ func (orm *ORM) buildBulkWhereClause(req *reqBuildBulkWhereClause) ([]string, er
 			whereArgIndex += placeholderCount
 		}
 
-		if whereArgIndex != len(orm.WhereArgs) {
-			return nil, orm.setError(
-				"Ensure the number of placeholders in .Where() matches the number of arguments provided.",
-				errors.New("update: mismatched where clause placeholders and arguments"),
-			)
-		}
 	}
 
 	return whereClauses, nil

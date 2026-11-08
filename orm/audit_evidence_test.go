@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -137,6 +138,9 @@ func TestFindWhereValidatesPlaceholderArgumentCountAndBindsValues(t *testing.T) 
 			if err == nil {
 				t.Fatal("expected placeholder/argument mismatch to be rejected")
 			}
+			if query.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
+			}
 		})
 	}
 }
@@ -203,6 +207,9 @@ func TestHavingBindsValuesAndValidatesPlaceholderCount(t *testing.T) {
 			}
 			if _, _, err := query.buildGroupByHavingFindSQL(database.POSTGRES, 1, nil); err == nil {
 				t.Fatal("expected HAVING placeholder/argument mismatch to be rejected")
+			}
+			if query.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
 			}
 		})
 	}
@@ -315,6 +322,9 @@ func TestDeletePayloadRequiresWhereOrPrimaryKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("Delete payload builder accepted a placeholder/argument mismatch")
 	}
+	if orm.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("Delete HTTP code = %d, want %d", orm.HTTPCode, http.StatusBadRequest)
+	}
 }
 
 func TestPrepareUpsertSQLValidatesDriverColumnsAndArguments(t *testing.T) {
@@ -358,6 +368,9 @@ func TestPrepareUpsertSQLValidatesDriverColumnsAndArguments(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if err := test.orm.prepareUpsertSQL(test.meta, test.driver); err == nil {
 				t.Fatal("prepareUpsertSQL() accepted invalid upsert configuration")
+			}
+			if test.name == "mismatched condition arguments" && test.orm.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("HTTP code = %d, want %d", test.orm.HTTPCode, http.StatusBadRequest)
 			}
 		})
 	}

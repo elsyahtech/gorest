@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"reflect"
 	"regexp"
 	"slices"
@@ -143,7 +144,7 @@ func (orm *ORM) planHasManyScyllaPreloads(
 
 	cond, err := parseScyllaPreloadCondition(relName, args, hasMany.table)
 	if err != nil {
-		return false, orm.setError(scyllaPreloadCondHint, err)
+		return false, orm.setError(scyllaPreloadCondHint, err, http.StatusBadRequest)
 	}
 
 	keys, err := buildChildSortKeys(hasMany.orderByRaw, hasMany.elemType)
@@ -179,7 +180,7 @@ func (orm *ORM) planBelongsToScyllaPreloads(
 
 	cond, err := parseScyllaPreloadCondition(relationName, args, belongTo.collection)
 	if err != nil {
-		return orm.setError(scyllaPreloadCondHint, err)
+		return orm.setError(scyllaPreloadCondHint, err, http.StatusBadRequest)
 	}
 
 	var selectCols []string
@@ -221,7 +222,7 @@ func parseScyllaPreloadCondition(relation string, args []any, table string) (scy
 
 	condArgs := args[1:]
 
-	if n := strings.Count(clause, "?"); n != len(condArgs) {
+	if n := countActivePlaceholders(clause, ""); n != len(condArgs) {
 		return scyllaCond{}, fmt.Errorf("preload error: condition for %q has %d placeholder(s) but %d argument(s) were provided", relation, n, len(condArgs))
 	}
 

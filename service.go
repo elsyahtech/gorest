@@ -9,6 +9,7 @@ import (
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
+	"github.com/elsyahtech/gorest/hardening"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/redis"
@@ -57,6 +58,10 @@ func (app *App) Use(args ...any) *App {
 		case monitoring.Config, *monitoring.Config:
 			app.useCaseMonitoring(args, idx)
 
+		// SECURITY HARDENING
+		case hardening.Config, *hardening.Config:
+			app.useCaseHardening(args, idx)
+
 		default:
 			golog.Fatalf(
 				"gorest error: unsupported application configuration type %T (%v); "+
@@ -66,9 +71,11 @@ func (app *App) Use(args ...any) *App {
 					"redis.Config/redis.ConfigDefault, "+
 					"server.Config/server.ConfigDefault, "+
 					"filter.Config/filter.ConfigDefault, "+
-					"monitoring.Config/monitoring.ConfigDefault; "+
+					"monitoring.Config/monitoring.ConfigDefault, "+
+					"hardening.Config/hardening.ConfigDefault; "+
 					"example: app.Use(monitoring.Config{...}) "+
-					"example: app.Use(database.ConfigDefault)",
+					"example: app.Use(database.ConfigDefault), "+
+					"example: app.Use(hardening.Config{Enable: true, HardeningAllowedIPs: []string{...}})",
 				arg, arg,
 			)
 		}
@@ -157,6 +164,16 @@ func (app *App) useCaseMonitoring(args []any, idx int) {
 	}
 
 	app.monitoringInit()
+}
+
+func (app *App) useCaseHardening(args []any, idx int) {
+	if argType, hardeningOk := args[idx].(hardening.Config); hardeningOk {
+		app.config.hardening = &argType
+	} else if argPtr, hardeningOk := args[idx].(*hardening.Config); hardeningOk {
+		app.config.hardening = argPtr
+	}
+
+	app.hardeningInit()
 }
 
 func (app *App) initializeConfiguredFilter(config *filter.Config) {

@@ -26,6 +26,9 @@ func New(config ...Config) *App {
 	// initialize the monitoring service
 	app.monitoringInit()
 
+	// initialize the app hardening service
+	app.hardeningInit()
+
 	// initialize the server
 	app.serverInit()
 
@@ -42,6 +45,7 @@ func (app *App) Start() *App {
 
 	app.logProductionWarnings()
 	app.registerOperationalRoutes()
+	app.registerHardeningRoutes()
 	app.startLifecycle()
 
 	return app
