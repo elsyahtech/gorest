@@ -1,8 +1,8 @@
-# Helper package
+# Helpers
 
-The `helper` package contains small request, conversion, and hashing utilities.
-These helpers are optional; they do not replace application-specific
-validation, authentication, or authorization.
+GOREST provides reusable utilities in the `helper` package and in the packages
+that own related functionality. These helpers are optional; they do not replace
+application-specific validation, authentication, or authorization.
 
 ## Parse request bodies
 
@@ -31,6 +31,49 @@ result; optional pointer conversions return `nil` for absent values.
 
 Use endpoint-specific validation and error responses rather than exposing
 internal error details directly to clients.
+
+## Read environment configuration
+
+The `helper` package includes typed environment readers for strings, integers,
+booleans, durations, comma-separated string slices, file modes, and TLS minimum
+versions. Parsing helpers return errors for invalid configured values; check
+those errors rather than silently accepting a fallback. Readers with a default
+return that default when the variable is unset or empty, and return the default
+alongside an error when parsing fails.
+
+String readers that do not say `Trimmed` preserve whitespace. This matters for
+values such as passwords and tokens. Use `ReadTrimmedEnvironmentVariable` only
+when surrounding whitespace should be ignored. Pointer readers are available
+for optional `*string` and `*bool` configuration values; the string pointer
+reader distinguishes unset from explicitly empty, while the boolean pointer
+reader treats unset or empty as absent.
+
+```go
+timeout, err := helper.ReadEnvironmentDurationWithDefault("APP_TIMEOUT", 30*time.Second)
+if err != nil {
+	return fmt.Errorf("read APP_TIMEOUT: %w", err)
+}
+
+enabled, err := helper.ReadEnvironmentBooleanPointer("APP_FEATURE_ENABLED")
+if err != nil {
+	return fmt.Errorf("read APP_FEATURE_ENABLED: %w", err)
+}
+```
+
+`ReadEnvironmentStringSliceWithDefault` copies the default slice when the
+variable is unset. An explicitly empty variable produces an empty slice, which
+can be used to clear a built-in list. `ValidateApplicationEnvironmentMode`
+rejects an empty value but permits custom labels such as `staging` and `uat`,
+which GOREST treats as production-like for transport security.
+
+## Utilities in other packages
+
+Use helpers from their owning packages rather than duplicating them in
+`helper`: `database.IsDuplicateKeyError` for duplicate-key errors,
+`database.NormalizeDatabaseDriver` for database driver names, and
+`filter.GetClientIP` for resolving a client IP according to the filter
+package's proxy-header rules. `filter.GetClientIP` is not a substitute for
+configuring trusted proxies correctly.
 
 ## Password hashes and digests
 

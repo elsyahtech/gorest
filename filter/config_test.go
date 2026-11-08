@@ -25,14 +25,29 @@ func TestRunAppliesDefaultsWithoutDiscardingSignatureKey(t *testing.T) {
 	if got.RefreshTokenDuration != 30*24*time.Hour {
 		t.Errorf("RefreshTokenDuration = %s, want %s", got.RefreshTokenDuration, 30*24*time.Hour)
 	}
-	if got.CookiePath != DefaultCookiePath {
-		t.Errorf("CookiePath = %q, want %q", got.CookiePath, DefaultCookiePath)
+	if got.CookieConfig.CookiePath != DefaultCookiePath {
+		t.Errorf("CookiePath = %q, want %q", got.CookieConfig.CookiePath, DefaultCookiePath)
 	}
 }
 
 func TestRunWithoutConfigReturnsDefaults(t *testing.T) {
 	if got := Run(); !reflect.DeepEqual(got, ConfigDefault) {
 		t.Errorf("Run() = %#v, want %#v", got, ConfigDefault)
+	}
+}
+
+func TestRunCopiesIPRestrictions(t *testing.T) {
+	config := Config{
+		AllowedIPs: []string{"192.0.2.1"},
+		BlockedIPs: []string{"198.51.100.0/24"},
+	}
+
+	got := Run(config)
+	got.AllowedIPs[0] = "203.0.113.1"
+	got.BlockedIPs[0] = "203.0.113.0/24"
+
+	if config.AllowedIPs[0] != "192.0.2.1" || config.BlockedIPs[0] != "198.51.100.0/24" {
+		t.Fatalf("Run() shares IP restriction slices with input: config=%#v", config)
 	}
 }
 

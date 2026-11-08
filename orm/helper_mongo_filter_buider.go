@@ -2,6 +2,7 @@ package orm
 
 import (
 	"errors"
+	"net/http"
 	"reflect"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -26,7 +27,7 @@ func (orm *ORM) buildBulkMongoFilter(row reflect.Value, meta *columnMetaData) (b
 
 	customFilter, message, err := convertWhereToMongoFilter(orm.WhereClauses, orm.WhereArgs)
 	if err != nil {
-		return nil, orm.setError(message, err)
+		return nil, orm.setError(message, err, http.StatusBadRequest)
 	}
 
 	if len(pkFilter) == 0 {
@@ -43,7 +44,7 @@ func (orm *ORM) buildSingleMongoFilter(row reflect.Value, meta *columnMetaData) 
 	if len(orm.WhereClauses) > 0 {
 		customFilter, message, err := convertWhereToMongoFilter(orm.WhereClauses, orm.WhereArgs)
 		if err != nil {
-			return nil, orm.setError(message, err)
+			return nil, orm.setError(message, err, http.StatusBadRequest)
 		}
 
 		return customFilter, nil

@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"net/http"
 	"reflect"
 	"testing"
 
@@ -198,7 +199,8 @@ func TestParsePreloadConditionValidatesArgumentsAndDriverPlaceholders(t *testing
 		{name: "non-string condition", args: []any{42}, bad: true},
 		{name: "empty condition", args: []any{"  "}, bad: true},
 		{name: "unsafe condition", args: []any{"status = 'active'"}, bad: true},
-		{name: "argument mismatch", args: []any{"status = ?"}, bad: true},
+		{name: "missing argument", args: []any{"status = ?"}, bad: true},
+		{name: "extra argument", args: []any{"status = ?", "active", "extra"}, bad: true},
 	}
 
 	for _, test := range tests {
@@ -207,6 +209,9 @@ func TestParsePreloadConditionValidatesArgumentsAndDriverPlaceholders(t *testing
 			got, values, err := query.parsePreloadCondition("Orders", test.args, test.driver)
 			if (err != nil) != test.bad {
 				t.Fatalf("parsePreloadCondition() error = %v, want bad %t", err, test.bad)
+			}
+			if (test.name == "missing argument" || test.name == "extra argument") && query.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
 			}
 			if err == nil && (got != test.want || !reflect.DeepEqual(values, test.values)) {
 				t.Fatalf("condition/arguments = %q / %#v, want %q / %#v", got, values, test.want, test.values)

@@ -510,7 +510,7 @@ Use a development database and disposable records to check these cases before de
 | SQL transaction fails before commit | Rollback; verify from a fresh session that the write is absent |
 | Destructive filter matches multiple rows | Confirm the intended scope and authorization before running it |
 
-For transactions, use the complete SQL lifecycle example in [Transactions](orm.md#transactions): rollback on every operation failure, handle commit failure, and verify the final database state. MongoDB and ScyllaDB transaction methods are currently no-ops in this ORM and do not provide rollback or atomicity.
+For SQL and MongoDB transactions, use the lifecycle guidance in [Transactions](orm.md#transactions): roll back on operation failures, handle commit failures, and verify the final database state. MongoDB transactions require a replica set or sharded cluster. ScyllaDB does not support a general transaction through these methods; use conditional statements or lightweight transactions only for operations within their documented constraints.
 
 ## 6. Diagnose and verify
 

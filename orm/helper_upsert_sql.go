@@ -32,17 +32,8 @@ func (orm *ORM) prepareUpsertSQL(meta columnMetaData, driver string) error {
 		}
 	}
 
-	placeholderCount := 0
-
-	for _, clause := range orm.UpsertClauses {
-		placeholderCount += countActivePlaceholders(clause, driver)
-	}
-
-	if placeholderCount != len(orm.UpsertArgs) {
-		return orm.setError(
-			"Ensure the number of placeholders in .Upsert() matches the number of arguments provided.",
-			fmt.Errorf("create: upsert clause has %d placeholder(s) but got %d arg(s)", placeholderCount, len(orm.UpsertArgs)),
-		)
+	if err := orm.validatePlaceholderArguments("Create", "Upsert clause", orm.UpsertClauses, orm.UpsertArgs, driver); err != nil {
+		return err
 	}
 
 	return nil

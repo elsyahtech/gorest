@@ -18,6 +18,15 @@ func (filter *Filter) Authentication() server.Handler {
 		golog.Fatalf("cannot use the filter authentication middleware: JWT filter is not running. Set SignatureKey in filter.Run(...) and register it with app.Use(...) before using authentication middleware.")
 	}
 
+	allowedIPs, err := parseIPRanges(filter.Config.AllowedIPs)
+	if err != nil {
+		golog.Fatalf("cannot use the filter authentication middleware: invalid AllowedIPs: %v", err)
+	}
+	blockedIPs, err := parseIPRanges(filter.Config.BlockedIPs)
+	if err != nil {
+		golog.Fatalf("cannot use the filter authentication middleware: invalid BlockedIPs: %v", err)
+	}
+
 	if filter.JWT == nil || filter.JWT.Method == nil {
 		golog.Fatalf("cannot use the filter authentication middleware: JWT signing method is not configured. Set a supported SigningMethod in filter.Run(...) and register it with app.Use(...).")
 	}
@@ -27,6 +36,13 @@ func (filter *Filter) Authentication() server.Handler {
 			return ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{
 				errorKey:   "authentication filter is not configured",
 				messageKey: "The server cannot validate authentication tokens",
+			})
+		}
+
+		if !ipAllowed(ctx.RequestCtx().RemoteIP(), allowedIPs, blockedIPs) {
+			return ctx.Status(http.StatusForbidden).JSON(fiber.Map{
+				errorKey:   "IP address is not allowed",
+				messageKey: "This network address cannot access the resource",
 			})
 		}
 

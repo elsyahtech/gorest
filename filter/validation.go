@@ -109,7 +109,7 @@ func (filter *Filter) validateRefreshToken(ctx server.Context, refreshToken stri
 
 	key := []byte(*filter.Config.SignatureKey)
 
-	if message, status, err := filter.execGenerateToken(ctx, tokenID, "access", key); err != nil {
+	if _, message, status, err := filter.execGenerateToken(ctx, tokenID, "access", key); err != nil {
 		return nil, message, status, refreshFailedError{err: fmt.Errorf("generate new access token: %w", err)}
 	}
 
@@ -121,12 +121,12 @@ func (filter *Filter) deleteTokenCookie(ctx server.Context, name, value string) 
 		Expires:     time.Now().Add(-time.Second),
 		Name:        name,
 		Value:       value,
-		Path:        filter.Config.CookiePath,
-		Domain:      filter.Config.CookieDomain,
-		SameSite:    filter.Config.CookieSameSite,
-		Secure:      filter.Config.CookieSecure,
-		HTTPOnly:    filter.Config.CookieHTTPOnly,
-		SessionOnly: filter.Config.CookieSessionOnly,
+		Path:        filter.Config.CookieConfig.CookiePath,
+		Domain:      filter.Config.CookieConfig.CookieDomain,
+		SameSite:    filter.Config.CookieConfig.CookieSameSite,
+		Secure:      filter.Config.CookieConfig.CookieSecure,
+		HTTPOnly:    filter.Config.CookieConfig.CookieHTTPOnly,
+		SessionOnly: filter.Config.CookieConfig.CookieSessionOnly,
 	})
 }
 

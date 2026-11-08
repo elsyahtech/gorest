@@ -81,7 +81,8 @@ func TestParseScyllaPreloadCondition(t *testing.T) {
 		{name: "is null is not supported", args: []any{"deleted_at IS NULL"}, wantErr: true},
 		{name: "is not null is not supported", args: []any{"deleted_at IS NOT NULL"}, wantErr: true},
 		{name: "parentheses are not supported", args: []any{"(status = ?)", "open"}, wantErr: true},
-		{name: "placeholder argument mismatch", args: []any{"status = ?"}, wantErr: true},
+		{name: "missing placeholder argument", args: []any{"status = ?"}, wantErr: true},
+		{name: "surplus placeholder argument", args: []any{"status = ?", "open", "extra"}, wantErr: true},
 	}
 
 	for _, test := range tests {

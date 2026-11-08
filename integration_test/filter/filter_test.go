@@ -3,6 +3,7 @@
 package filter_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,7 +23,7 @@ func TestCreateTokenSetsSignedAccessAndRefreshCookies(t *testing.T) {
 	config.SignatureKey = stringPointer(signingKey)
 	config.AccessTokenDuration = 2 * time.Minute
 	config.RefreshTokenDuration = 2 * time.Hour
-	config.CookieSecure = true
+	config.CookieConfig.CookieSecure = true
 
 	app := gorest.New(gorest.Config{AppName: "filter-integration"})
 	app.Use(config)
@@ -37,11 +38,12 @@ func TestCreateTokenSetsSignedAccessAndRefreshCookies(t *testing.T) {
 		t.Fatalf("initialize HTTP server: %v", err)
 	}
 	httpServer.Post("/tokens", func(ctx *server.Context) error {
-		message, status, err := app.Filter().CreateToken(*ctx, "user-123")
+		tokenResponse, message, status, err := app.Filter().CreateToken(*ctx, "user-123")
 		if err != nil {
 			return ctx.Status(status).SendString(message)
 		}
-		return ctx.Status(status).SendString(message)
+
+		return ctx.Status(status).JSON(tokenResponse)
 	})
 
 	response, err := httpServer.SRV.Test(httptest.NewRequest(http.MethodPost, "/tokens", nil))
@@ -51,6 +53,14 @@ func TestCreateTokenSetsSignedAccessAndRefreshCookies(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("token request status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	var tokenResponse jwtfilter.TokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&tokenResponse); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	if tokenResponse.AccessToken == nil || tokenResponse.AccessToken.Token == "" ||
+		tokenResponse.RefreshToken == nil || tokenResponse.RefreshToken.Token == "" {
+		t.Fatalf("token response did not contain both token details: %#v", tokenResponse)
 	}
 
 	cookies := response.Cookies()
@@ -116,6 +126,59 @@ func TestCreateTokenSetsSignedAccessAndRefreshCookies(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Errorf("missing token cookies: %v", want)
+	}
+}
+
+func TestCreateTokenReturnsTokenResponseWithoutCookiesWhenDisabled(t *testing.T) {
+	const signingKey = "integration-test-signing-key-with-at-least-32-bytes"
+	config := jwtfilter.ConfigDefault
+	config.SignatureKey = stringPointer(signingKey)
+	config.CookieConfig.DisableStoreTokenCookie = true
+
+	app := gorest.New(gorest.Config{AppName: "filter-integration"})
+	app.Use(config)
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close GOREST app: %v", err)
+		}
+	})
+
+	httpServer, _, err := server.New(nil)
+	if err != nil {
+		t.Fatalf("initialize HTTP server: %v", err)
+	}
+	httpServer.Post("/tokens", func(ctx *server.Context) error {
+		tokenResponse, message, status, err := app.Filter().CreateToken(*ctx, "user-123")
+		if err != nil {
+			return ctx.Status(status).SendString(message)
+		}
+
+		return ctx.Status(status).JSON(tokenResponse)
+	})
+
+	response, err := httpServer.SRV.Test(httptest.NewRequest(http.MethodPost, "/tokens", nil))
+	if err != nil {
+		t.Fatalf("send token request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("token request status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	if cookies := response.Cookies(); len(cookies) != 0 {
+		t.Fatalf("response cookies = %d, want none", len(cookies))
+	}
+
+	var tokenResponse jwtfilter.TokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&tokenResponse); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	if tokenResponse.AccessToken == nil || tokenResponse.AccessToken.Token == "" ||
+		tokenResponse.RefreshToken == nil || tokenResponse.RefreshToken.Token == "" {
+		t.Fatalf("token response did not contain both token details: %#v", tokenResponse)
+	}
+	if tokenResponse.AccessToken.TokenType != "access" || tokenResponse.RefreshToken.TokenType != "refresh" {
+		t.Fatalf("token response types = (%q, %q), want access and refresh",
+			tokenResponse.AccessToken.TokenType, tokenResponse.RefreshToken.TokenType)
 	}
 }
 
@@ -291,6 +354,41 @@ func TestAuthenticationBearerTokenWorksOnGroupedRouteOverHTTP(t *testing.T) {
 	}
 	if got := string(body); got != "access" {
 		t.Fatalf("handler received token type %q, want access", got)
+	}
+}
+
+func TestAuthenticationIPBlocklistUsesConnectionPeer(t *testing.T) {
+	const signingKey = "integration-test-signing-key-with-at-least-32-bytes"
+	config := jwtfilter.ConfigDefault
+	config.SignatureKey = stringPointer(signingKey)
+	config.AllowedIPs = []string{"0.0.0.0/0", "::/0"}
+	config.BlockedIPs = []string{"0.0.0.0/0", "::/0"}
+
+	app := gorest.New(gorest.Config{AppName: "filter-ip-integration"})
+	app.Use(config)
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close GOREST app: %v", err)
+		}
+	})
+
+	httpServer, _, err := server.New(nil)
+	if err != nil {
+		t.Fatalf("initialize HTTP server: %v", err)
+	}
+	httpServer.Get("/protected", app.Filter().Authentication(), func(ctx *server.Context) error {
+		return ctx.SendStatus(http.StatusOK)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("X-Forwarded-For", "192.0.2.42")
+	response, err := httpServer.SRV.Test(request)
+	if err != nil {
+		t.Fatalf("send protected request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusForbidden)
 	}
 }
 

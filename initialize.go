@@ -10,6 +10,7 @@ import (
 
 	"github.com/elsyahtech/gorest/database"
 	"github.com/elsyahtech/gorest/filter"
+	"github.com/elsyahtech/gorest/hardening"
 	"github.com/elsyahtech/gorest/log"
 	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/redis"
@@ -173,6 +174,40 @@ func (app *App) monitoringInit() {
 	if app.server != nil {
 		app.reconfigureServer()
 	}
+}
+
+func (app *App) hardeningInit() {
+	if app == nil {
+		golog.Fatalf("failed to run app hardening: application is nil")
+	}
+
+	if app.log == nil {
+		golog.Fatalf("failed to run app hardening: logger is not running")
+	}
+
+	if app.config.hardening == nil {
+		config := hardening.ConfigDefault
+		app.config.hardening = &config
+	}
+
+	config := hardening.Run(*app.config.hardening)
+	hardeningInitialized, err := hardening.New(config)
+	if err != nil {
+		app.Log(map[string]any{
+			LogFieldKeyError: err,
+		}, true).Error("failed to run security hardening")
+		app.abortStartup(fmt.Errorf("initialize app hardening: %w", err))
+	}
+
+	app.config.hardening = &config
+	app.hardening = hardeningInitialized
+	if app.hardening.Enabled() {
+		app.registerService("Hardening")
+	} else {
+		app.unregisterService("Hardening")
+	}
+
+	app.Log(nil, true).Info("app hardening is ready")
 }
 
 func (app *App) newServer() {

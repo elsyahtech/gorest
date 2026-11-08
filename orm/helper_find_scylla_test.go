@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -99,7 +100,7 @@ func TestBuildWhereClauseFindScyllaRejectsUnsupportedAndMismatchedClauses(t *tes
 			name:        "unused argument",
 			clauses:     []string{"id = ?"},
 			args:        []any{7, "extra"},
-			wantMessage: "unused arguments provided to .Where()",
+			wantMessage: "mismatched where clause placeholders and arguments",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -112,6 +113,9 @@ func TestBuildWhereClauseFindScyllaRejectsUnsupportedAndMismatchedClauses(t *tes
 			_, _, err := query.buildWhereClauseFindScylla(false, "")
 			if err == nil || !strings.Contains(err.Error(), test.wantMessage) {
 				t.Fatalf("error = %v, want message containing %q", err, test.wantMessage)
+			}
+			if query.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("HTTP code = %d, want %d", query.HTTPCode, http.StatusBadRequest)
 			}
 		})
 	}

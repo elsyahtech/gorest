@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/elsyahtech/gorest/database"
+	"github.com/elsyahtech/gorest/hardening"
 	"github.com/elsyahtech/gorest/monitoring"
 	"github.com/elsyahtech/gorest/redis"
 )
@@ -32,6 +33,126 @@ func TestFormatUptime(t *testing.T) {
 				t.Errorf("formatUptime(%s) = %q, want %q", test.got, got, test.want)
 			}
 		})
+	}
+}
+
+func TestHardeningEndpointIsDisabledByDefault(t *testing.T) {
+	app := New()
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close application: %v", err)
+		}
+	})
+	app.registerHardeningRoutes()
+
+	response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, "/gorest/hardening", nil))
+	if err != nil {
+		t.Fatalf("request disabled hardening endpoint: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("disabled endpoint status = %d, want %d", response.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestHardeningEndpointRequiresPeerAllowlist(t *testing.T) {
+	app := New().Use(hardening.Config{Enable: true})
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close application: %v", err)
+		}
+	})
+	app.registerHardeningRoutes()
+
+	request := httptest.NewRequest(http.MethodGet, "/gorest/hardening", nil)
+	request.Header.Set("X-Forwarded-For", "127.0.0.1")
+	response, err := app.server.SRV.Test(request)
+	if err != nil {
+		t.Fatalf("request hardening endpoint without allowlist: %v", err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatalf("read denied hardening response: %v", err)
+	}
+	if response.StatusCode != http.StatusForbidden || string(body) != `{"status":"forbidden"}` {
+		t.Fatalf("denied response = %d %s", response.StatusCode, body)
+	}
+}
+
+func TestHardeningEndpointReturnsJSONAndHTMLReports(t *testing.T) {
+	app := New(Config{Environment: Production}).Use(hardening.Config{
+		Enable:              true,
+		HardeningAllowedIPs: []string{"0.0.0.0/0", "::/0"},
+	})
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close application: %v", err)
+		}
+	})
+	app.registerHardeningRoutes()
+
+	response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, "/gorest/hardening", nil))
+	if err != nil {
+		t.Fatalf("request JSON hardening report: %v", err)
+	}
+	var report struct {
+		EvidenceMode string `json:"evidence_mode"`
+		Inventory    []struct {
+			Path string `json:"field_path"`
+		} `json:"inventory"`
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("JSON report status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	if err := json.NewDecoder(response.Body).Decode(&report); err != nil {
+		response.Body.Close()
+		t.Fatalf("decode hardening report: %v", err)
+	}
+	response.Body.Close()
+	if report.EvidenceMode != "effective_runtime_config" {
+		t.Errorf("evidence mode = %q", report.EvidenceMode)
+	}
+	if len(report.Inventory) == 0 {
+		t.Fatal("hardening report has no configuration inventory")
+	}
+
+	htmlRequest := httptest.NewRequest(http.MethodGet, "/gorest/hardening?format=html", nil)
+	htmlResponse, err := app.server.SRV.Test(htmlRequest)
+	if err != nil {
+		t.Fatalf("request HTML hardening report: %v", err)
+	}
+	defer htmlResponse.Body.Close()
+	if htmlResponse.StatusCode != http.StatusOK {
+		t.Fatalf("HTML report status = %d, want %d", htmlResponse.StatusCode, http.StatusOK)
+	}
+	if contentType := htmlResponse.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/html") {
+		t.Errorf("HTML Content-Type = %q", contentType)
+	}
+	if htmlResponse.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("HTML Cache-Control = %q, want no-store", htmlResponse.Header.Get("Cache-Control"))
+	}
+}
+
+func TestHardeningEndpointRejectsUnknownReportFormat(t *testing.T) {
+	app := New().Use(hardening.Config{
+		Enable:              true,
+		HardeningAllowedIPs: []string{"0.0.0.0/0", "::/0"},
+	})
+	t.Cleanup(func() {
+		if _, _, err := app.Close(); err != nil {
+			t.Errorf("close application: %v", err)
+		}
+	})
+	app.registerHardeningRoutes()
+
+	response, err := app.server.SRV.Test(httptest.NewRequest(http.MethodGet, "/gorest/hardening?format=xml", nil))
+	if err != nil {
+		t.Fatalf("request unsupported hardening format: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unsupported format status = %d, want %d", response.StatusCode, http.StatusBadRequest)
 	}
 }
 

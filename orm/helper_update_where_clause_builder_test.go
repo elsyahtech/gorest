@@ -1,26 +1,32 @@
 package orm
 
 import (
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestBuildSingleWhereClauseRejectsUnusedWhereArgs(t *testing.T) {
-	var row reflect.Value
-	orm := &ORM{
-		WhereClauses: []string{"status = ?"},
-		WhereArgs:    []any{"active", "unused"},
-	}
+	for _, args := range [][]any{nil, {"active", "unused"}} {
+		var row reflect.Value
+		orm := &ORM{
+			WhereClauses: []string{"status = ?"},
+			WhereArgs:    args,
+		}
 
-	_, err := orm.buildSingleWhereClause(
-		&row,
-		&resultBuildUpdatePayload{values: []any{"updated"}},
-		&columnMetaData{},
-		"mysql",
-	)
-	if err == nil || !strings.Contains(err.Error(), "mismatched where clause placeholders and arguments") {
-		t.Fatalf("expected mismatched WHERE argument error, got %v", err)
+		_, err := orm.buildSingleWhereClause(
+			&row,
+			&resultBuildUpdatePayload{values: []any{"updated"}},
+			&columnMetaData{},
+			"mysql",
+		)
+		if err == nil || !strings.Contains(err.Error(), "mismatched where clause placeholders and arguments") {
+			t.Fatalf("expected mismatched WHERE argument error, got %v", err)
+		}
+		if orm.HTTPCode != http.StatusBadRequest {
+			t.Fatalf("HTTP code = %d, want %d", orm.HTTPCode, http.StatusBadRequest)
+		}
 	}
 }
 
@@ -39,6 +45,9 @@ func TestBuildSingleWhereClauseAcceptsExactWhereArgs(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if orm.HTTPCode != 0 {
+		t.Fatalf("HTTP code = %d, want no error status", orm.HTTPCode)
 	}
 	if len(result.args) != 2 || result.args[0] != "updated" || result.args[1] != "active" {
 		t.Fatalf("unexpected arguments: %#v", result.args)
@@ -64,6 +73,24 @@ func TestBuildBulkWhereClauseRejectsUnusedWhereArgs(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "mismatched where clause placeholders and arguments") {
 		t.Fatalf("expected mismatched WHERE argument error, got %v", err)
+	}
+	if orm.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("HTTP code = %d, want %d", orm.HTTPCode, http.StatusBadRequest)
+	}
+
+	orm = &ORM{
+		WhereClauses: []string{"status = ?"},
+	}
+	query = &resBuildQueryUpdateSQL{argCounter: 1}
+	_, err = orm.buildBulkWhereClause(&reqBuildBulkWhereClause{
+		query:             query,
+		driver:            "mysql",
+		primaryKeyIndex:   []int{0},
+		primaryKeyColumns: []string{"id"},
+		rows:              []reflect.Value{row},
+	})
+	if err == nil || orm.HTTPCode != http.StatusBadRequest {
+		t.Fatalf("missing argument result = (%v, %d), want HTTP 400 error", err, orm.HTTPCode)
 	}
 }
 

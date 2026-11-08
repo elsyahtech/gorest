@@ -38,6 +38,87 @@ func TestMongoServerVersion(t *testing.T) {
 	t.Logf("MongoDB server version: %s", version)
 }
 
+func TestMongoTransactionCommitAndRollback(t *testing.T) {
+	app := internaltest.OpenApp(t, database.MONGO)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var topology struct {
+		SetName string `bson:"setName"`
+		Message string `bson:"msg"`
+	}
+	_, _, err := app.Database().RawQueryMongo(ctx, func(ctx context.Context, client *mongo.Client) error {
+		return client.Database("admin").
+			RunCommand(ctx, bson.D{{Key: "hello", Value: 1}}).
+			Decode(&topology)
+	})
+	if err != nil {
+		t.Fatalf("inspect MongoDB deployment topology: %v", err)
+	}
+	if topology.SetName == "" && topology.Message != "isdbgrid" {
+		t.Skip("MongoDB transactions require a replica set or sharded cluster")
+	}
+
+	collectionName := "transaction_" + uniqueSuffix(t)
+	if message, status, err := app.Database().MongoCreateCollection(ctx, collectionName); err != nil {
+		t.Fatalf("create transaction test collection (HTTP %d, %s): %v", status, message, err)
+	}
+	collection, message, status, err := app.Database().MongoCollection(collectionName)
+	if err != nil {
+		t.Fatalf("get transaction test collection (HTTP %d, %s): %v", status, message, err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		if err := collection.Drop(cleanupCtx); err != nil {
+			t.Errorf("drop transaction test collection: %v", err)
+		}
+	})
+
+	type transactionDocument struct {
+		ID   string `gorest:"_id, primary_key"`
+		Name string `gorest:"name"`
+	}
+
+	rollbackSession, message, status, err := app.Database().BeginTxContext(ctx)
+	if err != nil {
+		t.Fatalf("begin rollback transaction (HTTP %d, %s): %v", status, message, err)
+	}
+	rollbackDoc := transactionDocument{ID: uniqueSuffix(t) + "_rollback", Name: "rolled back"}
+	if query := rollbackSession.Table(collectionName).Create(&rollbackDoc); query.Error != nil {
+		_, _, rollbackErr := rollbackSession.Rollback()
+		t.Fatalf("create document in rollback transaction (HTTP %d): %v; rollback error: %v", query.HTTPCode, query.Error, rollbackErr)
+	}
+	if message, status, err := rollbackSession.Rollback(); err != nil {
+		t.Fatalf("rollback MongoDB transaction (HTTP %d, %s): %v", status, message, err)
+	}
+
+	if count, err := collection.CountDocuments(ctx, bson.D{{Key: "_id", Value: rollbackDoc.ID}}); err != nil {
+		t.Fatalf("count rolled-back MongoDB document: %v", err)
+	} else if count != 0 {
+		t.Fatalf("rolled-back document count = %d, want 0", count)
+	}
+
+	commitSession, message, status, err := app.Database().BeginTxContext(ctx)
+	if err != nil {
+		t.Fatalf("begin commit transaction (HTTP %d, %s): %v", status, message, err)
+	}
+	commitDoc := transactionDocument{ID: uniqueSuffix(t) + "_commit", Name: "committed"}
+	if query := commitSession.Table(collectionName).Create(&commitDoc); query.Error != nil {
+		_, _, rollbackErr := commitSession.Rollback()
+		t.Fatalf("create document in commit transaction (HTTP %d): %v; rollback error: %v", query.HTTPCode, query.Error, rollbackErr)
+	}
+	if message, status, err := commitSession.Commit(); err != nil {
+		t.Fatalf("commit MongoDB transaction (HTTP %d, %s): %v", status, message, err)
+	}
+
+	if count, err := collection.CountDocuments(ctx, bson.D{{Key: "_id", Value: commitDoc.ID}}); err != nil {
+		t.Fatalf("count committed MongoDB document: %v", err)
+	} else if count != 1 {
+		t.Fatalf("committed document count = %d, want 1", count)
+	}
+}
+
 func TestMongoStorageUsageEndpoint(t *testing.T) {
 	internaltest.StorageUsage(t, database.MONGO)
 }

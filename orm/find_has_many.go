@@ -595,11 +595,8 @@ func (orm *ORM) parsePreloadCondition(relation string, args []any, activeDriver 
 
 	condArgs := args[1:]
 
-	if n := countActivePlaceholders(clause, activeDriver); n != len(condArgs) {
-		return "", nil, orm.setError(
-			message,
-			fmt.Errorf("preload error: condition for %q has %d placeholder(s) but %d argument(s) were provided", relation, n, len(condArgs)),
-		)
+	if err := orm.validatePlaceholderArguments("Find", "Preload condition", []string{clause}, condArgs, activeDriver); err != nil {
+		return "", nil, err
 	}
 
 	return clause, condArgs, nil

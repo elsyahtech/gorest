@@ -10,30 +10,32 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// CreateToken generates a new JWT token with the provided claims and signs it using the specified signature key.
-func (filter *Filter) CreateToken(ctx server.Context, tokenID string) (string, int, error) {
+// CreateToken generates signed access and refresh tokens. It returns both token
+// details and, unless CookieConfig.DisableStoreTokenCookie is true, stores the
+// tokens in response cookies.
+func (filter *Filter) CreateToken(ctx server.Context, tokenID string) (*TokenResponse, string, int, error) {
 	if filter == nil || filter.JWT == nil || filter.Config == nil {
-		return filterConfigurationMessage, http.StatusNotImplemented,
+		return nil, filterConfigurationMessage, http.StatusNotImplemented,
 			errors.New("filter configuration is error: config is nil")
 	}
 
 	if filter.Config.SignatureKey == nil || *filter.Config.SignatureKey == "" {
-		return filterConfigurationMessage, http.StatusBadRequest,
+		return nil, filterConfigurationMessage, http.StatusBadRequest,
 			errors.New("filter signature key is empty")
 	}
 
 	if tokenID == "" {
-		return "Ensure the token ID is provided and not empty.", http.StatusBadRequest,
+		return nil, "Ensure the token ID is provided and not empty.", http.StatusBadRequest,
 			errors.New("token ID is empty")
 	}
 
 	if filter.JWT.Method == nil {
-		return "", http.StatusInternalServerError,
+		return nil, "", http.StatusInternalServerError,
 			errors.New("JWT signing method is not configured")
 	}
 
 	if filter.Config.AccessTokenDuration < time.Second || filter.Config.RefreshTokenDuration < time.Second {
-		return "Access and refresh token durations must be at least one second.", http.StatusBadRequest,
+		return nil, "Access and refresh token durations must be at least one second.", http.StatusBadRequest,
 			errors.New("JWT token duration must be at least one second")
 	}
 
@@ -44,40 +46,47 @@ func (filter *Filter) CreateToken(ctx server.Context, tokenID string) (string, i
 		refresh = "refresh"
 	)
 
-	message, httpCode, err := filter.execGenerateToken(ctx, tokenID, access, key)
+	accessToken, message, httpCode, err := filter.execGenerateToken(ctx, tokenID, access, key)
 	if err != nil {
-		return message, httpCode, fmt.Errorf("failed to generate access token: %w", err)
+		return nil, message, httpCode, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	message, httpCode, err = filter.execGenerateToken(ctx, tokenID, refresh, key)
+	refreshToken, message, httpCode, err := filter.execGenerateToken(ctx, tokenID, refresh, key)
 	if err != nil {
-		return message, httpCode, fmt.Errorf("failed to generate refresh token: %w", err)
+		return nil, message, httpCode, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
 
-	return "Token saved successfully", http.StatusOK, nil
+	return &TokenResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, "Tokens generated successfully", http.StatusOK, nil
 }
 
-func (filter *Filter) execGenerateToken(ctx server.Context, tokenID, tokenType string, key []byte) (string, int, error) {
+func (filter *Filter) execGenerateToken(ctx server.Context, tokenID, tokenType string, key []byte) (*TokenDetail, string, int, error) {
 	duration := filter.Config.AccessTokenDuration
 	if tokenType == "refresh" {
 		duration = filter.Config.RefreshTokenDuration
 	} else if tokenType != "access" {
-		return "Ensure the token type is access or refresh.", http.StatusBadRequest,
+		return nil, "Ensure the token type is access or refresh.", http.StatusBadRequest,
 			fmt.Errorf("unsupported token type %q", tokenType)
 	}
 
 	tokenGenerated, expiresAt, err := filter.generateToken(filter.JWT.Method, tokenID, tokenType, duration, key)
 	if err != nil {
-		return "", http.StatusInternalServerError,
+		return nil, "", http.StatusInternalServerError,
 			fmt.Errorf("failed to sign %s token: %w", tokenType, err)
 	}
 
-	message, httpCode, err := filter.createCookie(ctx, tokenType, tokenGenerated, expiresAt)
-	if err != nil {
-		return message, httpCode, fmt.Errorf("%w", err)
+	if filter.Config.CookieConfig.DisableStoreTokenCookie {
+		return tokenGenerated, "", http.StatusOK, nil
 	}
 
-	return "", http.StatusOK, nil
+	message, httpCode, err := filter.createCookie(ctx, tokenType, tokenGenerated.Token, expiresAt)
+	if err != nil {
+		return nil, message, httpCode, fmt.Errorf("%w", err)
+	}
+
+	return tokenGenerated, "", http.StatusOK, nil
 }
 
 func (filter *Filter) generateToken(
@@ -86,9 +95,9 @@ func (filter *Filter) generateToken(
 	tokenType string,
 	duration time.Duration,
 	key []byte,
-) (string, time.Time, error) {
+) (*TokenDetail, time.Time, error) {
 	if signingMethod == nil {
-		return "", time.Time{}, errors.New("JWT signing method is not configured")
+		return nil, time.Time{}, errors.New("JWT signing method is not configured")
 	}
 
 	now := time.Now()
@@ -104,8 +113,15 @@ func (filter *Filter) generateToken(
 
 	tokenGenerated, err := token.SignedString(key)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w", err)
+		return nil, time.Time{}, fmt.Errorf("%w", err)
 	}
 
-	return tokenGenerated, expiresAt, nil
+	return &TokenDetail{
+		IssueAt:   now,
+		TokenID:   tokenID,
+		Token:     tokenGenerated,
+		Issuer:    filter.Config.Issuer,
+		TokenType: tokenType,
+		ExpiresAt: expiresAt.Unix(),
+	}, expiresAt, nil
 }

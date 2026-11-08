@@ -36,6 +36,9 @@ const (
 
 	// DefaultCookieSessionOnly specifies whether the cookie expires when the browser session ends.
 	DefaultCookieSessionOnly = false
+
+	// DefaultDisableStoreTokenCookie specifies whether to disable storing access and refresh tokens in cookies.
+	DisableStoreTokenCookie = false
 )
 
 const filterConfigurationMessage = "Ensure the filter is configured with a valid signature key."

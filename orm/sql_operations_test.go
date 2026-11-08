@@ -53,6 +53,47 @@ func TestSQLiteORMCreateFindUpdateAndDeleteLifecycle(t *testing.T) {
 		t.Fatalf("Find() result = %#v, want %#v", found, created)
 	}
 
+	for _, operation := range []struct {
+		name string
+		run  func() *ORM
+	}{
+		{
+			name: "Find",
+			run: func() *ORM {
+				var result user
+				return newORM().Where("id = ?", 1, "extra").Find(&result)
+			},
+		},
+		{
+			name: "Update",
+			run: func() *ORM {
+				value := user{ID: 1, Name: "must-not-write"}
+				return newORM().Where("id = ?", 1, "extra").Update(&value)
+			},
+		},
+		{
+			name: "Delete",
+			run: func() *ORM {
+				return newORM().Where("id = ?", 1, "extra").Delete(&created)
+			},
+		},
+	} {
+		t.Run(operation.name+" rejects surplus WHERE arguments", func(t *testing.T) {
+			query := operation.run()
+			if query.Error == nil || query.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("operation result = (HTTP %d, %v), want HTTP 400 validation error",
+					query.HTTPCode, query.Error)
+			}
+		})
+	}
+
+	found = user{}
+	query = newORM().Where("id = ?", 1).Find(&found)
+	if query.Error != nil || found != created {
+		t.Fatalf("valid Find() after rejected argument counts = (%#v, %v), want %#v",
+			found, query.Error, created)
+	}
+
 	updated := user{ID: 1, Name: "updated"}
 	query = newORM().Update(&updated)
 	if query.Error != nil || query.HTTPCode != http.StatusOK || query.RowsAffected != 1 {

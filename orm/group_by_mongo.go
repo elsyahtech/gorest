@@ -277,6 +277,10 @@ func (orm *ORM) pipelinepOnbuildMongoGroupPipeline(
 		pipeline = append(pipeline, bson.D{{Key: dolarMatch, Value: req.filter}})
 	}
 
+	if err := orm.validatePlaceholderArguments("Find", "HAVING clause", orm.HavingClauses, orm.HavingArgs, ""); err != nil {
+		return nil, nil, orm.Message, err
+	}
+
 	for idx, clause := range orm.HavingClauses {
 		match := mongoHavingExpr.FindStringSubmatch(clause)
 

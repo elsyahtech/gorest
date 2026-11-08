@@ -11,6 +11,47 @@ The public release history begins with `v0.0.71`. Earlier versions
 <details open>
 <summary><strong>Unreleased</strong></summary>
 
+### Added
+
+- Added the optional `GET /gorest/hardening` endpoint, which returns an advisory
+  JSON or HTML report of effective GOREST runtime configuration. It is disabled
+  by default and supports a peer-IP/CIDR allowlist; sensitive values are
+  redacted. Added the hardening configuration and client guide.
+- Added filter IP allowlist and blocklist support for routes protected by
+  `Authentication()`. Checks use the connection peer IP and do not trust
+  forwarded headers.
+- Added `helper` readers for environment variables covering strings, pointers,
+  integers, durations, booleans, string slices, file modes, TLS minimum
+  versions, and application environment validation.
+- Added MongoDB transaction support through transaction-bound database
+  sessions and ORM operations.
+- Added a GitHub Actions test workflow for unit and app, filter, and logger
+  integration tests, with unit coverage reporting.
+
+### Changed
+
+- **Breaking API change:** `Filter.CreateToken()` now returns
+  `(*filter.TokenResponse, string, int, error)` with access and refresh token
+  details. Cookie options have moved under `filter.Config.CookieConfig`; set
+  `DisableStoreTokenCookie` there when the application manages token
+  transport. Update callers and filter configuration literals when upgrading.
+- Filter authentication now validates Bearer credentials only as access
+  tokens, reads refresh credentials from the `refresh` cookie, and can use a
+  valid refresh cookie to issue a replacement access cookie and continue the
+  current request without an additional client round trip. Cookie lifetimes
+  follow their corresponding token durations.
+- Defined transaction behavior by database driver. SQL transactions use
+  bounded contexts and cleanup; MongoDB uses native sessions and transactions;
+  generic ScyllaDB `Commit`/`Rollback` transactions return
+  `HTTP 501 Not Implemented` because ScyllaDB does not support that model.
+- Clarified database timeout semantics: the setting configures supported
+  driver connection/I/O timeouts and caps transaction duration; use a context
+  deadline to bound an individual operation.
+- Updated ORM query handling to validate placeholder/argument counts across
+  supported operations and database drivers before execution. Adjusted
+  MongoDB, ScyllaDB, and SQL query, preload, and update paths to use consistent
+  driver-specific behavior and error reporting.
+
 ### Fixed
 
 - Treat a GitHub 404 response for `releases/latest` as an informational skipped
@@ -20,11 +61,14 @@ The public release history begins with `v0.0.71`. Earlier versions
   `TLS: "true"` now uses the driver's system certificate roots and verifies the
   server hostname. Optional `SSLCAPath`, `SSLCertPath`, and `SSLKeyPath`
   configure a private CA or mTLS directly.
-
-### Added
-
-- Added a GitHub Actions test workflow for unit and app, filter, and logger
-  integration tests, with unit coverage reporting.
+- Corrected filter cookie configuration defaults and validation, cookie
+  expiration calculation, and token issuance when cookie storage is disabled.
+- Improved database transaction lifecycle handling, including cancellation,
+  cleanup, prevention of operations falling back to the connection pool after
+  transaction completion, and retryable MongoDB finalization after errors.
+- Fixed ORM placeholder counting and validation so placeholders in supported
+  driver syntax are counted consistently and mismatched arguments return a
+  client error before query execution.
 
 </details>
 

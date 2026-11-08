@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -116,7 +117,16 @@ func TestBuildMongoGroupPipelineRejectsUnsupportedSelectionsAndHaving(t *testing
 				GroupByClauses: []string{"status"},
 				HavingClauses:  []string{"COUNT(*) > ?"},
 			},
-			want: "unsupported having expression",
+			want: "mismatched having clause placeholders and arguments",
+		},
+		{
+			name: "unused having argument",
+			query: &ORM{
+				GroupByClauses: []string{"status"},
+				HavingClauses:  []string{"COUNT(*) > ?"},
+				HavingArgs:     []any{1, 2},
+			},
+			want: "mismatched having clause placeholders and arguments",
 		},
 		{
 			name: "unknown having field",
@@ -137,6 +147,9 @@ func TestBuildMongoGroupPipelineRejectsUnsupportedSelectionsAndHaving(t *testing
 			}
 			if test.query.Error == nil {
 				t.Fatal("grouped query error was not stored on ORM")
+			}
+			if test.query.HTTPCode != http.StatusBadRequest {
+				t.Fatalf("HTTP code = %d, want %d", test.query.HTTPCode, http.StatusBadRequest)
 			}
 			if !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("error = %q, want it to contain %q", err, test.want)

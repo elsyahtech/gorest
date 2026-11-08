@@ -643,8 +643,9 @@ func SQLInvalidInputs(t *testing.T, driver string) {
 	createDynamicRecord(t, app, table, reflect.TypeFor[row](), map[string]any{"ID": int64(1), "Name": "safe"})
 
 	for _, test := range []struct {
-		name string
-		run  func() *orm.ORM
+		name           string
+		wantStatusCode int
+		run            func() *orm.ORM
 	}{
 		{name: "unknown selected column", run: func() *orm.ORM {
 			return app.Database().Table(table).Select("not_a_column").Find(&[]row{})
@@ -658,13 +659,28 @@ func SQLInvalidInputs(t *testing.T, driver string) {
 		{name: "empty select expression", run: func() *orm.ORM {
 			return app.Database().Table(table).Select("").Find(&[]row{})
 		}},
-		{name: "mismatched placeholder", run: func() *orm.ORM {
+		{name: "missing placeholder argument", wantStatusCode: http.StatusBadRequest, run: func() *orm.ORM {
 			return app.Database().Table(table).Where("id = ?").Find(&[]row{})
+		}},
+		{name: "surplus Find argument", wantStatusCode: http.StatusBadRequest, run: func() *orm.ORM {
+			return app.Database().Table(table).Where("id = ?", 1, "extra").Find(&[]row{})
+		}},
+		{name: "surplus Update argument", wantStatusCode: http.StatusBadRequest, run: func() *orm.ORM {
+			record := row{ID: 1, Name: "must-not-write"}
+			return app.Database().Table(table).Where("id = ?", 1, "extra").Update(&record)
+		}},
+		{name: "surplus Delete argument", wantStatusCode: http.StatusBadRequest, run: func() *orm.ORM {
+			record := row{ID: 1, Name: "safe"}
+			return app.Database().Table(table).Where("id = ?", 1, "extra").Delete(&record)
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if query := test.run(); query.Error == nil {
+			query := test.run()
+			if query.Error == nil {
 				t.Fatal("invalid ORM input unexpectedly succeeded")
+			}
+			if test.wantStatusCode != 0 && query.HTTPCode != test.wantStatusCode {
+				t.Fatalf("HTTP code = %d, want %d", query.HTTPCode, test.wantStatusCode)
 			}
 		})
 	}

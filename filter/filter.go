@@ -2,6 +2,7 @@ package filter
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -25,8 +26,14 @@ func New(config *Config) (*jwt.Token, string, error) {
 		return nil, message, errors.New("gorest error configuring filter")
 	}
 
+	if err := validateIPRestrictions(config.AllowedIPs, config.BlockedIPs); err != nil {
+		return nil, "ensure all filter IP allowlist and blocklist entries are valid IP addresses or CIDR ranges",
+			fmt.Errorf("invalid filter IP restrictions: %w", err)
+	}
+
 	if config.AccessTokenDuration < time.Second || config.RefreshTokenDuration < time.Second {
 		const message = "ensure access and refresh token durations are at least one second"
+
 		return nil, message, errors.New("JWT token duration must be at least one second")
 	}
 

@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -31,16 +32,19 @@ func TestCreateTokenSetsCookiesMatchingTokenLifetimes(t *testing.T) {
 		SignatureKey:         &key,
 		AccessTokenDuration:  5 * time.Minute,
 		RefreshTokenDuration: 24 * time.Hour,
-		CookieMaxAge:         60,
+		CookieConfig: CookieConfig{
+			CookieMaxAge: 60,
+		},
 	}
 	tokenFilter := newTestFilter(t, config)
 	app := fiber.New()
 	app.Post("/token", func(ctx fiber.Ctx) error {
-		message, status, err := tokenFilter.CreateToken(server.Context{Ctx: ctx}, "user-123")
+		tokenResponse, message, status, err := tokenFilter.CreateToken(server.Context{Ctx: ctx}, "user-123")
 		if err != nil {
 			return ctx.Status(status).SendString(message)
 		}
-		return ctx.Status(status).SendString(message)
+
+		return ctx.Status(status).JSON(tokenResponse)
 	})
 
 	response, err := app.Test(httptest.NewRequest(http.MethodPost, "/token", nil))
@@ -92,6 +96,57 @@ func TestCreateTokenSetsCookiesMatchingTokenLifetimes(t *testing.T) {
 	}
 }
 
+func TestCreateTokenReturnsTokensWithoutSettingCookiesWhenDisabled(t *testing.T) {
+	key := "test-signing-key"
+	config := Config{
+		SignatureKey:         &key,
+		AccessTokenDuration:  5 * time.Minute,
+		RefreshTokenDuration: 24 * time.Hour,
+		CookieConfig: CookieConfig{
+			DisableStoreTokenCookie: true,
+		},
+	}
+	tokenFilter := newTestFilter(t, config)
+	app := fiber.New()
+	app.Post("/token", func(ctx fiber.Ctx) error {
+		tokenResponse, message, status, err := tokenFilter.CreateToken(server.Context{Ctx: ctx}, "user-123")
+		if err != nil {
+			return ctx.Status(status).SendString(message)
+		}
+
+		return ctx.Status(status).JSON(tokenResponse)
+	})
+
+	response, err := app.Test(httptest.NewRequest(http.MethodPost, "/token", nil))
+	if err != nil {
+		t.Fatalf("send token request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+	if cookies := response.Cookies(); len(cookies) != 0 {
+		t.Fatalf("response cookies = %d, want none", len(cookies))
+	}
+
+	var got TokenResponse
+	if err := json.NewDecoder(response.Body).Decode(&got); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	for name, detail := range map[string]*TokenDetail{
+		"access":  got.AccessToken,
+		"refresh": got.RefreshToken,
+	} {
+		if detail == nil {
+			t.Errorf("%s token detail is nil", name)
+			continue
+		}
+		if detail.Token == "" || detail.TokenType != name || detail.TokenID != "user-123" {
+			t.Errorf("%s token detail = %#v", name, detail)
+		}
+	}
+}
+
 func TestGenerateTokenConcurrentCallsUseIndependentClaims(t *testing.T) {
 	key := "test-signing-key"
 	tokenFilter := newTestFilter(t, Config{SignatureKey: &key})
@@ -116,7 +171,7 @@ func TestGenerateTokenConcurrentCallsUseIndependentClaims(t *testing.T) {
 				results <- fmt.Errorf("generate token for %s: %w", tokenID, err)
 				return
 			}
-			parsed, _, err := new(jwt.Parser).ParseUnverified(token, jwt.MapClaims{})
+			parsed, _, err := new(jwt.Parser).ParseUnverified(token.Token, jwt.MapClaims{})
 			if err != nil {
 				results <- fmt.Errorf("parse token for %s: %w", tokenID, err)
 				return
@@ -148,5 +203,23 @@ func TestNewRejectsTokenDurationsBelowClaimPrecision(t *testing.T) {
 
 	if _, _, err := New(&config); err == nil {
 		t.Fatal("New() error = nil, want sub-second token duration rejection")
+	}
+}
+
+func TestNewRejectsInvalidIPRestrictions(t *testing.T) {
+	key := "test-signing-key"
+	for _, test := range []struct {
+		name   string
+		config Config
+	}{
+		{name: "invalid allowlist", config: Config{SignatureKey: &key, AllowedIPs: []string{"192.0.2.1", "invalid"}}},
+		{name: "empty blocklist entry", config: Config{SignatureKey: &key, BlockedIPs: []string{" "}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := Run(test.config)
+			if _, _, err := New(&config); err == nil {
+				t.Fatal("New() error = nil, want invalid IP restriction error")
+			}
+		})
 	}
 }

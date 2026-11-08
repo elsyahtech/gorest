@@ -13,6 +13,7 @@ import (
 	"github.com/elsyahtech/gorest/database"
 	gorestfilter "github.com/elsyahtech/gorest/filter"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func newSQLiteDBSession(t *testing.T, timeout time.Duration) *DBSession {
@@ -104,7 +105,7 @@ func TestDBSessionQuerySQLForwardsRowsAndUnavailableErrors(t *testing.T) {
 func TestFilterAdapterReportsUnderlyingConfigurationError(t *testing.T) {
 	adapter := &Filter{filter: &gorestfilter.Filter{}}
 
-	_, status, err := adapter.CreateToken(Context{}, "user-1")
+	_, _, status, err := adapter.CreateToken(Context{}, "user-1")
 	if err == nil || status != http.StatusNotImplemented {
 		t.Fatalf("CreateToken() = HTTP %d, error %v; want missing-configuration error", status, err)
 	}
@@ -138,6 +139,100 @@ func TestBeginTxContextRespectsCallerCancellation(t *testing.T) {
 	}
 	if tableCount != 0 {
 		t.Fatal("transaction changes remained after caller cancellation")
+	}
+}
+
+func TestBeginMongoTransactionBindsSessionToExistingOperations(t *testing.T) {
+	client, err := mongo.Connect(
+		options.Client().
+			ApplyURI("mongodb://127.0.0.1:27017").
+			SetServerSelectionTimeout(50 * time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("create MongoDB client: %v", err)
+	}
+
+	dbSession := &DBSession{
+		database: &database.Database{Mongo: client},
+		config:   &database.Config{Driver: database.MONGO, Timeout: time.Second},
+	}
+	txSession, message, status, err := dbSession.BeginTxContext(context.Background())
+	if err != nil {
+		t.Fatalf("BeginTxContext() = (%q, %d, %v)", message, status, err)
+	}
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		txSession.mongoSession.EndSession(cleanupCtx)
+		if txSession.txCancel != nil {
+			txSession.txCancel()
+		}
+		disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), time.Second)
+		defer disconnectCancel()
+		if err := client.Disconnect(disconnectCtx); err != nil {
+			t.Errorf("disconnect MongoDB client: %v", err)
+		}
+	}()
+
+	if !txSession.mongoSession.TransactionRunning() {
+		t.Fatal("BeginTxContext() did not start a MongoDB transaction")
+	}
+
+	if _, _, status, err := txSession.BeginTxContext(context.Background()); err == nil || status != http.StatusConflict {
+		t.Fatalf("nested BeginTxContext() = HTTP %d, error %v; want HTTP 409 and error", status, err)
+	}
+
+	queryContext := txSession.Table("transaction_test").Context
+	if mongo.SessionFromContext(queryContext) != txSession.mongoSession {
+		t.Fatal("ORM query context does not contain the transaction session")
+	}
+
+	_, status, err = txSession.RawQueryMongo(context.Background(), func(ctx context.Context, _ *mongo.Client) error {
+		session := mongo.SessionFromContext(ctx)
+		if session != txSession.mongoSession || !session.TransactionRunning() {
+			t.Fatal("RawQueryMongo context does not contain the active transaction session")
+		}
+		return nil
+	})
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("RawQueryMongo() = HTTP %d, error %v", status, err)
+	}
+
+	if _, _, status, err := txSession.MongoCollection("transaction_test"); err == nil || status != http.StatusBadRequest {
+		t.Fatalf("MongoCollection() in transaction = HTTP %d, error %v; want HTTP 400 and error", status, err)
+	}
+
+	if _, _, status, err := dbSession.BeginTxContext(context.Background(), &sql.TxOptions{ReadOnly: true}); err == nil || status != http.StatusBadRequest {
+		t.Fatalf("Mongo BeginTxContext() with SQL-only options = HTTP %d, error %v; want HTTP 400 and error", status, err)
+	}
+}
+
+func TestNoSQLTransactionMethodsDoNotReportUnsupportedTransactionsAsSuccessful(t *testing.T) {
+	scyllaSession := &DBSession{
+		database: &database.Database{Scylla: &gocql.Session{}},
+		config:   &database.Config{Driver: database.SCYLLA},
+	}
+
+	txSession, _, status, err := scyllaSession.BeginTxContext(context.Background())
+	if err == nil || status != http.StatusNotImplemented || txSession != nil {
+		t.Fatalf("Scylla BeginTxContext() = (%v, %d, %v), want nil session, HTTP 501, and error", txSession, status, err)
+	}
+	if _, status, err := scyllaSession.Commit(); err == nil || status != http.StatusNotImplemented {
+		t.Fatalf("Scylla Commit() = HTTP %d, error %v; want HTTP 501 and error", status, err)
+	}
+	if _, status, err := scyllaSession.Rollback(); err == nil || status != http.StatusNotImplemented {
+		t.Fatalf("Scylla Rollback() = HTTP %d, error %v; want HTTP 501 and error", status, err)
+	}
+
+	mongoSession := &DBSession{
+		database: &database.Database{Mongo: &mongo.Client{}},
+		config:   &database.Config{Driver: database.MONGO},
+	}
+	if _, status, err := mongoSession.Commit(); err == nil || status != http.StatusBadRequest {
+		t.Fatalf("Mongo Commit() without BeginTx() = HTTP %d, error %v; want HTTP 400 and error", status, err)
+	}
+	if _, status, err := mongoSession.Rollback(); err == nil || status != http.StatusBadRequest {
+		t.Fatalf("Mongo Rollback() without BeginTx() = HTTP %d, error %v; want HTTP 400 and error", status, err)
 	}
 }
 

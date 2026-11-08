@@ -29,8 +29,10 @@ group. A route can also receive middleware and its handler directly through
 verb. The filter validates the token and stores its details in request locals;
 application handlers remain responsible for account and resource-level
 authorization. Invalid or missing tokens stop the chain before the protected
-handler runs. A valid refresh token can renew the access cookie and continue
-the current request, as described in the [filter guide](./filter.md).
+handler runs. If access validation fails, a valid refresh cookie can renew the
+access cookie and continue the current request without an additional client
+round trip. On that path, `tokenJWT` describes the refresh token. See the
+[filter guide](./filter.md) for the full behavior and its implications.
 
 ```go
 // Clean, Express-inspired routing syntax

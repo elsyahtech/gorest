@@ -169,12 +169,20 @@ func (dbSession *DBSession) QuerySQL(ctx context.Context, query string, args ...
 // MongoCollection returns a handle to the named MongoDB collection in the configured database.
 // It does not contact the server or create the collection; it only prepares the handle for operations
 // such as InsertOne, Find, UpdateOne, and DeleteOne.
+// This method cannot bind the returned handle's operations to a MongoDB transaction. Use
+// RawQueryMongo with the transaction-bound session, or the ORM, when a transaction is active.
 // Returns 400 Bad Request if collectionName is empty, and 503 Service Unavailable if MongoDB is not running.
 func (dbSession *DBSession) MongoCollection(collectionName string) (*mongo.Collection, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		return nil, "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation.",
 			http.StatusServiceUnavailable,
 			errors.New("database service is not running")
+	}
+
+	if dbSession.mongoSession != nil {
+		const message = "MongoCollection() returns a raw handle that cannot join the active transaction; use ORM operations or RawQueryMongo() instead."
+
+		return nil, message, http.StatusBadRequest, errors.New("MongoCollection cannot be used with an active MongoDB transaction")
 	}
 
 	coll, message, httpCode, err := dbSession.database.Collection(dbSession.config, collectionName)
@@ -195,7 +203,10 @@ func (dbSession *DBSession) DecodeMongoCursor(ctx context.Context, cursor *mongo
 			errors.New("database service is not running")
 	}
 
-	return dbSession.database.DecodeMongoCursor(ctx, cursor, dest) //nolint:wrapcheck
+	sessionCtx, cancel := dbSession.withMongoSessionContext(ctx)
+	defer cancel()
+
+	return dbSession.database.DecodeMongoCursor(sessionCtx, cursor, dest) //nolint:wrapcheck
 }
 
 // EncodeMongoCollection converts a struct (or other value) into a bson.M document,
@@ -225,7 +236,10 @@ func (dbSession *DBSession) MongoCreateCollection(
 			errors.New("database service is not running")
 	}
 
-	message, httpCode, err := dbSession.database.CreateCollection(ctx, dbSession.config, collectionName, opts...)
+	sessionCtx, cancel := dbSession.withMongoSessionContext(ctx)
+	defer cancel()
+
+	message, httpCode, err := dbSession.database.CreateCollection(sessionCtx, dbSession.config, collectionName, opts...)
 	if err != nil {
 		return message, httpCode, fmt.Errorf("%w", err)
 	}
@@ -400,7 +414,10 @@ type QueryBuilderMongo func(ctx context.Context, client *mongo.Client) error
 // needs direct raw MongoDB operations.
 // Prefer the built-in helpers (MongoCollection, DecodeMongoCursor, etc.) when possible.
 func (dbSession *DBSession) RawQueryMongo(ctx context.Context, fn QueryBuilderMongo) (string, int, error) {
-	return runRawQuery(ctx, dbSession, mongoRawQueryAdapter{callback: fn})
+	sessionCtx, cancel := dbSession.withMongoSessionContext(ctx)
+	defer cancel()
+
+	return runRawQuery(sessionCtx, dbSession, mongoRawQueryAdapter{callback: fn})
 }
 
 // QueryBuilderScylla is a function that receives the ScyllaDB session and runs queries on it directly,
@@ -491,21 +508,23 @@ func runRawQuery(ctx context.Context, session *DBSession, adapter rawQueryAdapte
 	return "", http.StatusOK, nil
 }
 
-// BeginTx starts a SQL transaction and returns a new DBSession bound to it.
+// BeginTx starts a transaction supported by the configured driver and returns a
+// new DBSession bound to it. SQL drivers use database/sql transactions; MongoDB
+// uses a native session transaction. ScyllaDB does not support a general
+// transaction through this API.
 // Use the returned session for all statements that belong to the transaction,
-// then finish with Commit or Rollback. The configured database timeout is applied
-// to the transaction context.
-// Returns 409 Conflict if this session is already transaction-bound, and 500 Internal Server Error if a transaction cannot be started.
+// then finish with Commit or Rollback. The configured database timeout is
+// applied to the transaction context.
 func (dbSession *DBSession) BeginTx(opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	return dbSession.BeginTxContext(context.Background(), opts...)
 }
 
-// BeginTxContext starts a SQL transaction using ctx and returns a new DBSession
-// bound to it. The configured database timeout caps the transaction lifetime,
-// while cancellation or an earlier deadline from ctx is also respected.
-// Commit or Rollback cancels the derived context and releases its resources.
-// Returns 400 for a nil context, 409 if the session is already transaction-bound,
-// 503 if the database service is unavailable, and 500 if the driver cannot start it.
+// BeginTxContext starts a transaction using ctx and returns a new DBSession
+// bound to it. SQL drivers use database/sql transactions; MongoDB uses a native
+// session transaction. The configured database timeout caps the transaction
+// lifetime, while cancellation or an earlier deadline from ctx is also
+// respected. Commit or Rollback cancels the derived context and releases its
+// resources. ScyllaDB does not support a general transaction through this API.
 func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxOptions) (*DBSession, string, int, error) {
 	if dbSession == nil || dbSession.database == nil {
 		const message = "Register the database config with app.Use(database.Run(...)) and select a driver supported by this operation."
@@ -525,8 +544,56 @@ func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxO
 		return nil, message, http.StatusBadRequest, errors.New("context is empty")
 	}
 
-	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
-		return dbSession, "", http.StatusOK, nil
+	if dbSession.Tx != nil || dbSession.mongoSession != nil {
+		const message = "Commit or roll back the active transaction before starting another transaction."
+
+		return nil, message, http.StatusConflict, errors.New("a transaction is already active in this database session")
+	}
+
+	switch dbSession.config.Driver {
+	case database.SCYLLA:
+		const message = "ScyllaDB does not support a general transaction through BeginTxContext; use conditional statements or lightweight transactions for supported atomic operations."
+
+		return nil, message, http.StatusNotImplemented, errors.New("general ScyllaDB transactions are not supported")
+	case database.MONGO:
+		if dbSession.database.Mongo == nil {
+			const message = "Configure app.Use(database.Run(...)) with the MONGO driver."
+
+			return nil, message, http.StatusServiceUnavailable, errors.New("MongoDB database is not running")
+		}
+
+		for _, opt := range opts {
+			if opt != nil && (opt.Isolation != sql.LevelDefault || opt.ReadOnly) {
+				const message = "MongoDB transactions do not support SQL isolation-level or read-only options."
+
+				return nil, message, http.StatusBadRequest, errors.New("unsupported MongoDB transaction options")
+			}
+		}
+
+		txCtx, cancel := transactionContext(ctx, dbSession.config.Timeout)
+		mongoSession, err := dbSession.database.Mongo.StartSession()
+		if err != nil {
+			cancel()
+			return nil, "Start a MongoDB session before beginning the transaction.", http.StatusInternalServerError,
+				fmt.Errorf("start MongoDB session: %w", err)
+		}
+
+		if err := mongoSession.StartTransaction(); err != nil {
+			cleanupCtx, cleanupCancel := transactionCleanupContext(dbSession.config.Timeout)
+			mongoSession.EndSession(cleanupCtx)
+			cleanupCancel()
+			cancel()
+			return nil, "Ensure the MongoDB deployment supports transactions and no transaction is already active.",
+				http.StatusInternalServerError, fmt.Errorf("start MongoDB transaction: %w", err)
+		}
+
+		return &DBSession{
+			database:     dbSession.database,
+			config:       dbSession.config,
+			mongoSession: mongoSession,
+			txContext:    txCtx,
+			txCancel:     cancel,
+		}, "Transaction started successfully", http.StatusOK, nil
 	}
 
 	var (
@@ -534,11 +601,7 @@ func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxO
 		cancel context.CancelFunc
 	)
 
-	if dbSession.config.Timeout > 0 {
-		txCtx, cancel = context.WithTimeout(ctx, dbSession.config.Timeout)
-	} else {
-		txCtx, cancel = context.WithCancel(ctx)
-	}
+	txCtx, cancel = transactionContext(ctx, dbSession.config.Timeout)
 
 	txDB, message, httpCode, err := dbSession.database.BeginTxContext(txCtx, dbSession.config, opts...)
 	if err != nil {
@@ -547,10 +610,47 @@ func (dbSession *DBSession) BeginTxContext(ctx context.Context, opts ...*sql.TxO
 	}
 
 	return &DBSession{
-		database: txDB,
-		config:   dbSession.config,
-		txCancel: cancel,
+		database:  txDB,
+		config:    dbSession.config,
+		txContext: txCtx,
+		txCancel:  cancel,
 	}, message, httpCode, nil
+}
+
+func transactionContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+
+	return context.WithCancel(ctx)
+}
+
+func transactionCleanupContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		timeout = database.DefaultTimeout
+	}
+
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+func (dbSession *DBSession) withMongoSessionContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil || dbSession == nil || dbSession.mongoSession == nil {
+		return ctx, func() {}
+	}
+
+	opCtx, cancel := context.WithCancel(ctx)
+	stop := func() bool { return false }
+	if dbSession.txContext != nil {
+		stop = context.AfterFunc(dbSession.txContext, cancel)
+		if dbSession.txContext.Err() != nil {
+			cancel()
+		}
+	}
+
+	return mongo.NewSessionContext(opCtx, dbSession.mongoSession), func() {
+		stop()
+		cancel()
+	}
 }
 
 // Rollback aborts the active transaction, discarding all changes made since BeginTx.
@@ -567,7 +667,8 @@ func (dbSession *DBSession) Rollback() (string, int, error) {
 
 // Commit saves all changes made in the active transaction.
 // Returns 400 Bad Request if there is no active transaction or it has already been finalized, and 500 Internal Server Error if commit fails.
-// After Commit, the transaction is finished and Rollback has nothing left to undo.
+// After a successful commit the transaction is finished. If a MongoDB commit fails,
+// the session remains active so the caller can retry Commit or attempt Rollback.
 func (dbSession *DBSession) Commit() (string, int, error) {
 	return dbSession.finalizeTransaction(&structFinalizeTransaction{
 		operation:        "commit",
@@ -599,8 +700,60 @@ func (dbSession *DBSession) finalizeTransaction(req *structFinalizeTransaction) 
 		return message, http.StatusServiceUnavailable, fmt.Errorf("%s: database configuration is not available", req.operation)
 	}
 
-	if dbSession.config.Driver == database.MONGO || dbSession.config.Driver == database.SCYLLA {
-		return "", http.StatusOK, nil
+	if dbSession.config.Driver == database.SCYLLA {
+		const message = "ScyllaDB does not support a general transaction through Commit or Rollback; use conditional statements or lightweight transactions for supported atomic operations."
+
+		return message, http.StatusNotImplemented, fmt.Errorf("%s: general ScyllaDB transactions are not supported", req.operation)
+	}
+
+	if dbSession.config.Driver == database.MONGO {
+		if dbSession.mongoSession == nil {
+			return req.noTransaction, http.StatusBadRequest, fmt.Errorf("%s: no active MongoDB transaction", req.operation)
+		}
+
+		if !dbSession.txDone.CompareAndSwap(false, true) {
+			const message = "The transaction has already been committed or rolled back."
+
+			return message, http.StatusBadRequest, fmt.Errorf("%s: transaction is already finished", req.operation)
+		}
+
+		var (
+			err         error
+			finalizeCtx context.Context
+			cancel      context.CancelFunc
+		)
+		if req.operation == "commit" {
+			parentCtx := dbSession.txContext
+			if parentCtx == nil {
+				parentCtx = context.Background()
+			}
+			finalizeCtx = mongo.NewSessionContext(parentCtx, dbSession.mongoSession)
+			err = dbSession.mongoSession.CommitTransaction(finalizeCtx)
+		} else {
+			finalizeCtx, cancel = transactionCleanupContext(dbSession.config.Timeout)
+			finalizeCtx = mongo.NewSessionContext(finalizeCtx, dbSession.mongoSession)
+			err = dbSession.mongoSession.AbortTransaction(finalizeCtx)
+		}
+
+		if err != nil {
+			dbSession.txDone.Store(false)
+			if cancel != nil {
+				cancel()
+			}
+			return req.operationFailure, http.StatusInternalServerError, fmt.Errorf("%s MongoDB transaction: %w", req.operation, err)
+		}
+
+		if cancel != nil {
+			cancel()
+		}
+		cleanupCtx, cleanupCancel := transactionCleanupContext(dbSession.config.Timeout)
+		dbSession.mongoSession.EndSession(cleanupCtx)
+		cleanupCancel()
+		if dbSession.txCancel != nil {
+			dbSession.txCancel()
+		}
+
+		return req.success, http.StatusOK, nil
 	}
 
 	if dbSession.database.Tx == nil {
@@ -722,10 +875,15 @@ func (dbSession *DBSession) Table(table string) *orm.ORM {
 		}
 	}
 
+	queryContext := context.Background()
+	if dbSession.mongoSession != nil && dbSession.txContext != nil {
+		queryContext = mongo.NewSessionContext(dbSession.txContext, dbSession.mongoSession)
+	}
+
 	return &orm.ORM{
 		Error:              nil,
 		Result:             nil,
-		Context:            context.Background(),
+		Context:            queryContext,
 		ReturnDest:         nil,
 		Database:           dbSession.database,
 		Tx:                 dbSession.database.Tx,
@@ -937,11 +1095,20 @@ func (app *App) Filter() *filter.Filter {
 	return app.filter
 }
 
-func (flt *Filter) CreateToken(ctx Context, tokenID string) (string, int, error) {
-	message, httpCode, err := flt.filter.CreateToken(ctx, tokenID)
-	if err != nil {
-		return message, httpCode, fmt.Errorf("%w", err)
+// CreateToken generates access and refresh token details. By default it also
+// stores both tokens in response cookies; set
+// filter.Config.CookieConfig.DisableStoreTokenCookie to return the tokens
+// without writing cookies.
+func (flt *Filter) CreateToken(ctx Context, tokenID string) (*filter.TokenResponse, string, int, error) {
+	if flt == nil || flt.filter == nil {
+		return nil, "Ensure the filter is configured with a valid signature key.", http.StatusNotImplemented,
+			errors.New("filter is not running")
 	}
 
-	return message, httpCode, nil
+	tokenResponse, message, httpCode, err := flt.filter.CreateToken(ctx, tokenID)
+	if err != nil {
+		return nil, message, httpCode, fmt.Errorf("%w", err)
+	}
+
+	return tokenResponse, message, httpCode, nil
 } //nolint:revive
