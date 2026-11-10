@@ -11,27 +11,35 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func (filter *Filter) validateAccessToken(ctx server.Context, accessToken string) (jwt.MapClaims, string, int, error) {
+func (filter *Filter) validateAccessToken(ctx server.Context, accessToken string) (clm jwt.MapClaims, msg string, code int, valErr error, expErr error) {
 	const responseMessage = "A valid access token is required"
 	if accessToken == "" {
-		return nil, responseMessage, http.StatusUnauthorized, errors.New("missing access token")
+		return nil, responseMessage, http.StatusUnauthorized, errors.New("missing access token"), nil
 	}
 
 	claims, status, err := filter.validateToken(accessToken, "access")
 	if err != nil {
-		return nil, responseMessage, status, fmt.Errorf("validate access token: %w", err)
+		return nil, responseMessage, status, fmt.Errorf("validate access token: %w", err), nil
 	}
 
-	claims, message, status, err := checkTokenExpired(claims)
+	claims, message, status, err, expErr := checkTokenExpired(claims)
 	if err != nil {
-		if errors.Is(err, errTokenExpired) && ctx.Cookies("access") == accessToken {
+		if status < http.StatusBadRequest || status > 599 {
+			status = http.StatusUnauthorized
+		}
+
+		return nil, message, status, fmt.Errorf("validate access token expiration: %w", err), nil
+	}
+
+	if expErr != nil {
+		if errors.Is(expErr, errTokenExpired) && ctx.Cookies("access") == accessToken {
 			filter.deleteTokenCookie(ctx, "access", accessToken)
 		}
 
-		return nil, message, status, fmt.Errorf("validate access token expiration: %w", err)
+		return nil, message, status, nil, fmt.Errorf("validate access token expiration: %w", expErr)
 	}
 
-	return claims, "", http.StatusOK, nil
+	return claims, "", http.StatusOK, nil, nil
 }
 
 func (filter *Filter) validateToken(tokenString, expectedType string) (jwt.MapClaims, int, error) {
@@ -93,13 +101,21 @@ func (filter *Filter) validateRefreshToken(ctx server.Context, refreshToken stri
 		return nil, responseMessage, status, fmt.Errorf("validate refresh token: %w", err)
 	}
 
-	claims, message, status, err := checkTokenExpired(claims)
+	claims, message, status, err, expErr := checkTokenExpired(claims)
 	if err != nil {
-		if errors.Is(err, errTokenExpired) {
-			filter.deleteTokenCookie(ctx, "refresh", refreshToken)
+		if status < http.StatusBadRequest || status > 599 {
+			status = http.StatusUnauthorized
 		}
 
 		return nil, message, status, fmt.Errorf("validate refresh token expiration: %w", err)
+	}
+
+	if expErr != nil {
+		if errors.Is(expErr, errTokenExpired) {
+			filter.deleteTokenCookie(ctx, "refresh", refreshToken)
+		}
+
+		return nil, message, status, fmt.Errorf("validate refresh token expiration: %w", expErr)
 	}
 
 	tokenID, ok := claims["token_id"].(string)
@@ -149,19 +165,19 @@ func (failure refreshFailedError) Is(target error) bool {
 	return target == errRefreshFailed
 }
 
-func checkTokenExpired(claims jwt.MapClaims) (jwt.MapClaims, string, int, error) {
+func checkTokenExpired(claims jwt.MapClaims) (clm jwt.MapClaims, msg string, status int, err error, expErr error) {
 	expiresAt, err := unixTimestampClaim(claims, "expires_at")
 	if err != nil {
 		const message = "The token is missing a valid expires_at claim"
-		return nil, message, http.StatusUnauthorized, err
+		return nil, message, http.StatusUnauthorized, err, nil
 	}
 
 	if time.Now().Unix() >= expiresAt {
 		const message = "The token has expired; please authenticate again"
-		return nil, message, http.StatusUnauthorized, fmt.Errorf("%w at %d", errTokenExpired, expiresAt)
+		return nil, message, http.StatusUnauthorized, nil, fmt.Errorf("%w at %d", errTokenExpired, expiresAt)
 	}
 
-	return claims, "", http.StatusOK, nil
+	return claims, "", http.StatusOK, nil, nil
 }
 
 func unixTimestampClaim(claims jwt.MapClaims, name string) (int64, error) {

@@ -43,6 +43,10 @@ func TestAuthenticationLogsConfiguredSuccessEvents(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/protected", nil)
 			if test.useRefresh {
 				request.AddCookie(&http.Cookie{
+					Name:  "access",
+					Value: createAuthenticationTestToken(t, tokenFilter, "access", -time.Second),
+				})
+				request.AddCookie(&http.Cookie{
 					Name:  "refresh",
 					Value: createAuthenticationTestToken(t, tokenFilter, "refresh", time.Hour),
 				})
@@ -79,10 +83,11 @@ func TestAuthenticationLogsConfiguredSuccessEvents(t *testing.T) {
 
 func TestAuthenticationLogsConfiguredFailureEvents(t *testing.T) {
 	tests := []struct {
-		name       string
-		event      AuthenticationLogEvent
-		tokenName  string
-		tokenValue func(*testing.T, *Filter) string
+		name          string
+		event         AuthenticationLogEvent
+		tokenName     string
+		tokenValue    func(*testing.T, *Filter) string
+		expiredAccess bool
 	}{
 		{
 			name:  "missing credentials",
@@ -103,15 +108,17 @@ func TestAuthenticationLogsConfiguredFailureEvents(t *testing.T) {
 			},
 		},
 		{
-			name:       "invalid refresh token",
-			event:      AuthenticationEventRefreshTokenInvalid,
-			tokenName:  "refresh",
-			tokenValue: func(*testing.T, *Filter) string { return "invalid-token" },
+			name:          "invalid refresh token",
+			event:         AuthenticationEventRefreshTokenInvalid,
+			tokenName:     "refresh",
+			tokenValue:    func(*testing.T, *Filter) string { return "invalid-token" },
+			expiredAccess: true,
 		},
 		{
-			name:      "expired refresh token",
-			event:     AuthenticationEventRefreshTokenExpired,
-			tokenName: "refresh",
+			name:          "expired refresh token",
+			event:         AuthenticationEventRefreshTokenExpired,
+			tokenName:     "refresh",
+			expiredAccess: true,
 			tokenValue: func(t *testing.T, tokenFilter *Filter) string {
 				return createAuthenticationTestToken(t, tokenFilter, "refresh", -time.Second)
 			},
@@ -128,6 +135,12 @@ func TestAuthenticationLogsConfiguredFailureEvents(t *testing.T) {
 			tokenFilter.Logger = zap.New(core)
 
 			request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+			if test.expiredAccess {
+				request.AddCookie(&http.Cookie{
+					Name:  "access",
+					Value: createAuthenticationTestToken(t, tokenFilter, "access", -time.Second),
+				})
+			}
 			if test.tokenName != "" {
 				request.AddCookie(&http.Cookie{
 					Name:  test.tokenName,

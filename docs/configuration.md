@@ -781,14 +781,16 @@ false unless set explicitly.
 With the defaults, GOREST issues cookies named `access` and `refresh`.
 Authentication middleware accepts an access JWT from the `Authorization`
 header using the `Bearer` scheme, or from the `access` cookie; the Bearer
-credential is validated only as an access token. If access validation fails,
-it tries the `refresh` cookie. A valid refresh cookie can issue a replacement
-access cookie and continue the current request without an additional client
-round trip, even if an invalid Bearer token was supplied. On this fallback
-path, `tokenJWT` describes the refresh token used for the request, not the
-replacement access token. When `CookieConfig.DisableStoreTokenCookie` is
-enabled, middleware does not write or expose the replacement token;
-applications managing token transport must provide their own renewal flow.
+credential is validated only as an access token. The `refresh` cookie is tried
+only when the access token is otherwise valid but expired. Invalid access
+tokens, including tokens with malformed or missing required claims, are
+rejected without refresh fallback. A valid refresh cookie can issue a
+replacement access cookie and continue the current request without an
+additional client round trip. On this fallback path, `tokenJWT` describes the
+refresh token used for the request, not the replacement access token. When
+`CookieConfig.DisableStoreTokenCookie` is enabled, middleware does not write
+or expose the replacement token; applications managing token transport must
+provide their own renewal flow.
 The middleware verifies the token signature, signing method, issuer, type,
 required claims, and expiry. It does not authenticate user credentials, check
 account state, or authorize application resources. For middleware, token

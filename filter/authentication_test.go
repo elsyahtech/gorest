@@ -9,6 +9,7 @@ import (
 
 	"github.com/elsyahtech/gorest/server"
 	"github.com/gofiber/fiber/v3"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestAuthenticationAcceptsValidAccessToken(t *testing.T) {
@@ -81,6 +82,49 @@ func TestAuthenticationRejectsExpiredAccessWithoutRefresh(t *testing.T) {
 
 	if response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthenticationDoesNotUseRefreshForInvalidAccessToken(t *testing.T) {
+	tokenFilter := newTestFilter(t, Config{SignatureKey: authenticationStringPointer("authentication-test-key")})
+	validRefresh := createAuthenticationTestToken(t, tokenFilter, "refresh", time.Hour)
+	missingExpiryToken, err := jwt.NewWithClaims(tokenFilter.JWT.Method, jwt.MapClaims{
+		"token_id":   "user-123",
+		"issuer":     tokenFilter.Config.Issuer,
+		"token_type": "access",
+		"issue_at":   float64(time.Now().Unix()),
+	}).SignedString([]byte(*tokenFilter.Config.SignatureKey))
+	if err != nil {
+		t.Fatalf("sign access token without expiry: %v", err)
+	}
+
+	for _, test := range []struct {
+		name        string
+		accessToken string
+	}{
+		{name: "malformed access token", accessToken: "not-a-jwt"},
+		{name: "access token with missing expiry", accessToken: missingExpiryToken},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/protected", nil)
+			request.AddCookie(&http.Cookie{Name: "access", Value: test.accessToken})
+			request.AddCookie(&http.Cookie{Name: "refresh", Value: validRefresh})
+
+			response, err := newAuthenticationTestApp(tokenFilter).Test(request)
+			if err != nil {
+				t.Fatalf("send request: %v", err)
+			}
+			defer response.Body.Close()
+
+			if response.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+			}
+			for _, cookie := range response.Cookies() {
+				if cookie.Name == "access" && cookie.Value != "" && cookie.MaxAge >= 0 {
+					t.Fatal("invalid access token triggered access-token renewal")
+				}
+			}
+		})
 	}
 }
 
