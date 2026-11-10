@@ -152,16 +152,17 @@ validated as an **access token**; putting a refresh token in the `Authorization`
 header does not make it a refresh credential. Refresh tokens are read only
 from the `refresh` cookie.
 
-If access-token validation fails for any reason, the middleware tries the
-refresh cookie. A valid refresh token causes GOREST to issue a replacement
-access token and, by default, set it in the `access` cookie. The middleware
-then continues the **same request** using the validated refresh token's
-identity; the client does not need to repeat the request with the new access
-token. This fallback is intended to keep cookie-based sessions seamless and
-avoid an extra round trip. It also means that a valid refresh cookie can
-authorize the current protected request when the access token is invalid or
-expired. If a request includes an invalid Bearer token and a valid refresh
-cookie, the refresh fallback can still continue that request.
+The middleware uses the refresh cookie only when the access token is otherwise
+valid but has expired. A malformed token, invalid signature, wrong issuer or
+token type, or missing/invalid required claim is rejected immediately; a
+refresh cookie does not recover an invalid access token. When the access token
+has expired, a valid refresh token causes GOREST to issue a replacement access
+token and, by default, set it in the `access` cookie. The middleware then
+continues the **same request** using the validated refresh token's identity;
+the client does not need to repeat the request with the new access token.
+This fallback is intended to keep cookie-based sessions seamless and avoid an
+extra round trip. It means a valid refresh cookie can authorize the current
+protected request when paired with an expired access token.
 
 On the fallback path, the `filter.TokenDetail` stored in request locals under
 `tokenJWT` describes the refresh token that authenticated the request
@@ -221,10 +222,9 @@ Available event constants are:
 | `AuthenticationEventAuthenticationSucceeded` | A valid access token, or a valid refresh token on the fallback path, authenticated the request. |
 | `AuthenticationEventRefreshSucceeded` | A refresh token issued a replacement access token and authenticated the current request. |
 
-An access-token failure that is recovered by a valid refresh token is not
-logged as an authentication failure. If access and refresh credentials are
-both supplied and both fail, the selected access and refresh failure events
-can both be recorded. If both
+An expired access token that is recovered by a valid refresh token is not
+logged as an authentication failure. A refresh failure event is recorded only
+when the access token is expired and refresh validation is attempted. If both
 success events are enabled, a request authenticated through refresh emits both
 `authentication_succeeded` and `refresh_succeeded`; otherwise each event can
 be selected independently. Failure events are logged at `WARN`, while success

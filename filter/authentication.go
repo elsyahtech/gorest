@@ -57,18 +57,31 @@ func (filter *Filter) Authentication() server.Handler {
 			})
 		}
 
-		claims, _, _, accessErr := filter.validateAccessToken(*ctx, accessToken)
+		claims, _, status, valErr, expErr := filter.validateAccessToken(*ctx, accessToken)
+		if valErr != nil {
+			if status < http.StatusBadRequest || status > 599 {
+				status = http.StatusUnauthorized
+			}
+
+			filter.logAuthenticationFailures(accessToken, refreshToken, valErr, expErr, status)
+
+			return ctx.Status(status).JSON(fiber.Map{
+				errorKey:   valErr.Error(),
+				messageKey: "A valid access token is required",
+			})
+		}
+
 		tokenString := accessToken
 		usedRefreshToken := false
 
-		if accessErr != nil {
+		if expErr != nil {
 			refreshClaims, message, status, err := filter.validateRefreshToken(*ctx, refreshToken)
 			if err != nil {
 				if status < http.StatusBadRequest || status > 599 {
 					status = http.StatusUnauthorized
 				}
 
-				filter.logAuthenticationFailures(accessToken, refreshToken, accessErr, err, status)
+				filter.logAuthenticationFailures(accessToken, refreshToken, expErr, err, status)
 
 				return ctx.Status(status).JSON(fiber.Map{
 					errorKey:   err.Error(),

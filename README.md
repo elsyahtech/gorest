@@ -134,6 +134,7 @@ application, it provides:
 - Native SQL and ORM-based data access
 - REST API response helpers
 - Optional JWT token and request-filter helpers
+- Password hashing and verification helpers using Argon2id and bcrypt
 
 The application remains regular Go code. Developers can use Go's standard
 library and other packages when a requirement falls outside GOREST's
@@ -141,6 +142,8 @@ abstractions.
 See the [server and router guide](docs/guide/router.md),
 [configuration guide](docs/configuration.md), and
 [logger guide](docs/guide/logger.md) for the corresponding technical details.
+For password-hashing examples and guidance, see the
+[helper guide](docs/guide/helpers.md#password-hashes-and-digests).
 The [architecture overview](docs/architecture.md) explains how these
 components fit into application startup and request handling.
 
