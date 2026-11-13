@@ -9,9 +9,7 @@ The public release history begins with `v0.0.71`. Earlier versions
 (`v0.0.1`–`v0.0.70`) were development iterations and are not included here.
 
 <details open>
-<summary><strong>v1.1.21</strong> - 2026-11-10</summary>
-
-[Compare v1.1.20 to v1.1.21](https://github.com/elsyahtech/gorest/compare/v1.1.20...v1.1.21)
+<summary><strong>Unreleased</strong></summary>
 
 ### Added
 
@@ -27,6 +25,8 @@ The public release history begins with `v0.0.71`. Earlier versions
   versions, and application environment validation.
 - Added MongoDB transaction support through transaction-bound database
   sessions and ORM operations.
+- Added a GitHub Actions test workflow for unit and app, filter, and logger
+  integration tests, with unit coverage reporting.
 
 ### Changed
 
@@ -35,13 +35,11 @@ The public release history begins with `v0.0.71`. Earlier versions
   details. Cookie options have moved under `filter.Config.CookieConfig`; set
   `DisableStoreTokenCookie` there when the application manages token
   transport. Update callers and filter configuration literals when upgrading.
-- Filter authentication accepts Bearer credentials only as access tokens and
-  reads refresh credentials from the `refresh` cookie. Refresh fallback is
-  attempted only when an otherwise valid access token has expired; malformed
-  or otherwise invalid access tokens are rejected. A valid refresh cookie can
-  issue a replacement access cookie and continue the current request without
-  an additional client round trip. Cookie lifetimes follow their corresponding
-  token durations.
+- Filter authentication now validates Bearer credentials only as access
+  tokens, reads refresh credentials from the `refresh` cookie, and can use a
+  valid refresh cookie to issue a replacement access cookie and continue the
+  current request without an additional client round trip. Cookie lifetimes
+  follow their corresponding token durations.
 - Defined transaction behavior by database driver. SQL transactions use
   bounded contexts and cleanup; MongoDB uses native sessions and transactions;
   generic ScyllaDB `Commit`/`Rollback` transactions return
@@ -56,6 +54,13 @@ The public release history begins with `v0.0.71`. Earlier versions
 
 ### Fixed
 
+- Treat a GitHub 404 response for `releases/latest` as an informational skipped
+  update check instead of reporting it as a warning. Other request failures and
+  unexpected HTTP responses remain warnings.
+- Enable MySQL TLS when `TLS` is configured without requiring `SSLCAPath`.
+  `TLS: "true"` now uses the driver's system certificate roots and verifies the
+  server hostname. Optional `SSLCAPath`, `SSLCertPath`, and `SSLKeyPath`
+  configure a private CA or mTLS directly.
 - Corrected filter cookie configuration defaults and validation, cookie
   expiration calculation, and token issuance when cookie storage is disabled.
 - Improved database transaction lifecycle handling, including cancellation,
@@ -64,43 +69,6 @@ The public release history begins with `v0.0.71`. Earlier versions
 - Fixed ORM placeholder counting and validation so placeholders in supported
   driver syntax are counted consistently and mismatched arguments return a
   client error before query execution.
-
-</details>
-
-<details>
-<summary><strong>v1.1.20</strong> - 2026-11-05</summary>
-
-[Compare v1.1.19 to v1.1.20](https://github.com/elsyahtech/gorest/compare/v1.1.19...v1.1.20)
-
-### Fixed
-
-- Support configuring a custom MySQL CA and mTLS certificate/key files
-  directly, without requiring applications to register a driver-specific TLS
-  profile. MySQL TLS configuration now builds and applies the appropriate
-  client TLS settings.
-
-</details>
-
-<details>
-<summary><strong>v1.1.19</strong> - 2026-11-05</summary>
-
-[Compare v1.1.18 to v1.1.19](https://github.com/elsyahtech/gorest/compare/v1.1.18...v1.1.19)
-
-### Added
-
-- Added a GitHub Actions workflow for unit tests and app, filter, and logger
-  integration tests, with unit coverage reporting and authenticated Codecov
-  uploads.
-
-### Fixed
-
-- Enable MySQL TLS when `TLS` is configured without requiring `SSLCAPath`.
-  `TLS: "true"` uses the system certificate roots and verifies the server
-  hostname. At this release, custom CA and mTLS configurations use a registered
-  MySQL TLS profile.
-- Treat a GitHub 404 response for `releases/latest` as an informational skipped
-  update check instead of a warning. Other request failures and unexpected
-  HTTP responses remain warnings.
 
 </details>
 
